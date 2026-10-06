@@ -5,6 +5,7 @@ import {
   type RulesetContext,
 } from "@/lib/domain/decision-engine";
 import type { Incident } from "@/lib/domain/entities";
+import type { PriorIllegalMove } from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
 import { applyIncidentAnswers } from "@/lib/domain/follow-up";
 import { fixedProviders, FIXED_NOW } from "./helpers";
 
@@ -23,6 +24,18 @@ function incident(overrides: Partial<Incident> = {}): Incident {
     updatedAt: FIXED_NOW,
     ...overrides,
   };
+}
+
+function priors(color: string, n: number): PriorIllegalMove[] {
+  return Array.from({ length: n }, (_, i) => ({
+    incidentId: `prior-${color}-${i}`,
+    reportedAt: FIXED_NOW,
+    subtype: "illegal-move" as const,
+  }));
+}
+
+function hist(white: number, black: number) {
+  return { white: priors("white", white), black: priors("black", black) };
 }
 
 const STANDARD: RulesetContext = {
@@ -51,7 +64,7 @@ describe("DecisionEngine", () => {
     it("returns context-required when no ruleset is given (never defaults to standard)", () => {
       const r = run({
         incident: incident(fullFacts),
-        illegalMoveHistory: { white: 0, black: 0 },
+        illegalMoveHistory: hist(0, 0),
       });
       expect(r.requiresFollowUp).toBe(true);
       expect(r.decision.kind).toBe("context-required");
@@ -64,7 +77,7 @@ describe("DecisionEngine", () => {
       const r = run({
         incident: incident(fullFacts),
         ruleset: { competitionType: "standard" },
-        illegalMoveHistory: { white: 0, black: 0 },
+        illegalMoveHistory: hist(0, 0),
       });
       expect(r.decision.kind).toBe("context-required");
       expect(r.decision.missingFields).toContain("規則バージョン");
@@ -87,7 +100,7 @@ describe("DecisionEngine", () => {
       const r = run({
         incident: incident(fullFacts),
         ruleset: { competitionType: "standard", rulesVersion: "FIDE-2018" },
-        illegalMoveHistory: { white: 0, black: 0 },
+        illegalMoveHistory: hist(0, 0),
       });
       expect(r.requiresFollowUp).toBe(false);
       expect(r.decision.kind).toBe("not-supported");
@@ -112,7 +125,7 @@ describe("DecisionEngine", () => {
             supervisionRegime,
             rulesVersion: "FIDE-2023",
           },
-          illegalMoveHistory: { white: 1, black: 0 },
+          illegalMoveHistory: hist(1, 0),
         });
         expect(r.requiresFollowUp).toBe(false);
         expect(r.decision.kind).toBe("not-supported");
@@ -129,7 +142,7 @@ describe("DecisionEngine", () => {
       const r = run({
         incident: incident(fullFacts),
         ruleset: STANDARD,
-        illegalMoveHistory: { white: 0, black: 1 },
+        illegalMoveHistory: hist(0, 1),
       });
       expect(r.requiresFollowUp).toBe(false);
       expect(r.decision.treeId).toBe("DT-001-illegal-move-standard");
@@ -142,7 +155,7 @@ describe("DecisionEngine", () => {
       const r = run({
         incident: incident({ ...fullFacts, playerColor: "black" }),
         ruleset: STANDARD,
-        illegalMoveHistory: { white: 1, black: 0 },
+        illegalMoveHistory: hist(1, 0),
       });
       expect(r.decision.penalties[0].type).toBe("time-addition-opponent");
       expect(r.decision.penalties[0].playerColor).toBe("white");
@@ -152,13 +165,14 @@ describe("DecisionEngine", () => {
       // 説明文に「白」「時計を押した」とあっても、構造化回答がなければ質問する
       const r = run({
         ruleset: STANDARD,
-        illegalMoveHistory: { white: 0, black: 0 },
+        illegalMoveHistory: hist(0, 0),
       });
       expect(r.requiresFollowUp).toBe(true);
       expect(r.followUpQuestions.map((q) => q.id)).toEqual([
         "playerColor",
         "subtype",
         "gameEnded",
+        "clockPressed",
       ]);
       expect(r.decision.escalationRecommended).toBe(false);
     });
@@ -169,7 +183,7 @@ describe("DecisionEngine", () => {
       const first = engine.processIncident({
         incident: inc,
         ruleset: STANDARD,
-        illegalMoveHistory: { white: 1, black: 0 },
+        illegalMoveHistory: hist(1, 0),
       });
       expect(first.requiresFollowUp).toBe(true);
 
@@ -182,7 +196,7 @@ describe("DecisionEngine", () => {
       const second = engine.processIncident({
         incident: inc,
         ruleset: STANDARD,
-        illegalMoveHistory: { white: 1, black: 0 },
+        illegalMoveHistory: hist(1, 0),
       });
       expect(second.followUpQuestions.map((q) => q.id)).toEqual([
         "opponentCanCheckmate",
@@ -192,7 +206,7 @@ describe("DecisionEngine", () => {
       const third = engine.processIncident({
         incident: inc,
         ruleset: STANDARD,
-        illegalMoveHistory: { white: 1, black: 0 },
+        illegalMoveHistory: hist(1, 0),
       });
       expect(third.requiresFollowUp).toBe(false);
       expect(third.decision.incidentId).toBe("inc-1");

@@ -1,4 +1,4 @@
-# ADR-003: Explicit Ruleset Context and Illegal-Move Counting
+# ADR-004: Explicit Ruleset Context and Illegal-Move Counting
 
 **Status:** Accepted
 
@@ -34,16 +34,27 @@ Review of Milestones 2–3 found that:
    whose DT-001 decision applied an illegal-move penalty (`time-addition-opponent` or `game-loss`).
 4. **Standard tree (DT-001).** "Opponent already moved" is not a Standard branch (it belongs to Rapid
    A.5.2). Discovery after the game ends → result stands. Second offence → loss, unless the opponent
-   cannot checkmate (draw, 7.5.5). Subtypes 7.5.2/7.5.3/7.5.4 are explicit inputs.
+   cannot checkmate (draw, 7.5.5); if the arbiter cannot tell, a final consult-CA decision with no
+   automatic penalty. The second-offence output lists the previously counted incidents (time +
+   subtype) so the arbiter can verify the count. Subtypes 7.5.2/7.5.3/7.5.4 are explicit inputs;
+   7.5.3 carries medium confidence (clock started in error: illegal move vs distraction).
 5. **Citations** live in `lib/domain/rules/citations.ts` as verbatim quotes with edition and printed
-   page, checked by `__tests__/citations.test.ts`.
+   page, checked by `__tests__/citations.test.ts`. FIDE page numbers are Arbiters' Manual 2025
+   printed pages (`pageDocument`), not pages of a standalone Laws edition.
 6. **Ad-hoc game context.** Until tournament management (Milestone 6), the report flow collects
    competition type (+ regime), rules version, round and board; an ad-hoc `Tournament`/`Game` is
    persisted with deterministic IDs (date × ruleset × round × board) so history is keyed correctly.
+   Every new report starts at the context step (pre-filled with the last values) so the arbiter
+   confirms round/board with one tap or changes them.
 
 ## Consequences
 
-- The count reflects the *suggested* decision. If the arbiter rules differently, the history will not
-  reflect it until an "arbiter override" is recorded (future work).
-- Ad-hoc game IDs include the local date; a game spanning midnight would split its history.
 - Reports need one extra tap to confirm the (remembered) game context.
+
+### Known follow-ups
+
+- **Count follows the suggested ruling.** The count reflects the app's *suggested* decision. If the
+  arbiter rules differently, history will not reflect it until an "arbiter override / final ruling"
+  is recorded on the incident.
+- **Midnight game IDs.** Ad-hoc game IDs include the local date; a game spanning midnight would split
+  its history. Resolved once tournament/round management (Milestone 6) supplies real game IDs.

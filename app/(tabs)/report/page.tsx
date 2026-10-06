@@ -112,8 +112,9 @@ export default function ReportPage() {
     );
   };
 
+  // 新しい報告では毎回、対局（ラウンド・ボード）を確認させる（前回値は初期値として表示）
   const handleReset = () => {
-    setStep("category");
+    setStep("context");
     setSelectedCategory(null);
     setDescription("");
     reset();
@@ -161,7 +162,11 @@ export default function ReportPage() {
       {/* Game context */}
       {step === "context" && (
         <div className="space-y-5">
-          <p className="text-gray-600">対局を指定してください</p>
+          <p className="text-gray-600">
+            {lastContext
+              ? "対局を確認してください（前回の値を表示しています。ラウンド・ボードが正しいか確認）"
+              : "対局を指定してください"}
+          </p>
 
           <fieldset>
             <legend className="font-semibold mb-2">
@@ -385,7 +390,9 @@ export default function ReportPage() {
                 これは判断支援です。最終的な裁定はアービターが行ってください。
               </p>
               <h2 className="text-xl font-bold mb-2">追加確認</h2>
-              <p className="mb-4">{currentDecision.conclusion}</p>
+              <p className="mb-4 whitespace-pre-line">
+                {currentDecision.conclusion}
+              </p>
 
               {error && (
                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">

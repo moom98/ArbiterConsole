@@ -218,10 +218,12 @@ export function DecisionDisplay({ decision, onClose }: DecisionDisplayProps) {
                       {source.source}
                     </span>
                   </div>
-                  {(source.edition || source.page !== undefined) && (
+                  {source.edition && (
+                    <p className="text-xs text-gray-500">{source.edition}</p>
+                  )}
+                  {source.page !== undefined && (
                     <p className="text-xs text-gray-500 mb-2">
-                      {source.edition}
-                      {source.page !== undefined && ` p.${source.page}`}
+                      {source.pageDocument ?? source.edition} p.{source.page}
                     </p>
                   )}
                   {source.text ? (

@@ -29,8 +29,10 @@ export interface RuleCitation {
   priority: number;
   /** 規則・資料の版（例: "FIDE Laws of Chess 2023"） */
   edition?: string;
-  /** 参照資料内の印刷ページ番号 */
+  /** 印刷ページ番号（pageDocument のページ） */
   page?: number;
+  /** page が指す資料（例: 条文は Laws 2023 だがページは Arbiters' Manual 2025） */
+  pageDocument?: string;
 }
 
 export interface Penalty {

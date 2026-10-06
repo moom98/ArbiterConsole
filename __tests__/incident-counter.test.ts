@@ -128,6 +128,32 @@ describe("IncidentCounter", () => {
     });
   });
 
+  it("lists counted incidents with time and subtype, oldest first", () => {
+    const later = record({ penalties: [plus2] });
+    later.incident.reportedAt = new Date(FIXED_NOW.getTime() + 60_000);
+    later.incident.illegalMoveFacts = { subtype: "two-hands" };
+    const earlier = record({ penalties: [plus2] });
+    earlier.incident.illegalMoveFacts = { subtype: "illegal-move" };
+    const notCounted = record({ penalties: [] });
+    const list = IncidentCounter.listIllegalMoves(
+      [later, notCounted, earlier],
+      "g1",
+      "white"
+    );
+    expect(list).toEqual([
+      {
+        incidentId: earlier.incident.id,
+        reportedAt: FIXED_NOW,
+        subtype: "illegal-move",
+      },
+      {
+        incidentId: later.incident.id,
+        reportedAt: later.incident.reportedAt,
+        subtype: "two-hands",
+      },
+    ]);
+  });
+
   it("can exclude the incident currently being evaluated", () => {
     const r = record({ penalties: [plus2] });
     expect(

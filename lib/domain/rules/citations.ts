@@ -30,6 +30,8 @@ function fide(article: string, page: number, text: string): RuleCitation {
     priority: PRIORITY_FIDE,
     edition: FIDE_LAWS_2023_EDITION,
     page,
+    // 条文自体は Laws 2023 だが、ページ番号は収録資料（Arbiters' Manual 2025）の印刷ページ
+    pageDocument: FIDE_ARBITERS_MANUAL_2025_EDITION,
   };
 }
 
@@ -41,6 +43,7 @@ function manual(topic: string, page: number, text: string): RuleCitation {
     priority: PRIORITY_COMMENTARY,
     edition: FIDE_ARBITERS_MANUAL_2025_EDITION,
     page,
+    pageDocument: FIDE_ARBITERS_MANUAL_2025_EDITION,
   };
 }
 
@@ -52,6 +55,7 @@ function jcf(page: number, text: string): RuleCitation {
     priority: PRIORITY_JCF,
     edition: JCF_NA_SEMINAR_4_EDITION,
     page,
+    pageDocument: JCF_NA_SEMINAR_4_EDITION,
   };
 }
 
@@ -109,7 +113,12 @@ export const CITATIONS = {
     40,
     "The penalties mentioned in Articles 7 and 9 of the Competitive Rules of Play shall be one minute instead of two minutes."
   ),
-  FIDE_A_4: fide("A.4", 40, "The Competitive Rules of Play shall apply if:"),
+  // 原典の印字どおり "A4.1one" / "A4.2"（PDF のテキストそのもの。抽出時の欠落ではない）
+  FIDE_A_4: fide(
+    "A.4",
+    40,
+    "The Competitive Rules of Play shall apply if: A4.1one arbiter supervises at most three games and A4.2 each game is recorded by the arbiter or his/her assistant and, if possible, by electronic means"
+  ),
   FIDE_A_5_2: fide(
     "A.5.2",
     41,
@@ -120,7 +129,11 @@ export const CITATIONS = {
     41,
     "The regulations of an event shall specify whether Article A.4 or Article A.5 shall apply for the entire event."
   ),
-  FIDE_B_2: fide("B.2", 42, "The Competition Rules shall apply if:"),
+  FIDE_B_2: fide(
+    "B.2",
+    42,
+    "The Competition Rules shall apply if: B.2.1 one arbiter supervises one game and B.2.2 each game is recorded by the arbiter or his/her assistant and, if possible, by electronic means."
+  ),
   FIDE_B_3: fide(
     "B.3",
     42,
@@ -147,6 +160,11 @@ export const CITATIONS = {
     "Article 7.5 (clock not pressed)",
     27,
     "A move cannot be declared illegal until the player has completed his/her move by pressing his/her clock. So, the player can correct his/her move without being penalized, even if he/she had already released the piece on the board, provided he/she hasn’t pressed the clock. Of course, he/she must comply with the relevant parts of article 4."
+  ),
+  MANUAL_7_5_3_CLOCK_IN_ERROR: manual(
+    "Article 7.5.3 (clock started in error)",
+    27,
+    "Where an opponent’s clock may have been started in error the arbiter must decide if this action constitutes an illegal move or a distraction."
   ),
   MANUAL_7_5_INTERVENE: manual(
     "Article 7.5 (arbiter intervention)",

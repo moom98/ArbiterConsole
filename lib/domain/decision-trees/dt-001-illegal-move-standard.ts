@@ -33,6 +33,18 @@ export interface IllegalMoveStandardInput extends IllegalMoveFacts {
    * IncidentCounter が算出する。非負整数でなければならない。
    */
   playerIncidentCount: number;
+  /**
+   * 数えた違法手の明細（アービターが回数を確認できるよう、2回目の判断に表示する）。
+   * IncidentCounter が算出する。
+   */
+  priorIllegalMoves?: PriorIllegalMove[];
+}
+
+/** これまでに違法手ペナルティが適用された Incident の要約 */
+export interface PriorIllegalMove {
+  incidentId: string;
+  reportedAt: Date;
+  subtype?: IllegalMoveSubtype;
 }
 
 export type DecisionTreeResult =
@@ -66,6 +78,28 @@ function isNonNegativeInteger(n: unknown): n is number {
   return typeof n === "number" && Number.isInteger(n) && n >= 0;
 }
 
+function formatTime(date: Date): string {
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+/** 数えた違法手の確認用の行（例: "記録済み 1回目: 10:23 通常の違法手"） */
+export function describePriorIllegalMoves(
+  prior: PriorIllegalMove[] | undefined,
+  count: number
+): string[] {
+  if (!prior || prior.length === 0) {
+    return [`記録上の違法手 ${count}回（明細なし）: 記録を確認する`];
+  }
+  return prior.map(
+    (p, i) =>
+      `記録済み ${i + 1}回目: ${formatTime(p.reportedAt)} ${
+        p.subtype ? SUBTYPE_LABELS[p.subtype] : "種別不明"
+      }（この回数で正しいか確認する）`
+  );
+}
+
 /**
  * DT-001: Illegal Move (Standard)
  *
@@ -81,6 +115,14 @@ export class IllegalMoveStandardTree {
     if (input.playerColor === undefined) basic.push(QUESTIONS.playerColor);
     if (input.subtype === undefined) basic.push(QUESTIONS.subtype);
     if (input.gameEnded === undefined) basic.push(QUESTIONS.gameEnded);
+    // 時計の質問も同じラウンドで行う（7.5.3 と分かっている場合は不要）
+    if (
+      basic.length > 0 &&
+      input.clockPressed === undefined &&
+      input.subtype !== "clock-without-move"
+    ) {
+      basic.push(QUESTIONS.clockPressed);
+    }
     if (basic.length > 0) return this.needsInput(basic);
 
     const color = input.playerColor as PlayerColor;
@@ -113,11 +155,15 @@ export class IllegalMoveStandardTree {
       return this.decided(this.firstOffence(color, subtype));
 
     // 6. 2回目 → 原則負け。ただし相手がメイト不可能ならドロー（7.5.5）
+    const priorLines = describePriorIllegalMoves(
+      input.priorIllegalMoves,
+      priorCount
+    );
     const canMate = input.opponentCanCheckmate;
-    if (canMate === undefined || canMate === "unknown") {
+    if (canMate === undefined) {
       return this.needsInput(
         [QUESTIONS.opponentCanCheckmate],
-        `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）の可能性があります。結論には、相手がメイト可能な局面かの確認が必要です（7.5.5 ただし書き）。`,
+        `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）の可能性があります。結論には、相手がメイト可能な局面かの確認が必要です（7.5.5 ただし書き）。\n${priorLines.join("\n")}`,
         cite(
           SUBTYPE_ARTICLE[subtype],
           "FIDE_7_5_5",
@@ -125,9 +171,15 @@ export class IllegalMoveStandardTree {
         )
       );
     }
+    if (canMate === "unknown")
+      return this.decided(
+        this.secondOffenceMateUnknown(color, subtype, priorLines)
+      );
     if (canMate === false)
-      return this.decided(this.secondOffenceDraw(color, subtype));
-    return this.decided(this.secondOffenceLoss(color, subtype, priorCount));
+      return this.decided(this.secondOffenceDraw(color, subtype, priorLines));
+    return this.decided(
+      this.secondOffenceLoss(color, subtype, priorCount, priorLines)
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -293,18 +345,24 @@ export class IllegalMoveStandardTree {
         "JCF_NA_P47_TOUCH_MOVE"
       );
     if (subtype === "two-hands") sourceKeys.push("MANUAL_7_5_COUNT_ONCE");
+    if (subtype === "clock-without-move")
+      sourceKeys.push("MANUAL_7_5_3_CLOCK_IN_ERROR");
     sourceKeys.push(
       "MANUAL_7_5_INCREMENT",
       "MANUAL_7_5_INTERVENE",
       "JCF_NA_P48_PENALTY"
     );
 
-    const actions = [
-      "時計を止める",
+    const actions = ["時計を止める"];
+    if (subtype === "clock-without-move")
+      actions.push(
+        "相手の時計が誤って（例: 一時停止の代わりに）始動された場合は、違法手か妨害（distraction）かをアービターが判断する"
+      );
+    actions.push(
       ...this.restoreActions(color, subtype),
       `${COLOR_JA[opp]}の時計に2分加算する（7.5.5）`,
-      `インクリメントがある場合、違法手で${COLOR_JA[color]}に加算されたインクリメント分を差し引く`,
-    ];
+      `インクリメントがある場合、違法手で${COLOR_JA[color]}に加算されたインクリメント分を差し引く`
+    );
     if (subtype === "two-hands")
       actions.push(
         "同じ手の中の複数の違反（例: 両手による違法キャスリング）は1回として数える"
@@ -329,15 +387,47 @@ export class IllegalMoveStandardTree {
         },
       ],
       sources: cite(...sourceKeys),
-      confidence: "high",
+      // 7.5.3: 誤って時計が始動された場合は違法手か妨害かの判断が必要（Arbiters' Manual）
+      confidence: subtype === "clock-without-move" ? "medium" : "high",
       escalationRecommended: false,
+    };
+  }
+
+  private secondOffenceMateUnknown(
+    color: PlayerColor,
+    subtype: IllegalMoveSubtype,
+    priorLines: string[]
+  ): DecisionFields {
+    return {
+      ...this.base(),
+      kind: "manual-review",
+      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手がメイト可能な局面か判断できないため、結論（負け／ドロー）を確定できません。CAへ確認してください。`,
+      actions: [
+        "時計を止める",
+        ...priorLines,
+        "相手があらゆる合法手の連続で違反者のキングをメイトできるかをCAと確認する",
+        "メイト可能なら違反者の負け、不可能ならドロー（7.5.5）",
+      ],
+      intervention: "consult-ca",
+      penalties: [],
+      sources: cite(
+        SUBTYPE_ARTICLE[subtype],
+        "FIDE_7_5_5",
+        "JCF_NA_P48_PENALTY",
+        "JCF_NA_P48_DRAW_EXCEPTION"
+      ),
+      confidence: "low",
+      escalationRecommended: true,
+      escalationReason:
+        "7.5.5 ただし書き（相手がメイト不可能ならドロー）の該当性を判断できません",
     };
   }
 
   private secondOffenceLoss(
     color: PlayerColor,
     subtype: IllegalMoveSubtype,
-    priorCount: number
+    priorCount: number,
+    priorLines: string[]
   ): DecisionFields {
     const inconsistent = priorCount >= 2;
     return {
@@ -346,6 +436,7 @@ export class IllegalMoveStandardTree {
       conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）です。相手はメイト可能な局面のため、${COLOR_JA[color]}の負けとなります。`,
       actions: [
         "時計を止める",
+        ...priorLines,
         `${COLOR_JA[color]}の負けを宣言する（7.5.5）`,
         "結果を記録する",
       ],
@@ -361,9 +452,13 @@ export class IllegalMoveStandardTree {
         SUBTYPE_ARTICLE[subtype],
         "FIDE_7_5_5",
         "MANUAL_7_5_INTERVENE",
-        "JCF_NA_P48_PENALTY"
+        "JCF_NA_P48_PENALTY",
+        ...(subtype === "clock-without-move"
+          ? (["MANUAL_7_5_3_CLOCK_IN_ERROR"] as const)
+          : [])
       ),
-      confidence: inconsistent ? "medium" : "high",
+      confidence:
+        inconsistent || subtype === "clock-without-move" ? "medium" : "high",
       escalationRecommended: inconsistent,
       escalationReason: inconsistent
         ? `記録上、${COLOR_JA[color]}にはすでに${priorCount}回の違法手ペナルティがあります。記録を確認してください。`
@@ -373,7 +468,8 @@ export class IllegalMoveStandardTree {
 
   private secondOffenceDraw(
     color: PlayerColor,
-    subtype: IllegalMoveSubtype
+    subtype: IllegalMoveSubtype,
+    priorLines: string[]
   ): DecisionFields {
     return {
       ...this.base(),
@@ -381,6 +477,7 @@ export class IllegalMoveStandardTree {
       conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手はどのような合法手の連続でもメイトできない局面のため、ドローとなります。`,
       actions: [
         "時計を止める",
+        ...priorLines,
         "ドローを宣言する（7.5.5 ただし書き）",
         "結果を記録する",
       ],
@@ -397,7 +494,7 @@ export class IllegalMoveStandardTree {
         "FIDE_7_5_5",
         "JCF_NA_P48_DRAW_EXCEPTION"
       ),
-      confidence: "high",
+      confidence: subtype === "clock-without-move" ? "medium" : "high",
       escalationRecommended: false,
     };
   }

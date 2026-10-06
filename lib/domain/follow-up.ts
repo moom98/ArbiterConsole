@@ -78,6 +78,7 @@ export const QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     id: "clockPressed",
     scope: "incident",
     label: "違反したプレーヤーは時計を押しましたか？",
+    help: "「手を指さずに時計を押した」の場合は「はい」",
     options: YES_NO,
   },
   opponentCanCheckmate: {
@@ -85,10 +86,11 @@ export const QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     scope: "incident",
     label:
       "相手は、あらゆる合法手の連続によって違反者のキングをチェックメイトできる局面ですか？",
-    help: "メイト不可能な場合はドロー（7.5.5 ただし書き）。判断できない場合はCAへ確認してください。",
+    help: "メイト不可能な場合はドロー（7.5.5 ただし書き）。判断できない場合は「わからない」を選ぶと、CA確認の判断支援になります。",
     options: [
       { value: "true", label: "メイト可能" },
       { value: "false", label: "メイト不可能" },
+      { value: "unknown", label: "わからない（CAへ確認）" },
     ],
   },
   competitionType: {

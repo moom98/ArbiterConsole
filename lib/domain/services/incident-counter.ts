@@ -4,7 +4,12 @@ import type {
   PenaltyType,
   PlayerColor,
 } from "@/lib/domain/entities";
-import { DT_001_ID } from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
+import {
+  DT_001_ID,
+  type PriorIllegalMove,
+} from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
+
+export type { PriorIllegalMove };
 
 export interface IncidentRecord {
   incident: Incident;
@@ -36,19 +41,63 @@ export class IncidentCounter {
     );
   }
 
+  /** 数えた違法手の明細（報告時刻順） */
+  static listIllegalMoves(
+    records: readonly IncidentRecord[],
+    gameId: string,
+    playerColor: PlayerColor,
+    options: { excludeIncidentId?: string } = {}
+  ): PriorIllegalMove[] {
+    return records
+      .filter(
+        (r) =>
+          r.incident.gameId === gameId &&
+          r.incident.playerColor === playerColor &&
+          r.incident.id !== options.excludeIncidentId &&
+          IncidentCounter.isPenalisedIllegalMove(r)
+      )
+      .map((r) => ({
+        incidentId: r.incident.id,
+        reportedAt: r.incident.reportedAt,
+        subtype: r.incident.illegalMoveFacts?.subtype,
+      }))
+      .sort((a, b) => a.reportedAt.getTime() - b.reportedAt.getTime());
+  }
+
   static countIllegalMoves(
     records: readonly IncidentRecord[],
     gameId: string,
     playerColor: PlayerColor,
     options: { excludeIncidentId?: string } = {}
   ): number {
-    return records.filter(
-      (r) =>
-        r.incident.gameId === gameId &&
-        r.incident.playerColor === playerColor &&
-        r.incident.id !== options.excludeIncidentId &&
-        IncidentCounter.isPenalisedIllegalMove(r)
+    return IncidentCounter.listIllegalMoves(
+      records,
+      gameId,
+      playerColor,
+      options
     ).length;
+  }
+
+  /** 色ごとの明細。DecisionEngine の illegalMoveHistory にそのまま渡す */
+  static illegalMoveHistory(
+    records: readonly IncidentRecord[],
+    gameId: string,
+    options: { excludeIncidentId?: string } = {}
+  ): Record<PlayerColor, PriorIllegalMove[]> {
+    return {
+      white: IncidentCounter.listIllegalMoves(
+        records,
+        gameId,
+        "white",
+        options
+      ),
+      black: IncidentCounter.listIllegalMoves(
+        records,
+        gameId,
+        "black",
+        options
+      ),
+    };
   }
 
   static countIllegalMovesByColor(
@@ -56,19 +105,7 @@ export class IncidentCounter {
     gameId: string,
     options: { excludeIncidentId?: string } = {}
   ): Record<PlayerColor, number> {
-    return {
-      white: IncidentCounter.countIllegalMoves(
-        records,
-        gameId,
-        "white",
-        options
-      ),
-      black: IncidentCounter.countIllegalMoves(
-        records,
-        gameId,
-        "black",
-        options
-      ),
-    };
+    const h = IncidentCounter.illegalMoveHistory(records, gameId, options);
+    return { white: h.white.length, black: h.black.length };
   }
 }

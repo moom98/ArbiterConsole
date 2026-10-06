@@ -107,6 +107,29 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
     expect(stored?.decisionId).toBe(final.result.decision.id);
   });
 
+  it("'unknown' mate ability ends in a persisted consult-CA decision (not left pending) and lists the counted move", async () => {
+    await report(WHITE_COMPLETED);
+    const second = await report(WHITE_COMPLETED);
+    expect(second.followUpQuestions.map((q) => q.id)).toEqual([
+      "opponentCanCheckmate",
+    ]);
+    expect(second.decision.conclusion).toContain("記録済み 1回目");
+
+    const final = await store
+      .getState()
+      .answerFollowUp({ opponentCanCheckmate: "unknown" });
+    if (!final.ok) throw new Error(final.error);
+    expect(final.result.requiresFollowUp).toBe(false);
+    expect(final.result.decision.kind).toBe("manual-review");
+    expect(final.result.decision.penalties).toHaveLength(0);
+    expect(final.result.decision.actions.join("\n")).toContain(
+      "記録済み 1回目"
+    );
+    const stored = await db.incidents.get(store.getState().currentIncident!.id);
+    expect(stored?.status).toBe("escalated");
+    expect(stored?.decisionId).toBe(final.result.decision.id);
+  });
+
   it("history is keyed by game: a different board starts from zero", async () => {
     await report(WHITE_COMPLETED);
     const other = await report(WHITE_COMPLETED, {

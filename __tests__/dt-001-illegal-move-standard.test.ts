@@ -32,7 +32,7 @@ function articles(d: Decision): string[] {
 
 describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
   describe("follow-up questions", () => {
-    it("asks for player colour, subtype and gameEnded together when nothing is known", () => {
+    it("asks colour, subtype, gameEnded and clockPressed in one round when nothing is known", () => {
       const r = run({});
       expect(r.status).toBe("needs-input");
       if (r.status !== "needs-input") return;
@@ -40,11 +40,12 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
         "playerColor",
         "subtype",
         "gameEnded",
+        "clockPressed",
       ]);
       expect(r.decision.kind).toBe("follow-up-required");
       expect(r.decision.penalties).toHaveLength(0);
       expect(r.decision.escalationRecommended).toBe(false);
-      expect(r.decision.missingFields).toHaveLength(3);
+      expect(r.decision.missingFields).toHaveLength(4);
     });
 
     it("asks whether the clock was pressed only after the basic facts", () => {
@@ -56,6 +57,16 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       expect(r.status).toBe("needs-input");
       if (r.status !== "needs-input") return;
       expect(r.questions.map((q) => q.id)).toEqual(["clockPressed"]);
+    });
+
+    it("omits the clock question from the first round when the subtype is 7.5.3", () => {
+      const r = run({ subtype: "clock-without-move" });
+      expect(r.status).toBe("needs-input");
+      if (r.status !== "needs-input") return;
+      expect(r.questions.map((q) => q.id)).toEqual([
+        "playerColor",
+        "gameEnded",
+      ]);
     });
 
     it("does not ask about the clock for 7.5.3 (clock pressed without a move)", () => {
@@ -162,6 +173,15 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       );
     });
 
+    it("7.5.3: notes the clock-started-in-error judgement and lowers confidence", () => {
+      const d = decided({ ...base, subtype: "clock-without-move" });
+      expect(d.confidence).toBe("medium");
+      expect(d.actions.join("\n")).toContain("妨害（distraction）");
+      expect(articles(d)).toContain(
+        "FIDE Arbiters' Manual: Article 7.5.3 (clock started in error)"
+      );
+    });
+
     const subtypeCases: Array<[IllegalMoveSubtype, string, RegExp]> = [
       ["illegal-move", "FIDE 7.5.1", /局面を違反直前の局面に戻す/],
       ["promotion-not-replaced", "FIDE 7.5.2", /クイーンに置き換える/],
@@ -194,24 +214,59 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
   });
 
   describe("second completed illegal move", () => {
-    it("asks whether the opponent can checkmate when unknown", () => {
-      const r = run({
-        ...base,
-        playerIncidentCount: 1,
-        opponentCanCheckmate: "unknown",
-      });
-      expect(r.status).toBe("needs-input");
-      if (r.status !== "needs-input") return;
-      expect(r.questions.map((q) => q.id)).toEqual(["opponentCanCheckmate"]);
-      expect(r.decision.penalties).toHaveLength(0);
-      expect(r.decision.conclusion).toContain("2回目");
-    });
-
-    it("asks the same when the answer is missing", () => {
+    it("asks whether the opponent can checkmate when not yet answered", () => {
       const { opponentCanCheckmate: _omit, ...rest } = base;
       void _omit;
       const r = run({ ...rest, playerIncidentCount: 1 });
       expect(r.status).toBe("needs-input");
+      if (r.status !== "needs-input") return;
+      expect(r.questions.map((q) => q.id)).toEqual(["opponentCanCheckmate"]);
+      expect(r.questions[0].options.map((o) => o.value)).toEqual([
+        "true",
+        "false",
+        "unknown",
+      ]);
+      expect(r.decision.penalties).toHaveLength(0);
+      expect(r.decision.conclusion).toContain("2回目");
+    });
+
+    it("'unknown' yields a final consult-CA decision citing 7.5.5, with no penalty", () => {
+      const d = decided({
+        ...base,
+        playerIncidentCount: 1,
+        opponentCanCheckmate: "unknown",
+      });
+      expect(d.kind).toBe("manual-review");
+      expect(d.intervention).toBe("consult-ca");
+      expect(d.penalties).toHaveLength(0);
+      expect(d.escalationRecommended).toBe(true);
+      expect(articles(d)).toContain("FIDE 7.5.5");
+    });
+
+    it("lists the previously counted illegal moves (time + subtype) for verification", () => {
+      const reportedAt = new Date(2026, 0, 1, 10, 23);
+      for (const opponentCanCheckmate of [true, false, "unknown"] as const) {
+        const d = decided({
+          ...base,
+          playerIncidentCount: 1,
+          priorIllegalMoves: [
+            { incidentId: "p1", reportedAt, subtype: "two-hands" },
+          ],
+          opponentCanCheckmate,
+        });
+        expect(d.actions.join("\n")).toContain(
+          "記録済み 1回目: 10:23 両手で指した"
+        );
+      }
+    });
+
+    it("says the itemised record is missing when only a count is known", () => {
+      const d = decided({
+        ...base,
+        playerIncidentCount: 1,
+        opponentCanCheckmate: true,
+      });
+      expect(d.actions.join("\n")).toContain("明細なし");
     });
 
     it("declares the game lost when the opponent can checkmate", () => {

@@ -7,7 +7,10 @@ import type {
   SupervisionRegime,
 } from "@/lib/domain/entities";
 import { SUPPORTED_RULES_VERSIONS } from "@/lib/domain/entities";
-import { IllegalMoveStandardTree } from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
+import {
+  IllegalMoveStandardTree,
+  type PriorIllegalMove,
+} from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
 import {
   buildDecision,
   type DecisionFields,
@@ -31,10 +34,10 @@ export interface DecisionEngineContext {
   incident: Incident;
   ruleset?: RulesetContext;
   /**
-   * この対局で各プレーヤーに既に適用された違法手ペナルティの回数（IncidentCounter が算出）。
-   * 評価中の Incident 自身は含めないこと。
+   * この対局で各プレーヤーに既に適用された違法手ペナルティの明細（IncidentCounter が算出）。
+   * 件数が回数になる。評価中の Incident 自身は含めないこと。
    */
-  illegalMoveHistory?: Record<PlayerColor, number>;
+  illegalMoveHistory?: Record<PlayerColor, PriorIllegalMove[]>;
 }
 
 export interface DecisionEngineResult {
@@ -123,11 +126,13 @@ export class DecisionEngine {
     const { incident, illegalMoveHistory } = context;
     const color = incident.playerColor;
     const tree = new IllegalMoveStandardTree(this.providers);
+    const prior =
+      color && illegalMoveHistory ? illegalMoveHistory[color] : undefined;
     const result = tree.evaluate({
       ...incident.illegalMoveFacts,
       playerColor: color,
-      playerIncidentCount:
-        color && illegalMoveHistory ? illegalMoveHistory[color] : undefined,
+      playerIncidentCount: Array.isArray(prior) ? prior.length : undefined,
+      priorIllegalMoves: prior,
     });
     const decision = {
       ...result.decision,

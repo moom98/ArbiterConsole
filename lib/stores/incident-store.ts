@@ -79,7 +79,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
       ? await db.tournaments.get(game.tournamentId)
       : undefined;
     const records = await loadGameRecords(db, incident.gameId);
-    const illegalMoveHistory = IncidentCounter.countIllegalMovesByColor(
+    const illegalMoveHistory = IncidentCounter.illegalMoveHistory(
       records,
       incident.gameId,
       { excludeIncidentId: incident.id }

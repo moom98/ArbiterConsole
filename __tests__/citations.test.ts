@@ -48,6 +48,15 @@ const EXPECTED: Record<string, { text: string; page: number }> = {
     page: 41,
     text: "If the arbiter observes an action taken under Article 7.5.1, 7.5.2, 7.5.3 or 7.5.4, he/she shall act according to Article 7.5.5, provided the opponent has not made his/her next move. If the arbiter does not intervene, the opponent is entitled to claim, provided the opponent has not made his/her next move. If the opponent does not claim and the arbiter does not intervene, the illegal move shall stand and the game shall continue. Once the opponent has made his/her next move, an illegal move cannot be corrected unless this is agreed by the players without intervention of the arbiter.",
   },
+  "FIDE A.4": {
+    page: 40,
+    // 原典の印字どおり "A4.1one"
+    text: "The Competitive Rules of Play shall apply if: A4.1one arbiter supervises at most three games and A4.2 each game is recorded by the arbiter or his/her assistant and, if possible, by electronic means",
+  },
+  "FIDE B.2": {
+    page: 42,
+    text: "The Competition Rules shall apply if: B.2.1 one arbiter supervises one game and B.2.2 each game is recorded by the arbiter or his/her assistant and, if possible, by electronic means.",
+  },
   "FIDE B.3": {
     page: 42,
     text: "Otherwise, play shall be governed by the Rapid chess Laws as in Article A.2, A.3 and A.5.",
@@ -78,6 +87,20 @@ describe("Rule citation catalog", () => {
     expect(CITATIONS.FIDE_4_3.text).toMatch(
       /^Except as provided in Article 4\.2\.1, if the player having the move touches on the chessboard, with the intention of moving or capturing: 4\.3\.1 one or more of his\/her own pieces, he\/she must move the first piece touched that can be moved\./
     );
+  });
+
+  it("FIDE page numbers are labelled as Arbiters' Manual 2025 pages", () => {
+    for (const c of all.filter((x) => x.source !== "JCF")) {
+      expect(c.pageDocument).toBe("FIDE Arbiters' Manual 2025");
+    }
+    expect(CITATIONS.JCF_NA_P48_PENALTY.pageDocument).toContain("JCF NA");
+  });
+
+  it("Manual note on 7.5.3 (clock started in error) is verbatim", () => {
+    expect(CITATIONS.MANUAL_7_5_3_CLOCK_IN_ERROR.text).toBe(
+      "Where an opponent’s clock may have been started in error the arbiter must decide if this action constitutes an illegal move or a distraction."
+    );
+    expect(CITATIONS.MANUAL_7_5_3_CLOCK_IN_ERROR.page).toBe(27);
   });
 
   it("JCF NA p.48 quotes the slide verbatim", () => {

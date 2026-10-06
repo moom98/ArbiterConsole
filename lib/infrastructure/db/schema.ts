@@ -5,6 +5,7 @@ import type {
   Incident,
   Decision,
   Rule,
+  RuleSource,
   Embedding,
 } from "@/lib/domain/entities";
 
@@ -14,6 +15,7 @@ export class ArbiterDatabase extends Dexie {
   incidents!: EntityTable<Incident, "id">;
   decisions!: EntityTable<Decision, "id">;
   rules!: EntityTable<Rule, "id">;
+  ruleSources!: EntityTable<RuleSource, "id">;
   embeddings!: EntityTable<Embedding, "id">;
 
   constructor() {
@@ -26,6 +28,12 @@ export class ArbiterDatabase extends Dexie {
       decisions: "id, incidentId, generatedBy, confidence, createdAt",
       rules: "id, source, tournamentId, article, priority",
       embeddings: "id, ruleId, model",
+    });
+
+    // v3: ルール資料（RuleSource）と Rule.sourceId を追加（§29, §30）
+    this.version(3).stores({
+      rules: "id, source, sourceId, tournamentId, article, priority",
+      ruleSources: "id, sourceType, tournamentId, status",
     });
   }
 }

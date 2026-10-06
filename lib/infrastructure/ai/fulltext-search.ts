@@ -1,102 +1,127 @@
 import lunr from "lunr";
-import { db } from "@/lib/infrastructure/db";
 import type { Rule } from "@/lib/domain/entities";
-import type { ScoredRule } from "./vector-search";
+import { tokenize, tokenizeDetailed } from "./tokenizer";
 
-let searchIndex: lunr.Index | null = null;
-let ruleMap: Map<string, Rule> | null = null;
+export interface FulltextHit {
+  ruleId: string;
+  /** Lunrの生スコア（上限なし。ハイブリッド検索側で正規化する） */
+  score: number;
+}
 
 /**
- * Lunr.jsのインデックスを構築
+ * Lunr.js による全文検索インデックス
+ *
+ * Lunr標準の tokenizer / trimmer / stemmer / stopWordFilter は英語前提で、
+ * trimmer は非ASCII文字（日本語）を除去してしまうため使用しない。
+ * 代わりに tokenizer.ts で事前にトークン化した配列を渡し、
+ * インデックス時・クエリ時ともにパイプラインを空にして同一処理を保証する。
  */
-export async function buildFulltextIndex(): Promise<void> {
-  const allRules = await db.rules.toArray();
+export class FulltextIndex {
+  private readonly index: lunr.Index;
 
-  // Ruleマップを作成
-  ruleMap = new Map(allRules.map((rule) => [rule.id, rule]));
+  constructor(rules: readonly Rule[]) {
+    this.index = lunr(function () {
+      this.pipeline.reset();
+      this.searchPipeline.reset();
 
-  // Lunrインデックスを構築
-  searchIndex = lunr(function () {
-    this.ref("id");
-    this.field("article", { boost: 10 });
-    this.field("title", { boost: 5 });
-    this.field("content");
+      this.ref("id");
+      this.field("article", { boost: 10 });
+      this.field("title", { boost: 5 });
+      this.field("content");
 
-    // 日本語検索のための設定
-    this.pipeline.remove(lunr.stemmer);
-    this.pipeline.remove(lunr.stopWordFilter);
-
-    allRules.forEach((rule) => {
-      this.add({
-        id: rule.id,
-        article: rule.article,
-        title: rule.title,
-        content: rule.content,
+      rules.forEach((rule) => {
+        // lunr は配列が渡された場合それをトークン列として扱う
+        this.add({
+          id: rule.id,
+          article: tokenize(rule.article),
+          title: tokenize(rule.title),
+          content: tokenize(rule.content),
+        });
       });
     });
-  });
-
-  console.log(`Fulltext index built with ${allRules.length} rules`);
-}
-
-/**
- * Full-text searchでルールを検索
- */
-export async function fulltextSearch(
-  query: string,
-  limit: number = 10
-): Promise<ScoredRule[]> {
-  if (!searchIndex || !ruleMap) {
-    await buildFulltextIndex();
   }
 
-  if (!searchIndex || !ruleMap) {
-    throw new Error("Failed to build fulltext index");
-  }
+  search(query: string, limit: number = Infinity): FulltextHit[] {
+    const tokens = tokenizeDetailed(query);
+    if (tokens.length === 0) {
+      return [];
+    }
 
-  // Lunrで検索
-  const results = searchIndex.query((q) => {
-    // クエリを単語に分割
-    const tokens = query.split(/\s+/).filter((t) => t.length > 0);
+    const results = this.index.query((q) => {
+      for (const token of tokens) {
+        q.term(token.text, { boost: 10, usePipeline: false });
 
-    tokens.forEach((token) => {
-      // Exact match
-      q.term(token, { boost: 10 });
-
-      // Wildcard match
-      if (token.length >= 2) {
-        q.term(token, {
-          wildcard: lunr.Query.wildcard.LEADING | lunr.Query.wildcard.TRAILING,
-          boost: 1,
-        });
+        if (token.kind === "article") {
+          // "7.5" で "7.5.4" などの下位条文にも一致させる
+          q.term(token.text, {
+            boost: 2,
+            usePipeline: false,
+            wildcard: lunr.Query.wildcard.TRAILING,
+          });
+        } else if (token.kind === "word" && token.text.length >= 3) {
+          // 語形変化の簡易吸収（"illegal" → "illegally" 等）
+          q.term(token.text, {
+            boost: 1,
+            usePipeline: false,
+            wildcard: lunr.Query.wildcard.TRAILING,
+          });
+        } else if (
+          token.kind === "cjk" &&
+          Array.from(token.text).length === 1
+        ) {
+          // 1文字の日本語クエリは bi-gram の前後どちらにも一致させる
+          q.term(token.text, {
+            boost: 1,
+            usePipeline: false,
+            wildcard:
+              lunr.Query.wildcard.LEADING | lunr.Query.wildcard.TRAILING,
+          });
+        }
       }
     });
-  });
 
-  // 結果をScoredRuleに変換
-  const scoredRules: ScoredRule[] = results
-    .map((result) => {
-      const rule = ruleMap!.get(result.ref);
-      if (!rule) {
-        return null;
-      }
+    return results
+      .slice(0, limit)
+      .map((r) => ({ ruleId: r.ref, score: r.score }));
+  }
+}
 
-      const scoredRule: ScoredRule = {
-        rule,
-        score: result.score,
-        method: "fulltext",
-      };
-      return scoredRule;
-    })
-    .filter((item) => item !== null) as ScoredRule[];
+let cachedIndex: FulltextIndex | null = null;
+let buildPromise: Promise<FulltextIndex> | null = null;
 
-  return scoredRules.slice(0, limit);
+/**
+ * インデックスを取得（構築中の場合は同じPromiseを共有し二重構築しない）
+ */
+export function getFulltextIndex(
+  loadRules: () => Promise<Rule[]>
+): Promise<FulltextIndex> {
+  if (cachedIndex) {
+    return Promise.resolve(cachedIndex);
+  }
+  if (!buildPromise) {
+    const promise = loadRules()
+      .then((rules) => {
+        const index = new FulltextIndex(rules);
+        // 構築中に clearFulltextIndex() された場合はキャッシュしない
+        if (buildPromise === promise) {
+          cachedIndex = index;
+        }
+        return index;
+      })
+      .finally(() => {
+        if (buildPromise === promise) {
+          buildPromise = null;
+        }
+      });
+    buildPromise = promise;
+  }
+  return buildPromise;
 }
 
 /**
- * Fulltext indexをクリア
+ * インデックスを破棄（ルール更新時に呼ぶ。次回検索時に再構築される）
  */
 export function clearFulltextIndex(): void {
-  searchIndex = null;
-  ruleMap = null;
+  cachedIndex = null;
+  buildPromise = null;
 }

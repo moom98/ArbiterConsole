@@ -25,7 +25,13 @@ export interface RuleSearchResult {
 }
 
 export interface HybridSearchResponse {
+  /** 主結果（優先順位 大会 > JCF > FIDE > 解説 でグループ化） */
   results: RuleSearchResult[];
+  /**
+   * 関連する可能性のある条文（一般的な語のみの一致など確度の低いもの）。
+   * 主結果とは混ぜず、優先順位の並べ替えもしない（関連度順）。
+   */
+  related: RuleSearchResult[];
   /** 失敗した検索方式とエラー内容（片方失敗時はもう片方の結果のみ返す） */
   failures: Partial<Record<SearchMethod, string>>;
 }
@@ -64,6 +70,12 @@ export interface FusedHit {
   score: number;
   vectorScore?: number;
   fulltextScore?: number;
+  /**
+   * main: 主結果（優先順位でグループ化して表示）
+   * related: 弱い一致（一般的な語のみ一致など）。主結果に混ぜず
+   *          「関連する可能性のある条文」として別表示する
+   */
+  confidence: "main" | "related";
 }
 
 export interface FuseOptions {
@@ -73,9 +85,14 @@ export interface FuseOptions {
   /** これ未満のベクトル類似度は 0 として扱う（既定 0） */
   vectorMinSimilarity?: number;
   /**
-   * 両方式が成功した場合でも、Lunrスコア上位この件数の全文検索ヒットは
-   * minScore に関わらず残す（既定 3）。日本語の長い質問文は bi-gram 数が多く
-   * coverage が低くなるため、統合スコアだけでは正解条文が落ちることがある。
+   * 全文検索ヒットを「実質的な一致」とみなす coverage（IDF重み付き内容語の一致率）の下限
+   * （既定 0.3）。これ未満の一致（"場合", "対局者" など一般的な語のみ）は
+   * 主結果に入れない。
+   */
+  substantiveCoverage?: number;
+  /**
+   * 実質的な一致である全文検索の上位この件数は、minScore に関わらず主結果に残す
+   * （既定 3）。また、実質的でない上位ヒットはこの件数まで related として返す。
    */
   guaranteedFulltextHits?: number;
   /**
@@ -100,6 +117,7 @@ export function fuseHits(
   fulltextHits: readonly FulltextHit[] | null,
   options: FuseOptions
 ): FusedHit[] {
+  type Draft = Omit<FusedHit, "confidence">;
   const wv = vectorHits ? Math.max(0, options.vectorWeight) : 0;
   const wf = fulltextHits ? Math.max(0, options.fulltextWeight) : 0;
   const totalWeight = wv + wf;
@@ -107,7 +125,7 @@ export function fuseHits(
     return [];
   }
 
-  const fused = new Map<string, FusedHit>();
+  const fused = new Map<string, Draft>();
   const entry = (ruleId: string) => {
     let hit = fused.get(ruleId);
     if (!hit) {
@@ -134,30 +152,53 @@ export function fuseHits(
     entry(hit.ruleId).fulltextScore = relative * (0.5 + 0.5 * coverage);
   }
 
-  const guaranteed = new Set(
+  const substantiveCoverage = options.substantiveCoverage ?? 0.3;
+  const substantive = new Set(
+    (fulltextHits ?? [])
+      .filter((h) => (h.coverage ?? 1) >= substantiveCoverage)
+      .map((h) => h.ruleId)
+  );
+  const topK = options.guaranteedFulltextHits ?? 3;
+  const topFulltext = new Set(
     [...(fulltextHits ?? [])]
       .sort((a, b) => b.score - a.score)
-      .slice(0, options.guaranteedFulltextHits ?? 3)
+      .slice(0, topK)
       .map((h) => h.ruleId)
   );
   const fulltextOnly = vectorHits === null;
   const relativeFloor = options.fulltextRelativeFloor ?? 0.1;
 
   const results: FusedHit[] = [];
-  for (const hit of Array.from(fused.values())) {
-    hit.score =
-      (wv * (hit.vectorScore ?? 0) + wf * (hit.fulltextScore ?? 0)) /
+  for (const draft of Array.from(fused.values())) {
+    const score =
+      (wv * (draft.vectorScore ?? 0) + wf * (draft.fulltextScore ?? 0)) /
       totalWeight;
+    const relative = relativeById.get(draft.ruleId) ?? 0;
+    const isSubstantive = substantive.has(draft.ruleId);
+    const hasVectorSupport = (draft.vectorScore ?? 0) > 0;
 
-    let keep: boolean;
+    let confidence: FusedHit["confidence"] | null = null;
     if (fulltextOnly) {
-      // 意味検索が使えない（オフライン等）場合は全文検索の順位で返す
-      keep = (relativeById.get(hit.ruleId) ?? 0) >= relativeFloor;
-    } else {
-      keep = hit.score >= options.minScore || guaranteed.has(hit.ruleId);
+      // 意味検索が使えない（オフライン等）場合: minScore は適用せず、
+      // 実質的な一致を主結果、それ以外の上位を related とする
+      if (relative >= relativeFloor) {
+        confidence = isSubstantive
+          ? "main"
+          : topFulltext.has(draft.ruleId)
+            ? "related"
+            : null;
+      }
+    } else if (
+      (score >= options.minScore && (hasVectorSupport || isSubstantive)) ||
+      (isSubstantive && topFulltext.has(draft.ruleId))
+    ) {
+      confidence = "main";
+    } else if (topFulltext.has(draft.ruleId) && relative >= relativeFloor) {
+      confidence = "related";
     }
-    if (keep) {
-      results.push(hit);
+
+    if (confidence) {
+      results.push({ ...draft, score, confidence });
     }
   }
 
@@ -206,13 +247,13 @@ export async function hybridSearch(
   } = options;
 
   if (!query.trim()) {
-    return { results: [], failures: {} };
+    return { results: [], related: [], failures: {} };
   }
 
   const corpus = await deps.loadCorpus();
   const candidates = selectCandidates(corpus, tournamentId);
   if (candidates.length === 0) {
-    return { results: [], failures: {} };
+    return { results: [], related: [], failures: {} };
   }
 
   const [vectorOutcome, fulltextOutcome] = await Promise.allSettled([
@@ -242,10 +283,9 @@ export async function hybridSearch(
   const ruleById = new Map(candidates.map((r) => [r.id, r]));
   const sourceById = new Map(corpus.sources.map((s) => [s.id, s]));
 
-  const top: RuleSearchResult[] = [];
-  for (const hit of fused) {
+  const toResult = (hit: FusedHit): RuleSearchResult | null => {
     const rule = ruleById.get(hit.ruleId);
-    if (!rule) continue;
+    if (!rule) return null;
     const methods: SearchMethod[] = [];
     if (hit.vectorScore !== undefined && hit.vectorScore > 0) {
       methods.push("vector");
@@ -253,19 +293,30 @@ export async function hybridSearch(
     if (hit.fulltextScore !== undefined && hit.fulltextScore > 0) {
       methods.push("fulltext");
     }
-    top.push({
+    return {
       rule,
       source: rule.sourceId ? sourceById.get(rule.sourceId) : undefined,
       score: hit.score,
       vectorScore: hit.vectorScore,
       fulltextScore: hit.fulltextScore,
       methods,
-    });
-    if (top.length >= limit) break;
-  }
+    };
+  };
+  const collect = (confidence: FusedHit["confidence"], max: number) =>
+    fused
+      .filter((hit) => hit.confidence === confidence)
+      .map(toResult)
+      .filter((r): r is RuleSearchResult => r !== null)
+      .slice(0, max);
 
-  return { results: orderByRulePriority(top), failures };
+  return {
+    results: orderByRulePriority(collect("main", limit)),
+    related: collect("related", RELATED_LIMIT),
+    failures,
+  };
 }
+
+const RELATED_LIMIT = 3;
 
 function errorMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);

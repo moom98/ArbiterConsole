@@ -74,6 +74,7 @@ export default function SearchPage() {
   }
 
   const results = response?.results ?? [];
+  const related = response?.related ?? [];
 
   return (
     <div className="p-4 sm:p-6">
@@ -139,7 +140,7 @@ export default function SearchPage() {
           )}
 
           {results.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
+            <div className="text-center py-8 text-gray-500">
               <p>該当する条文が見つかりませんでした</p>
               <p className="text-sm mt-2">
                 別のキーワードや条文番号で検索してください
@@ -149,38 +150,66 @@ export default function SearchPage() {
             <ul className="space-y-3">
               {results.map((result) => (
                 <li key={result.rule.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelected(result)}
-                    className="w-full text-left bg-white rounded-lg shadow p-4 active:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <h3 className="font-semibold">
-                        {result.rule.article}
-                        {result.rule.title && (
-                          <span className="ml-2 font-normal text-gray-700">
-                            {result.rule.title}
-                          </span>
-                        )}
-                      </h3>
-                      <span className="shrink-0 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                        {SOURCE_LABEL[result.rule.source]}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 mb-2">
-                      {sourceLine(result)}
-                    </p>
-                    <p className="text-sm text-gray-700 line-clamp-3">
-                      {result.rule.content}
-                    </p>
-                  </button>
+                  <ResultCard result={result} onSelect={setSelected} />
                 </li>
               ))}
             </ul>
           )}
+
+          {related.length > 0 && (
+            <section className="mt-6">
+              <h2 className="text-sm font-semibold text-gray-600 mb-1">
+                関連する可能性のある条文
+              </h2>
+              <p className="text-xs text-gray-500 mb-2">
+                一般的な語のみが一致しています。内容を確認してください。
+              </p>
+              <ul className="space-y-2 opacity-80">
+                {related.map((result) => (
+                  <li key={result.rule.id}>
+                    <ResultCard result={result} onSelect={setSelected} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </>
       )}
     </div>
+  );
+}
+
+function ResultCard({
+  result,
+  onSelect,
+}: {
+  result: RuleSearchResult;
+  onSelect: (result: RuleSearchResult) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(result)}
+      className="w-full text-left bg-white rounded-lg shadow p-4 active:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    >
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <h3 className="font-semibold">
+          {result.rule.article}
+          {result.rule.title && (
+            <span className="ml-2 font-normal text-gray-700">
+              {result.rule.title}
+            </span>
+          )}
+        </h3>
+        <span className="shrink-0 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+          {SOURCE_LABEL[result.rule.source]}
+        </span>
+      </div>
+      <p className="text-xs text-gray-500 mb-2">{sourceLine(result)}</p>
+      <p className="text-sm text-gray-700 line-clamp-3">
+        {result.rule.content}
+      </p>
+    </button>
   );
 }
 

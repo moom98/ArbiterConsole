@@ -53,7 +53,9 @@ describe("fuseHits", () => {
 
   it("re-weights to the available side when one side is unavailable", () => {
     const fulltextOnly = fuseHits(null, [{ ruleId: "a", score: 7 }], weights);
-    expect(fulltextOnly).toEqual([{ ruleId: "a", score: 1, fulltextScore: 1 }]);
+    expect(fulltextOnly).toEqual([
+      { ruleId: "a", score: 1, fulltextScore: 1, confidence: "main" },
+    ]);
 
     const vectorOnly = fuseHits([{ ruleId: "a", score: 0.5 }], null, weights);
     expect(vectorOnly[0].score).toBeCloseTo(0.5);

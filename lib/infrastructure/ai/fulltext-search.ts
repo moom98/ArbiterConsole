@@ -7,8 +7,10 @@ export interface FulltextHit {
   /** Lunrの生スコア（上限なし。ハイブリッド検索側で正規化する） */
   score: number;
   /**
-   * クエリトークンのうち、この条文に一致したものの割合 (0, 1]。
-   * 弱い部分一致（bi-gram 1個だけ等）を正規化後に過大評価しないために使う。
+   * クエリの内容語トークンのうち、この条文に一致したものの割合 [0, 1]（IDF重み付き）。
+   * - ひらがなのみの bi-gram（"ます", "どう" 等の機能語）は対象外
+   * - 多くの条文に出現する bi-gram（"場合", "対局" 等）は重みが小さい
+   * クエリの主要な語が一致しているか（実質的な一致か）の判定に使う。
    */
   coverage?: number;
 }
@@ -21,10 +23,34 @@ export interface FulltextHit {
  * 代わりに tokenizer.ts で事前にトークン化した配列を渡し、
  * インデックス時・クエリ時ともにパイプラインを空にして同一処理を保証する。
  */
+const HIRAGANA_ONLY = new RegExp("^[\\p{Script=Hiragana}ー]+$", "u");
+
+/** ひらがなのみの bi-gram は文法的な要素が多く、内容の一致判定から除く */
+function isContentToken(token: SearchToken): boolean {
+  return !(token.kind === "cjk" && HIRAGANA_ONLY.test(token.text));
+}
+
 export class FulltextIndex {
   private readonly index: lunr.Index;
+  private readonly documentFrequency = new Map<string, number>();
+  private readonly documentCount: number;
 
   constructor(rules: readonly Rule[]) {
+    this.documentCount = rules.length;
+    for (const rule of rules) {
+      const terms = new Set([
+        ...tokenize(rule.article),
+        ...tokenize(rule.title),
+        ...tokenize(rule.content),
+      ]);
+      terms.forEach((term) =>
+        this.documentFrequency.set(
+          term,
+          (this.documentFrequency.get(term) ?? 0) + 1
+        )
+      );
+    }
+
     this.index = lunr(function () {
       this.pipeline.reset();
       this.searchPipeline.reset();
@@ -88,18 +114,31 @@ export class FulltextIndex {
     const uniqueTokens = Array.from(
       new Map(tokens.map((t) => [t.text, t])).values()
     );
+    const contentTokens = uniqueTokens.filter(isContentToken);
+    const weighted = (
+      contentTokens.length > 0 ? contentTokens : uniqueTokens
+    ).map((token) => ({ token, weight: this.idf(token.text) }));
+    const totalWeight = weighted.reduce((sum, w) => sum + w.weight, 0);
 
     return results.slice(0, limit).map((r) => {
       const matchedTerms = Object.keys(r.matchData.metadata);
-      const matched = uniqueTokens.filter((token) =>
-        matchedTerms.some((term) => tokenMatchesTerm(token, term))
-      ).length;
+      const matchedWeight = weighted
+        .filter(({ token }) =>
+          matchedTerms.some((term) => tokenMatchesTerm(token, term))
+        )
+        .reduce((sum, w) => sum + w.weight, 0);
       return {
         ruleId: r.ref,
         score: r.score,
-        coverage: matched / uniqueTokens.length,
+        coverage: totalWeight > 0 ? matchedWeight / totalWeight : 0,
       };
     });
+  }
+
+  /** Lunr と同じ式の IDF。コーパスに無い語は最大の重みになる */
+  private idf(term: string): number {
+    const df = this.documentFrequency.get(term) ?? 0;
+    return Math.log(1 + Math.abs((this.documentCount - df + 0.5) / (df + 0.5)));
   }
 }
 

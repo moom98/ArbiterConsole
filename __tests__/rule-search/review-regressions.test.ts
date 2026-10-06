@@ -5,7 +5,11 @@ import {
   clearFulltextIndex,
   getFulltextIndex,
 } from "@/lib/infrastructure/ai/fulltext-search";
-import { fuseHits, hybridSearch } from "@/lib/infrastructure/ai/hybrid-search";
+import {
+  fuseHits,
+  hybridSearch,
+  type HybridSearchDeps,
+} from "@/lib/infrastructure/ai/hybrid-search";
 import {
   buildLines,
   parseArticlesFromPages,
@@ -43,12 +47,14 @@ describe("tokenizer prefixes and stop words", () => {
 describe("fulltext coverage and index invalidation", () => {
   afterEach(() => clearFulltextIndex());
 
-  it("reports the fraction of query tokens matched", () => {
+  it("reports IDF-weighted coverage of the query's content tokens", () => {
     const index = new FulltextIndex(rules);
     // bi-grams: 違法 / 法手 / 手キ / キャ — only the first two exist
-    const [hit] = index.search("違法手キャ");
-    expect(hit.ruleId).toBe("ja-illegal");
-    expect(hit.coverage).toBeCloseTo(2 / 4);
+    const [partial] = index.search("違法手キャ");
+    expect(partial.ruleId).toBe("ja-illegal");
+    expect(partial.coverage).toBeGreaterThan(0);
+    expect(partial.coverage).toBeLessThan(1);
+    expect(index.search("違法手")[0].coverage).toBe(1);
     expect(index.search("7.5")[0].coverage).toBe(1);
   });
 
@@ -112,19 +118,39 @@ describe("fuseHits gating", () => {
     expect(fused.map((h) => h.ruleId)).toEqual(["complete", "partial"]);
   });
 
-  it("fulltext-only: ignores minScore and cuts by relative score instead", () => {
+  it("fulltext-only: substantive hits are main regardless of minScore", () => {
     const fused = fuseHits(
       null,
       [
-        { ruleId: "top", score: 10, coverage: 0.15 },
-        { ruleId: "tail", score: 0.5, coverage: 0.05 },
+        { ruleId: "top", score: 10, coverage: 0.4 },
+        { ruleId: "weak", score: 5, coverage: 0.1 },
+        { ruleId: "tail", score: 0.5, coverage: 0.9 },
       ],
-      weights
+      { ...weights, minScore: 0.9 }
     );
-    expect(fused.map((h) => h.ruleId)).toEqual(["top"]);
+    expect(fused.map((h) => [h.ruleId, h.confidence])).toEqual([
+      ["top", "main"],
+      ["weak", "related"],
+    ]);
   });
 
-  it("both sides: keeps the top fulltext hits even below minScore", () => {
+  it("both sides: keeps substantive top fulltext hits below minScore as main", () => {
+    const fulltext = [1, 2, 3, 4].map((i) => ({
+      ruleId: `ft${i}`,
+      score: 10 - i,
+      coverage: 0.5,
+    }));
+    const fused = fuseHits(
+      fulltext.map((h) => ({ ruleId: h.ruleId, score: 0.2 })),
+      fulltext,
+      { ...weights, minScore: 0.9, vectorMinSimilarity: 0.5 }
+    );
+    expect(
+      fused.filter((h) => h.confidence === "main").map((h) => h.ruleId)
+    ).toEqual(["ft1", "ft2", "ft3"]);
+  });
+
+  it("both sides: non-substantive top fulltext hits become related only", () => {
     const fulltext = [1, 2, 3, 4].map((i) => ({
       ruleId: `ft${i}`,
       score: 10 - i,
@@ -133,13 +159,14 @@ describe("fuseHits gating", () => {
     const fused = fuseHits(
       fulltext.map((h) => ({ ruleId: h.ruleId, score: 0.2 })),
       fulltext,
-      { ...weights, minScore: 0.9, vectorMinSimilarity: 0.5 }
+      { ...weights, vectorMinSimilarity: 0.5 }
     );
+    expect(fused.every((h) => h.confidence === "related")).toBe(true);
     expect(fused.map((h) => h.ruleId)).toEqual(["ft1", "ft2", "ft3"]);
   });
 });
 
-describe("long Japanese natural-language question (offline / weak vector)", () => {
+describe("Japanese natural-language queries (offline / weak vector)", () => {
   const corpusRules = [
     makeRule({
       id: "11.3",
@@ -147,60 +174,85 @@ describe("long Japanese natural-language question (offline / weak vector)", () =
       article: "11.3",
       title: "電子機器",
       content:
-        "対局中、プレーヤーは携帯電話その他の電子機器を会場に持ち込んではならない。携帯電話が鳴った場合、その対局は負けとなる。罰則は大会規定で変更できる。",
+        "対局中、対局者は携帯電話その他の電子機器を会場に持ち込んではならない。対局者の携帯電話が鳴った場合、その対局者は負けとなる。罰則は大会規定で変更できる。",
     }),
     makeRule({
       id: "6.2",
       source: "FIDE",
       article: "6.2",
       title: "時計の操作",
-      content: "プレーヤーは着手と同じ手で時計を押さなければならない。",
+      content:
+        "対局者は着手と同じ手で時計を押さなければならない。時計を押し忘れた場合、相手は指摘できる。",
     }),
     makeRule({
       id: "9.2",
       source: "FIDE",
       article: "9.2",
       title: "三回同一局面",
-      content: "同一局面が三回現れた場合、プレーヤーの請求によりドローとなる。",
+      content: "同一局面が三回現れた場合、対局者の請求によりドローとなる。",
+    }),
+    makeRule({
+      id: "jcf-1.1",
+      source: "JCF",
+      article: "1.1",
+      title: "対局者の義務",
+      content:
+        "対局者は対局中、会場を離れる場合はアービターの許可を得なければならない。",
     }),
   ];
-  const question = "携帯電話が鳴ったときの罰則はどうなりますか";
   const fulltext = async (q: string) =>
     new FulltextIndex(corpusRules).search(q);
+  const search = (query: string, vector: HybridSearchDeps["vector"]) =>
+    hybridSearch(
+      query,
+      { tournamentId: undefined },
+      {
+        loadCorpus: async () => ({ rules: corpusRules, sources: [] }),
+        vector,
+        fulltext,
+      }
+    );
+  const vectorFails = vi.fn().mockRejectedValue(new Error("model missing"));
+  const lowVector: HybridSearchDeps["vector"] = async (_q, candidates) =>
+    candidates.map((r) => ({ ruleId: r.id, score: 0.2 }));
 
-  it("tokenises into many bi-grams, so coverage is low", () => {
-    const [hit] = new FulltextIndex(corpusRules).search(question);
+  const longQuestion = "携帯電話が鳴ったときの罰則はどうなりますか";
+  const irrelevant = "対局者が食事をする場合";
+
+  it("long question: content coverage stays high despite many bi-grams", () => {
+    const [hit] = new FulltextIndex(corpusRules).search(longQuestion);
     expect(hit.ruleId).toBe("11.3");
-    expect(hit.coverage).toBeLessThan(0.5);
+    expect(hit.coverage).toBeGreaterThan(0.5);
   });
 
-  it("returns the right rule when vector search fails", async () => {
-    const response = await hybridSearch(
-      question,
-      { tournamentId: undefined },
-      {
-        loadCorpus: async () => ({ rules: corpusRules, sources: [] }),
-        vector: vi.fn().mockRejectedValue(new Error("model missing")),
-        fulltext,
-      }
-    );
+  it("long question: 11.3 first when vector search fails", async () => {
+    const response = await search(longQuestion, vectorFails);
     expect(response.failures.vector).toBeDefined();
-    expect(response.results[0]?.rule.id).toBe("11.3");
+    expect(response.results.map((r) => r.rule.id)).toEqual(["11.3"]);
   });
 
-  it("returns the right rule when vector similarity is low for everything", async () => {
-    const response = await hybridSearch(
-      question,
-      { tournamentId: undefined },
-      {
-        loadCorpus: async () => ({ rules: corpusRules, sources: [] }),
-        vector: async (_q, candidates) =>
-          candidates.map((r) => ({ ruleId: r.id, score: 0.2 })),
-        fulltext,
-      }
-    );
-    expect(response.results.map((r) => r.rule.id)).toContain("11.3");
-    expect(response.results[0]?.rule.id).toBe("11.3");
+  it("long question: 11.3 first when vector similarity is low", async () => {
+    const response = await search(longQuestion, lowVector);
+    expect(response.results.map((r) => r.rule.id)).toEqual(["11.3"]);
+  });
+
+  it("irrelevant question: no main results when vector search fails", async () => {
+    const response = await search(irrelevant, vectorFails);
+    expect(response.results).toEqual([]);
+    // generic matches (対局者 / 場合) are offered only as possibly related
+    expect(response.related.length).toBeGreaterThan(0);
+    expect(response.related.length).toBeLessThanOrEqual(3);
+  });
+
+  it("irrelevant question: no main results when vector similarity is low", async () => {
+    const response = await search(irrelevant, lowVector);
+    expect(response.results).toEqual([]);
+  });
+
+  it("generic JCF matches do not outrank a relevant FIDE rule", async () => {
+    const response = await search("時計を押し忘れた場合", vectorFails);
+    expect(response.results.map((r) => r.rule.id)).toEqual(["6.2"]);
+    expect(response.related.map((r) => r.rule.id)).not.toContain("6.2");
   });
 });
 

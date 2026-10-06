@@ -3,7 +3,33 @@ const withPWA = require("next-pwa")({
   disable: process.env.NODE_ENV === "development",
   register: true,
   skipWaiting: true,
+  // モデル・WASMは大きく（数十〜百MB超）precacheに含めない。初回利用時に
+  // 下記の runtimeCaching (CacheFirst) でキャッシュしオフラインでも利用する。
+  publicExcludes: ["!noprecache/**/*", "!models/**/*", "!ort/**/*"],
+  // LLM API (api.anthropic.com) の応答はキャッシュしない（ルールを追加しないこと）
   runtimeCaching: [
+    {
+      // 埋め込みモデル（Transformers.js, 同一オリジン /models/）
+      urlPattern: ({ url }) =>
+        self.origin === url.origin && url.pathname.startsWith("/models/"),
+      handler: "CacheFirst",
+      options: {
+        cacheName: "embedding-model",
+        expiration: { maxEntries: 16 },
+        cacheableResponse: { statuses: [200] },
+      },
+    },
+    {
+      // onnxruntime-web の WASM（同一オリジン /ort/）
+      urlPattern: ({ url }) =>
+        self.origin === url.origin && url.pathname.startsWith("/ort/"),
+      handler: "CacheFirst",
+      options: {
+        cacheName: "onnx-wasm",
+        expiration: { maxEntries: 8 },
+        cacheableResponse: { statuses: [200] },
+      },
+    },
     {
       urlPattern: /^https:\/\/fonts\.(?:gstatic)\.com\/.*/i,
       handler: "CacheFirst",
@@ -12,18 +38,6 @@ const withPWA = require("next-pwa")({
         expiration: {
           maxEntries: 4,
           maxAgeSeconds: 365 * 24 * 60 * 60, // 1 year
-        },
-      },
-    },
-    {
-      urlPattern: /^https:\/\/api\.anthropic\.com\/.*/i,
-      handler: "NetworkFirst",
-      options: {
-        cacheName: "anthropic-api",
-        networkTimeoutSeconds: 10,
-        expiration: {
-          maxEntries: 32,
-          maxAgeSeconds: 24 * 60 * 60, // 1 day
         },
       },
     },

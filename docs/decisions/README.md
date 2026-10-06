@@ -8,7 +8,12 @@ ADRs document important architectural and design decisions made during the proje
 
 ## Index
 
-- [ADR-004: Explicit Ruleset Context and Illegal-Move Counting](ADR-004-explicit-ruleset-and-illegal-move-counting.md)
+| ADR | Title | Status |
+| --- | --- | --- |
+| [ADR-001](./ADR-001-technology-stack.md) | Technology Stack Selection | Accepted |
+| [ADR-002](./ADR-002-decision-tree-llm-boundary.md) | Decision Tree and LLM Responsibility Boundary | Accepted |
+| [ADR-003](./ADR-003-offline-rule-search.md) | Offline Rule Search: Japanese Tokenization, Multilingual Embeddings, Self-hosted Assets | Accepted |
+| [ADR-004](./ADR-004-explicit-ruleset-and-illegal-move-counting.md) | Explicit Ruleset Context and Illegal-Move Counting | Accepted |
 
 ## Naming Convention
 

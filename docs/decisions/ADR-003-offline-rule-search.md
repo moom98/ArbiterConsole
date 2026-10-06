@@ -93,12 +93,21 @@ never be served from cache.
   query tokens matched — at most halved, because long Japanese questions yield
   many bi-grams and therefore low coverage) are normalised before weighting
   (0.6 / 0.4); weights are re-normalised to the methods that succeeded.
-- `minScore` (0.25) applies to the fused score, but the top 3 full-text hits
-  are always kept. When only full-text search succeeded (e.g. model missing or
-  offline before the model was cached), `minScore` is not applied; results are
-  cut by rank (`limit`) and by relative score (≥ 10% of the best hit). This
-  degraded mode can show weaker matches; that is preferred over showing none.
-  These thresholds are initial values to be tuned with real documents.
+- Full-text **coverage** is IDF-weighted over the query's content tokens:
+  hiragana-only bi-grams (ます, どう, …) are ignored, bi-grams frequent in the
+  corpus (場合, 対局, …) weigh little, and query terms absent from the corpus
+  (e.g. 食事) weigh most. A full-text hit is **substantive** when coverage ≥ 0.3.
+- Results are split into two groups:
+  - **main** (`results`): fused score ≥ `minScore` (0.25) with vector support or
+    a substantive full-text match, plus substantive top-3 full-text hits even
+    below `minScore` (long Japanese questions). When only full-text search
+    succeeded (model missing / not yet cached offline), `minScore` is not
+    applied and substantive hits with ≥ 10% of the best score are main.
+    Only this group is ordered by source priority.
+  - **related** (`related`, max 3): non-substantive top full-text hits (only
+    generic words matched). Shown separately as 「関連する可能性のある条文」 in
+    relevance order, never mixed into the priority-ordered main results.
+- These thresholds are initial values to be tuned with real documents.
 - The in-memory Lunr index is rebuilt when a data stamp (rule count + source
   ids) changes, so an import in another tab is picked up.
 - Both searches run with `Promise.allSettled`; if one fails the other's results
@@ -130,7 +139,9 @@ never be served from cache.
 - Settings lists every source with a current/old badge and a delete control
   (in-page confirmation) that removes the source, its rules and embeddings.
 - Legacy rules imported before schema v3 (no `sourceId`, no edition info) are
-  deleted by the next import of the same type.
+  deleted by the next import of the same type. They count as existing data:
+  Settings shows 「出典情報のない旧データN件を削除します」 and the import
+  requires explicit confirmation.
 - Japanese `第N条のM` is parsed as its own article `N-M` (not merged into
   `第N条`), and the tokenizer maps `第N条のM` / `第N条` in text and queries to
   the same `N-M` / `N` tokens.
@@ -162,5 +173,14 @@ never be served from cache.
   worker only on first use. A "prepare for offline use" action in Settings
   (fetch `/models/**` and `/ort/*.wasm` while online and report cache status)
   is needed so a device is guaranteed to work offline at the venue.
+- **Single-CJK-character wildcard noise**: a single kanji/kana query token is
+  searched with leading+trailing wildcards, so e.g. a stray 「第」 or 「条」
+  matches every bi-gram containing that character. 「第N条」 itself is
+  normalised to `N` and unaffected, but single characters left over in a query
+  add noise. Acceptable for now: such hits are mostly non-substantive and land
+  in the `related` group.
+- **No way to reactivate a superseded source**: once superseded, a source can
+  only be deleted (or re-imported). A "make current" action in Settings is
+  needed for rolling back an edition.
 - Web Worker for embedding generation; chunked embeddings for long articles;
   tuning of the score thresholds with real FIDE/JCF documents.

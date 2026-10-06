@@ -44,7 +44,15 @@ export interface Penalty {
 }
 
 /** どの Decision Tree が判断を生成したか（履歴カウント等で使用） */
-export type DecisionTreeId = "DT-001-illegal-move-standard";
+export type DecisionTreeId =
+  | "DT-001-illegal-move-standard"
+  /** Rapid / Blitz の違法手（Competition Rules: A.4 / B.2） */
+  | "DT-002-illegal-move-fast-competition"
+  /** Rapid / Blitz の違法手（それ以外: A.5 / B.3） */
+  | "DT-003-illegal-move-fast-basic"
+  | "DT-004-flag-fall"
+  /** 同一局面（9.2 / 9.6.1）および 75手ルール（9.6.2） */
+  | "DT-005-repetition";
 
 /** 判断の種類 */
 export type DecisionKind =

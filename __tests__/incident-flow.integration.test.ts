@@ -1,0 +1,179 @@
+// @vitest-environment node
+import "fake-indexeddb/auto";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { ArbiterDatabase } from "@/lib/infrastructure/db/schema";
+import { createIncidentStore } from "@/lib/stores/incident-store";
+import type { ReportContext } from "@/lib/domain/services/game-context";
+import type { IncidentQuestionId } from "@/lib/domain/follow-up";
+import { fixedProviders } from "./helpers";
+
+const STANDARD_CTX: ReportContext = {
+  competitionType: "standard",
+  rulesVersion: "FIDE-2023",
+  round: 3,
+  boardNumber: 12,
+};
+
+const WHITE_COMPLETED: Partial<Record<IncidentQuestionId, string>> = {
+  playerColor: "white",
+  subtype: "illegal-move",
+  gameEnded: "false",
+  clockPressed: "true",
+};
+
+let dbCounter = 0;
+
+describe("Incident flow (store + engine + IndexedDB)", () => {
+  let db: ArbiterDatabase;
+  let store: ReturnType<typeof createIncidentStore>;
+
+  beforeEach(() => {
+    db = new ArbiterDatabase(`test-db-${++dbCounter}`);
+    store = createIncidentStore({
+      db,
+      providers: fixedProviders(`run${dbCounter}`),
+    });
+  });
+
+  afterEach(async () => {
+    await db.delete();
+  });
+
+  async function report(
+    answers: Partial<Record<IncidentQuestionId, string>>,
+    ctx: ReportContext = STANDARD_CTX
+  ) {
+    const submitted = await store.getState().submitIncident({
+      context: ctx,
+      category: "illegal-move",
+      description: "",
+      arbiterObserved: true,
+    });
+    expect(submitted.ok).toBe(true);
+    if (!submitted.ok) throw new Error(submitted.error);
+    expect(submitted.result.requiresFollowUp).toBe(true);
+    const incidentId = store.getState().currentIncident!.id;
+
+    const answered = await store.getState().answerFollowUp(answers);
+    if (!answered.ok) throw new Error(answered.error);
+    // 同じ Incident を再評価している
+    expect(store.getState().currentIncident!.id).toBe(incidentId);
+    return answered.result;
+  }
+
+  it("2nd penalised illegal move by the same player suggests a game loss; non-penalised reports do not count", async () => {
+    // 1回目: 白の違法手 → 黒に2分
+    const first = await report(WHITE_COMPLETED);
+    expect(first.requiresFollowUp).toBe(false);
+    expect(first.decision.penalties[0].type).toBe("time-addition-opponent");
+
+    // 間に: 時計を押していない（ペナルティなし）→ 数えない
+    const notCompleted = await report({
+      ...WHITE_COMPLETED,
+      clockPressed: "false",
+    });
+    expect(notCompleted.decision.penalties).toHaveLength(0);
+
+    // 間に: 黒の違法手 → 白の回数には影響しない
+    const black = await report({ ...WHITE_COMPLETED, playerColor: "black" });
+    expect(black.decision.penalties[0].type).toBe("time-addition-opponent");
+    expect(black.decision.conclusion).toContain("黒の1回目");
+
+    // 2回目: 白 → メイト可能かを質問 → 負け
+    const second = await report(WHITE_COMPLETED);
+    expect(second.requiresFollowUp).toBe(true);
+    expect(second.followUpQuestions.map((q) => q.id)).toEqual([
+      "opponentCanCheckmate",
+    ]);
+    // 追加質問待ちの間は保留（エスカレーション扱いにしない）
+    const pending = await db.incidents.get(
+      store.getState().currentIncident!.id
+    );
+    expect(pending?.status).toBe("pending");
+    expect(pending?.escalatedToCA).toBe(false);
+
+    const final = await store
+      .getState()
+      .answerFollowUp({ opponentCanCheckmate: "true" });
+    if (!final.ok) throw new Error(final.error);
+    expect(final.result.decision.penalties[0].type).toBe("game-loss");
+    expect(final.result.decision.penalties[0].playerColor).toBe("white");
+
+    const incidents = await db.incidents.toArray();
+    expect(incidents).toHaveLength(4);
+    expect(new Set(incidents.map((i) => i.gameId)).size).toBe(1);
+    const stored = await db.incidents.get(store.getState().currentIncident!.id);
+    expect(stored?.status).toBe("resolved");
+    expect(stored?.decisionId).toBe(final.result.decision.id);
+  });
+
+  it("history is keyed by game: a different board starts from zero", async () => {
+    await report(WHITE_COMPLETED);
+    const other = await report(WHITE_COMPLETED, {
+      ...STANDARD_CTX,
+      boardNumber: 13,
+    });
+    expect(other.decision.penalties[0].type).toBe("time-addition-opponent");
+  });
+
+  it("persists the game, tournament and last-used context", async () => {
+    await report(WHITE_COMPLETED);
+    const games = await db.games.toArray();
+    expect(games).toHaveLength(1);
+    expect(games[0].round).toBe(3);
+    expect(games[0].boardNumber).toBe(12);
+    const tournament = await db.tournaments.get(games[0].tournamentId);
+    expect(tournament?.competitionType).toBe("standard");
+    expect(tournament?.rulesVersion).toBe("FIDE-2023");
+
+    const fresh = createIncidentStore({
+      db,
+      providers: fixedProviders("fresh"),
+    });
+    await fresh.getState().loadLastContext();
+    expect(fresh.getState().lastContext).toEqual(STANDARD_CTX);
+  });
+
+  it("rapid reports return not-supported without applying the standard tree", async () => {
+    const res = await store.getState().submitIncident({
+      context: {
+        ...STANDARD_CTX,
+        competitionType: "rapid",
+        supervisionRegime: "basic-rules",
+      },
+      category: "illegal-move",
+      description: "",
+      arbiterObserved: true,
+    });
+    if (!res.ok) throw new Error(res.error);
+    expect(res.result.decision.kind).toBe("not-supported");
+    const stored = await db.incidents.get(store.getState().currentIncident!.id);
+    expect(stored?.status).toBe("escalated");
+  });
+
+  it("invalid context fails without a decision and without creating an incident", async () => {
+    const res = await store.getState().submitIncident({
+      context: { ...STANDARD_CTX, round: 0 },
+      category: "illegal-move",
+      description: "",
+      arbiterObserved: true,
+    });
+    expect(res.ok).toBe(false);
+    expect(store.getState().currentDecision).toBeNull();
+    expect(store.getState().error).toBeTruthy();
+    expect(await db.incidents.count()).toBe(0);
+  });
+
+  it("a new submit clears the previous decision", async () => {
+    await report(WHITE_COMPLETED);
+    expect(store.getState().currentDecision).not.toBeNull();
+    const p = store.getState().submitIncident({
+      context: { ...STANDARD_CTX, round: -1 },
+      category: "illegal-move",
+      description: "",
+      arbiterObserved: true,
+    });
+    await p;
+    expect(store.getState().currentDecision).toBeNull();
+  });
+});

@@ -72,6 +72,17 @@ export interface FuseOptions {
   minScore: number;
   /** これ未満のベクトル類似度は 0 として扱う（既定 0） */
   vectorMinSimilarity?: number;
+  /**
+   * 両方式が成功した場合でも、Lunrスコア上位この件数の全文検索ヒットは
+   * minScore に関わらず残す（既定 3）。日本語の長い質問文は bi-gram 数が多く
+   * coverage が低くなるため、統合スコアだけでは正解条文が落ちることがある。
+   */
+  guaranteedFulltextHits?: number;
+  /**
+   * 全文検索のみ成功した場合の足切り（最上位スコアに対する比率, 既定 0.1）。
+   * この場合 minScore は適用せず、順位（limit）で件数を絞る。
+   */
+  fulltextRelativeFloor?: number;
 }
 
 /**
@@ -81,7 +92,8 @@ export interface FuseOptions {
  * - Full-text: Lunrスコアは上限がないため最大値で割り [0,1] に正規化し、
  *   クエリトークンの一致割合（coverage）を掛ける
  * - 片方が利用不可（null）の場合は、利用可能な側の重みを1に再配分
- * - minScore は統合後のスコアに一度だけ適用
+ * - minScore は統合後のスコアに一度だけ適用。ただし全文検索の上位ヒットは
+ *   常に残し、全文検索のみ成功した場合は minScore を適用せず順位で絞る
  */
 export function fuseHits(
   vectorHits: readonly VectorHit[] | null,
@@ -112,19 +124,39 @@ export function fuseHits(
   }
 
   const maxFulltext = Math.max(0, ...(fulltextHits ?? []).map((h) => h.score));
+  const relativeById = new Map<string, number>();
   for (const hit of fulltextHits ?? []) {
-    // 最大値で割るだけだと弱い最上位ヒットも1.0になるため、
-    // クエリトークンの一致割合（coverage）を掛けて弱い一致を抑える
     const relative = maxFulltext > 0 ? Math.max(0, hit.score) / maxFulltext : 0;
-    entry(hit.ruleId).fulltextScore = relative * (hit.coverage ?? 1);
+    relativeById.set(hit.ruleId, relative);
+    // 最大値で割るだけだと弱い最上位ヒットも1.0になるため coverage で減衰させる。
+    // ただし長い質問文では coverage が極端に低くなるため半分までに留める
+    const coverage = Math.max(0, Math.min(1, hit.coverage ?? 1));
+    entry(hit.ruleId).fulltextScore = relative * (0.5 + 0.5 * coverage);
   }
+
+  const guaranteed = new Set(
+    [...(fulltextHits ?? [])]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, options.guaranteedFulltextHits ?? 3)
+      .map((h) => h.ruleId)
+  );
+  const fulltextOnly = vectorHits === null;
+  const relativeFloor = options.fulltextRelativeFloor ?? 0.1;
 
   const results: FusedHit[] = [];
   for (const hit of Array.from(fused.values())) {
     hit.score =
       (wv * (hit.vectorScore ?? 0) + wf * (hit.fulltextScore ?? 0)) /
       totalWeight;
-    if (hit.score >= options.minScore) {
+
+    let keep: boolean;
+    if (fulltextOnly) {
+      // 意味検索が使えない（オフライン等）場合は全文検索の順位で返す
+      keep = (relativeById.get(hit.ruleId) ?? 0) >= relativeFloor;
+    } else {
+      keep = hit.score >= options.minScore || guaranteed.has(hit.ruleId);
+    }
+    if (keep) {
       results.push(hit);
     }
   }

@@ -6,7 +6,7 @@ import {
   clearFulltextIndex,
   getFulltextIndex,
 } from "@/lib/infrastructure/ai/fulltext-search";
-import { fuseHits } from "@/lib/infrastructure/ai/hybrid-search";
+import { fuseHits, hybridSearch } from "@/lib/infrastructure/ai/hybrid-search";
 import {
   buildLines,
   parseArticlesFromPages,
@@ -107,10 +107,106 @@ describe("fuseHits gating", () => {
     expect(fused.map((h) => h.ruleId)).toEqual(["relevant"]);
   });
 
-  it("scales the normalised fulltext score by query-token coverage", () => {
-    expect(
-      fuseHits(null, [{ ruleId: "weak", score: 3, coverage: 0.2 }], weights)
-    ).toEqual([]);
+  it("ranks by coverage-dampened fulltext score", () => {
+    const fused = fuseHits(
+      [],
+      [
+        { ruleId: "partial", score: 10, coverage: 0.2 },
+        { ruleId: "complete", score: 9, coverage: 1 },
+      ],
+      weights
+    );
+    expect(fused.map((h) => h.ruleId)).toEqual(["complete", "partial"]);
+  });
+
+  it("fulltext-only: ignores minScore and cuts by relative score instead", () => {
+    const fused = fuseHits(
+      null,
+      [
+        { ruleId: "top", score: 10, coverage: 0.15 },
+        { ruleId: "tail", score: 0.5, coverage: 0.05 },
+      ],
+      weights
+    );
+    expect(fused.map((h) => h.ruleId)).toEqual(["top"]);
+  });
+
+  it("both sides: keeps the top fulltext hits even below minScore", () => {
+    const fulltext = [1, 2, 3, 4].map((i) => ({
+      ruleId: `ft${i}`,
+      score: 10 - i,
+      coverage: 0.1,
+    }));
+    const fused = fuseHits(
+      fulltext.map((h) => ({ ruleId: h.ruleId, score: 0.2 })),
+      fulltext,
+      { ...weights, minScore: 0.9, vectorMinSimilarity: 0.5 }
+    );
+    expect(fused.map((h) => h.ruleId)).toEqual(["ft1", "ft2", "ft3"]);
+  });
+});
+
+describe("long Japanese natural-language question (offline / weak vector)", () => {
+  const corpusRules = [
+    makeRule({
+      id: "11.3",
+      source: "FIDE",
+      article: "11.3",
+      title: "電子機器",
+      content:
+        "対局中、プレーヤーは携帯電話その他の電子機器を会場に持ち込んではならない。携帯電話が鳴った場合、その対局は負けとなる。罰則は大会規定で変更できる。",
+    }),
+    makeRule({
+      id: "6.2",
+      source: "FIDE",
+      article: "6.2",
+      title: "時計の操作",
+      content: "プレーヤーは着手と同じ手で時計を押さなければならない。",
+    }),
+    makeRule({
+      id: "9.2",
+      source: "FIDE",
+      article: "9.2",
+      title: "三回同一局面",
+      content: "同一局面が三回現れた場合、プレーヤーの請求によりドローとなる。",
+    }),
+  ];
+  const question = "携帯電話が鳴ったときの罰則はどうなりますか";
+  const fulltext = async (q: string) => new FulltextIndex(corpusRules).search(q);
+
+  it("tokenises into many bi-grams, so coverage is low", () => {
+    const [hit] = new FulltextIndex(corpusRules).search(question);
+    expect(hit.ruleId).toBe("11.3");
+    expect(hit.coverage).toBeLessThan(0.5);
+  });
+
+  it("returns the right rule when vector search fails", async () => {
+    const response = await hybridSearch(
+      question,
+      { tournamentId: undefined },
+      {
+        loadCorpus: async () => ({ rules: corpusRules, sources: [] }),
+        vector: vi.fn().mockRejectedValue(new Error("model missing")),
+        fulltext,
+      }
+    );
+    expect(response.failures.vector).toBeDefined();
+    expect(response.results[0]?.rule.id).toBe("11.3");
+  });
+
+  it("returns the right rule when vector similarity is low for everything", async () => {
+    const response = await hybridSearch(
+      question,
+      { tournamentId: undefined },
+      {
+        loadCorpus: async () => ({ rules: corpusRules, sources: [] }),
+        vector: async (_q, candidates) =>
+          candidates.map((r) => ({ ruleId: r.id, score: 0.2 })),
+        fulltext,
+      }
+    );
+    expect(response.results.map((r) => r.rule.id)).toContain("11.3");
+    expect(response.results[0]?.rule.id).toBe("11.3");
   });
 });
 

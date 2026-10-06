@@ -14,6 +14,7 @@ import {
   type GenerateEmbeddingsOptions,
 } from "@/lib/infrastructure/embeddings/generator";
 import type { PDFExtractionResult } from "@/lib/infrastructure/pdf/extractor";
+import { findActiveSourcesInScope, inScope } from "./rule-library";
 
 /**
  * ルール資料の取り込み（アプリケーションサービス）
@@ -44,7 +45,16 @@ export interface RuleSourceMetadata {
   publishedDate?: Date;
   /** sourceType が 'tournament' の場合は必須 */
   tournamentId?: string;
+  /**
+   * 同じ種別（大会固有規定は同じ大会）の有効な資料が既にある場合の扱い。
+   * 既存資料がある場合は明示的な指定が必須（未指定ならエラー）。
+   * - "supersede": 既存資料を旧版（superseded）にし、検索対象から外す
+   * - "keep-both": 既存資料も有効のまま併存させる（JCF規則とNAセミナー資料など）
+   */
+  onExisting?: ExistingSourceAction;
 }
+
+export type ExistingSourceAction = "supersede" | "keep-both";
 
 export interface IngestionDeps {
   extract(
@@ -73,6 +83,17 @@ const defaultDeps: IngestionDeps = {
 
 export class RuleIngestionError extends Error {}
 
+/** 既存の有効な資料があり、扱い（onExisting）の指定が必要な場合のエラー */
+export class ExistingSourceDecisionRequired extends RuleIngestionError {
+  constructor(readonly existing: RuleSource[]) {
+    super(
+      `有効な資料が既に登録されています（${existing
+        .map((s) => `${s.name} ${s.version}`)
+        .join("、")}）。置き換えるか併存させるかを選択してください`
+    );
+  }
+}
+
 export function validateMetadata(meta: RuleSourceMetadata): void {
   if (!meta.name.trim()) {
     throw new RuleIngestionError("資料名を入力してください");
@@ -91,7 +112,8 @@ export function validateMetadata(meta: RuleSourceMetadata): void {
 /**
  * PDFファイルからルールをインポートする
  *
- * 同じ資料種別・資料名（大会固有規定の場合は同じ大会）の既存資料は置き換える。
+ * 同じ種別（大会固有規定の場合は同じ大会）の有効な資料が既にある場合は、
+ * meta.onExisting で「旧版にする」か「併存させる」かを明示的に指定する必要がある。
  * Embedding生成に失敗した場合は、全文検索のみ利用可能な状態で保存する。
  */
 export async function ingestRulesFromPDF(
@@ -105,6 +127,16 @@ export async function ingestRulesFromPDF(
   embeddingError?: string;
 }> {
   validateMetadata(meta);
+
+  // 時間のかかる抽出の前に、既存資料の扱いが指定されているか確認する
+  const existing = await findActiveSourcesInScope(
+    deps.database,
+    meta.sourceType,
+    meta.tournamentId
+  );
+  if (existing.length > 0 && !meta.onExisting) {
+    throw new ExistingSourceDecisionRequired(existing);
+  }
 
   onProgress?.({
     stage: "extracting",
@@ -193,7 +225,13 @@ export async function ingestRulesFromPDF(
     message: "データベースに保存中...",
   });
 
-  await replaceRuleSource(deps.database, source, rules, embeddings);
+  await saveRuleSource(
+    deps.database,
+    source,
+    rules,
+    embeddings,
+    meta.onExisting
+  );
   clearFulltextIndex();
 
   onProgress?.({
@@ -211,57 +249,54 @@ export async function ingestRulesFromPDF(
 }
 
 /**
- * 同じ資料種別・資料名（大会固有規定は同じ大会）の既存資料・条文・Embeddingを削除し、
- * 新しい資料に置き換える。1トランザクションで実行する。
+ * 新しい資料・条文・Embeddingを1トランザクションで保存する。
+ *
+ * - 同じ種別（大会固有規定は同じ大会）の有効な資料がある場合、onExisting が必須。
+ *   "supersede" なら既存資料を旧版（superseded）にする（条文は保持、検索対象外）。
+ * - sourceId を持たない旧データ（スキーマv3以前、出典情報なし）は同じ種別・範囲なら削除する。
  */
-export async function replaceRuleSource(
+export async function saveRuleSource(
   database: ArbiterDatabase,
   source: RuleSource,
   rules: Rule[],
-  embeddings: Embedding[]
+  embeddings: Embedding[],
+  onExisting?: ExistingSourceAction
 ): Promise<void> {
   if (source.sourceType === "tournament" && !source.tournamentId) {
     throw new RuleIngestionError("大会固有規定には tournamentId が必要です");
   }
 
-  const sameScope = (r: { tournamentId?: string }) =>
-    source.sourceType !== "tournament" ||
-    r.tournamentId === source.tournamentId;
-  const normalizeName = (name: string) => name.trim().toLowerCase();
-  // 同じ種別・同じ資料名（大会固有規定は同じ大会）の資料のみ置き換える。
-  // 例: JCF規則 と NAセミナー資料 は別資料として共存する
-  const sameDocument = (s: RuleSource) =>
-    sameScope(s) && normalizeName(s.name) === normalizeName(source.name);
-
   await database.transaction(
     "rw",
     [database.ruleSources, database.rules, database.embeddings],
     async () => {
-      const oldSourceIds = (
-        await database.ruleSources
-          .where("sourceType")
-          .equals(source.sourceType)
-          .toArray()
-      )
-        .filter(sameDocument)
-        .map((s) => s.id);
-      const oldSourceIdSet = new Set(oldSourceIds);
+      const existing = await findActiveSourcesInScope(
+        database,
+        source.sourceType,
+        source.tournamentId
+      );
+      if (existing.length > 0) {
+        if (!onExisting) {
+          throw new ExistingSourceDecisionRequired(existing);
+        }
+        if (onExisting === "supersede") {
+          for (const old of existing) {
+            await database.ruleSources.update(old.id, { status: "superseded" });
+          }
+        }
+      }
 
-      // sourceId を持たない旧データ（v3以前）も同じ種別・範囲なら置き換え対象
-      const oldRuleIds = (
+      const legacyRuleIds = (
         await database.rules.where("source").equals(source.sourceType).toArray()
       )
-        .filter((r) =>
-          r.sourceId ? oldSourceIdSet.has(r.sourceId) : sameScope(r)
+        .filter(
+          (r) =>
+            !r.sourceId && inScope(r, source.sourceType, source.tournamentId)
         )
         .map((r) => r.id);
-
-      if (oldRuleIds.length > 0) {
-        await database.embeddings.where("ruleId").anyOf(oldRuleIds).delete();
-        await database.rules.bulkDelete(oldRuleIds);
-      }
-      if (oldSourceIds.length > 0) {
-        await database.ruleSources.bulkDelete(oldSourceIds);
+      if (legacyRuleIds.length > 0) {
+        await database.embeddings.where("ruleId").anyOf(legacyRuleIds).delete();
+        await database.rules.bulkDelete(legacyRuleIds);
       }
 
       await database.ruleSources.add(source);

@@ -1,12 +1,18 @@
 import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  ExistingSourceDecisionRequired,
   ingestRulesFromPDF,
-  replaceRuleSource,
+  saveRuleSource,
   type IngestionDeps,
   type RuleSourceMetadata,
 } from "@/lib/application/rule-ingestion";
 import { ArbiterDatabase } from "@/lib/infrastructure/db";
+import {
+  deleteRuleSource,
+  findActiveSourcesInScope,
+} from "@/lib/application/rule-library";
+import { selectCandidates } from "@/lib/infrastructure/ai/hybrid-search";
 import type { Embedding, Rule } from "@/lib/domain/entities";
 import { makeRule, makeSource } from "./fixtures";
 
@@ -89,29 +95,68 @@ describe("ingestRulesFromPDF", () => {
     expect(embeddings.every((e) => e.model === MODEL)).toBe(true);
   });
 
-  it("replaces the previous edition without orphaning embeddings", async () => {
+  it("requires an explicit choice when an active source of the type exists", async () => {
+    await ingestRulesFromPDF(file, fideMeta, undefined, deps());
+    const extract = vi.fn(deps().extract);
+    await expect(
+      ingestRulesFromPDF(
+        file,
+        { ...fideMeta, version: "2025" },
+        undefined,
+        deps({ extract })
+      )
+    ).rejects.toBeInstanceOf(ExistingSourceDecisionRequired);
+    // checked before the (slow) PDF extraction
+    expect(extract).not.toHaveBeenCalled();
+    expect(await database.ruleSources.count()).toBe(1);
+  });
+
+  it("supersede: old edition is kept as superseded and excluded from search", async () => {
     await ingestRulesFromPDF(file, fideMeta, undefined, deps());
     await ingestRulesFromPDF(
       file,
-      { ...fideMeta, version: "2025" },
+      { ...fideMeta, version: "2025", onExisting: "supersede" },
       undefined,
       deps()
     );
 
     const sources = await database.ruleSources.toArray();
-    expect(sources.map((s) => s.version)).toEqual(["2025"]);
+    expect(sources.map((s) => `${s.version}:${s.status}`).sort()).toEqual([
+      "2023:superseded",
+      "2025:active",
+    ]);
 
-    const rules = await database.rules.toArray();
-    expect(rules).toHaveLength(2);
-    expect(rules.every((r) => r.sourceId === sources[0].id)).toBe(true);
-
-    const ruleIds = new Set(rules.map((r) => r.id));
-    const embeddings = await database.embeddings.toArray();
-    expect(embeddings).toHaveLength(2);
-    expect(embeddings.every((e) => ruleIds.has(e.ruleId))).toBe(true);
+    const corpus = { rules: await database.rules.toArray(), sources };
+    const active = sources.find((s) => s.status === "active")!;
+    const candidates = selectCandidates(corpus, undefined);
+    expect(candidates).toHaveLength(2);
+    expect(candidates.every((r) => r.sourceId === active.id)).toBe(true);
   });
 
-  it("does not touch rules of other source types", async () => {
+  it("keep-both: both sources stay active", async () => {
+    const jcf = {
+      ...fideMeta,
+      sourceType: "JCF" as const,
+      language: "ja" as const,
+    };
+    await ingestRulesFromPDF(
+      file,
+      { ...jcf, name: "JCF競技規則" },
+      undefined,
+      deps()
+    );
+    await ingestRulesFromPDF(
+      file,
+      { ...jcf, name: "NAセミナー資料", onExisting: "keep-both" },
+      undefined,
+      deps()
+    );
+    const sources = await database.ruleSources.toArray();
+    expect(sources.every((s) => s.status === "active")).toBe(true);
+    expect(await database.rules.count()).toBe(4);
+  });
+
+  it("does not ask about sources of other types", async () => {
     await ingestRulesFromPDF(
       file,
       { ...fideMeta, sourceType: "JCF", name: "NA Seminar", language: "ja" },
@@ -172,7 +217,7 @@ describe("ingestRulesFromPDF", () => {
   });
 });
 
-describe("replaceRuleSource", () => {
+describe("saveRuleSource / deleteRuleSource", () => {
   const embeddingFor = (rule: Rule): Embedding => ({
     id: `e-${rule.id}`,
     ruleId: rule.id,
@@ -181,87 +226,68 @@ describe("replaceRuleSource", () => {
     createdAt: new Date(0),
   });
 
-  it("only replaces tournament regulations of the same tournament", async () => {
-    const t1Source = makeSource({
-      sourceType: "tournament",
-      tournamentId: "T1",
-    });
-    const t2Source = makeSource({
-      sourceType: "tournament",
-      tournamentId: "T2",
-    });
-    const t1Rule = makeRule({
-      source: "tournament",
-      tournamentId: "T1",
-      sourceId: t1Source.id,
-    });
-    const t2Rule = makeRule({
-      source: "tournament",
-      tournamentId: "T2",
-      sourceId: t2Source.id,
-    });
-    await replaceRuleSource(
-      database,
-      t1Source,
-      [t1Rule],
-      [embeddingFor(t1Rule)]
-    );
-    await replaceRuleSource(
-      database,
-      t2Source,
-      [t2Rule],
-      [embeddingFor(t2Rule)]
-    );
-
-    const newT1Source = makeSource({
-      sourceType: "tournament",
-      tournamentId: "T1",
-    });
-    const newT1Rule = makeRule({
-      source: "tournament",
-      tournamentId: "T1",
-      sourceId: newT1Source.id,
-    });
-    await replaceRuleSource(
-      database,
-      newT1Source,
-      [newT1Rule],
-      [embeddingFor(newT1Rule)]
-    );
-
-    const ruleIds = (await database.rules.toArray()).map((r) => r.id).sort();
-    expect(ruleIds).toEqual([newT1Rule.id, t2Rule.id].sort());
-    const embeddingRuleIds = (await database.embeddings.toArray())
-      .map((e) => e.ruleId)
-      .sort();
-    expect(embeddingRuleIds).toEqual(ruleIds);
+  it("scopes the existing-source check to the same tournament", async () => {
+    const t1 = makeSource({ sourceType: "tournament", tournamentId: "T1" });
+    const t2 = makeSource({ sourceType: "tournament", tournamentId: "T2" });
+    await saveRuleSource(database, t1, [], []);
+    // a different tournament does not need a decision
+    await saveRuleSource(database, t2, [], []);
+    await expect(
+      saveRuleSource(
+        database,
+        makeSource({ sourceType: "tournament", tournamentId: "T1" }),
+        [],
+        []
+      )
+    ).rejects.toBeInstanceOf(ExistingSourceDecisionRequired);
+    expect(
+      (await findActiveSourcesInScope(database, "tournament", "T2")).map(
+        (s) => s.id
+      )
+    ).toEqual([t2.id]);
   });
 
   it("refuses tournament sources without tournamentId", async () => {
     await expect(
-      replaceRuleSource(
-        database,
-        makeSource({ sourceType: "tournament" }),
-        [],
-        []
-      )
+      saveRuleSource(database, makeSource({ sourceType: "tournament" }), [], [])
     ).rejects.toThrow();
   });
 
-  it("replaces legacy rules (without sourceId) of the same source type", async () => {
+  it("removes legacy rules (without sourceId) of the same source type", async () => {
     const legacy = makeRule({ source: "FIDE" });
     await database.rules.add(legacy);
     await database.embeddings.add(embeddingFor(legacy));
 
     const source = makeSource();
     const fresh = makeRule({ source: "FIDE", sourceId: source.id });
-    await replaceRuleSource(database, source, [fresh], [embeddingFor(fresh)]);
+    await saveRuleSource(database, source, [fresh], [embeddingFor(fresh)]);
 
     expect((await database.rules.toArray()).map((r) => r.id)).toEqual([
       fresh.id,
     ]);
     expect((await database.embeddings.toArray()).map((e) => e.ruleId)).toEqual([
       fresh.id,
+    ]);
+  });
+
+  it("deletes a source together with its rules and embeddings", async () => {
+    const keep = makeSource({ sourceType: "JCF" });
+    const drop = makeSource();
+    const keepRule = makeRule({ source: "JCF", sourceId: keep.id });
+    const dropRule = makeRule({ source: "FIDE", sourceId: drop.id });
+    await saveRuleSource(database, keep, [keepRule], [embeddingFor(keepRule)]);
+    await saveRuleSource(database, drop, [dropRule], [embeddingFor(dropRule)]);
+
+    await deleteRuleSource(drop.id, database);
+
+    expect((await database.ruleSources.toArray()).map((s) => s.id)).toEqual([
+      keep.id,
+    ]);
+    expect((await database.rules.toArray()).map((r) => r.id)).toEqual([
+      keepRule.id,
+    ]);
+    expect((await database.embeddings.toArray()).map((e) => e.ruleId)).toEqual([
+      keepRule.id,
     ]);
   });
 });

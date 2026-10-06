@@ -1,5 +1,6 @@
 import type { RuleSource, RuleSourceType } from "@/lib/domain/entities";
-import { db } from "@/lib/infrastructure/db";
+import { db, type ArbiterDatabase } from "@/lib/infrastructure/db";
+import { clearFulltextIndex } from "@/lib/infrastructure/ai/fulltext-search";
 import { EMBEDDING_MODEL_ID } from "@/lib/infrastructure/embeddings/generator";
 
 /**
@@ -66,4 +67,64 @@ export async function getRuleStatistics(): Promise<RuleStatistics> {
       embeddingCount: embeddingsBySourceId.get(source.id) ?? 0,
     })),
   };
+}
+
+/**
+ * 資料の範囲判定: 大会固有規定は同じ大会のもののみ同一範囲とみなす
+ */
+export function inScope(
+  item: { tournamentId?: string },
+  sourceType: RuleSourceType,
+  tournamentId: string | undefined
+): boolean {
+  return sourceType !== "tournament" || item.tournamentId === tournamentId;
+}
+
+/**
+ * 同じ種別（大会固有規定は同じ大会）の有効な資料を取得する
+ */
+export async function findActiveSourcesInScope(
+  database: ArbiterDatabase,
+  sourceType: RuleSourceType,
+  tournamentId: string | undefined
+): Promise<RuleSource[]> {
+  const sources = await database.ruleSources
+    .where("sourceType")
+    .equals(sourceType)
+    .toArray();
+  return sources.filter(
+    (s) => s.status === "active" && inScope(s, sourceType, tournamentId)
+  );
+}
+
+export function getActiveSourcesInScope(
+  sourceType: RuleSourceType,
+  tournamentId: string | undefined
+): Promise<RuleSource[]> {
+  return findActiveSourcesInScope(db, sourceType, tournamentId);
+}
+
+/**
+ * 資料とその条文・Embeddingを削除する（1トランザクション）
+ */
+export async function deleteRuleSource(
+  sourceId: string,
+  database: ArbiterDatabase = db
+): Promise<void> {
+  await database.transaction(
+    "rw",
+    [database.ruleSources, database.rules, database.embeddings],
+    async () => {
+      const ruleIds = (await database.rules
+        .where("sourceId")
+        .equals(sourceId)
+        .primaryKeys()) as string[];
+      if (ruleIds.length > 0) {
+        await database.embeddings.where("ruleId").anyOf(ruleIds).delete();
+        await database.rules.bulkDelete(ruleIds);
+      }
+      await database.ruleSources.delete(sourceId);
+    }
+  );
+  clearFulltextIndex();
 }

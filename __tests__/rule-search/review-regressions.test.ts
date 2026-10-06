@@ -1,5 +1,4 @@
-import "fake-indexeddb/auto";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { tokenize } from "@/lib/infrastructure/ai/tokenizer";
 import {
   FulltextIndex,
@@ -12,12 +11,6 @@ import {
   parseArticlesFromPages,
   validatePdfFile,
 } from "@/lib/infrastructure/pdf/extractor";
-import {
-  ingestRulesFromPDF,
-  type IngestionDeps,
-  type RuleSourceMetadata,
-} from "@/lib/application/rule-ingestion";
-import { ArbiterDatabase } from "@/lib/infrastructure/db";
 import { makeRule } from "./fixtures";
 
 const weights = { vectorWeight: 0.6, fulltextWeight: 0.4, minScore: 0.25 };
@@ -172,7 +165,8 @@ describe("long Japanese natural-language question (offline / weak vector)", () =
     }),
   ];
   const question = "携帯電話が鳴ったときの罰則はどうなりますか";
-  const fulltext = async (q: string) => new FulltextIndex(corpusRules).search(q);
+  const fulltext = async (q: string) =>
+    new FulltextIndex(corpusRules).search(q);
 
   it("tokenises into many bi-grams, so coverage is low", () => {
     const [hit] = new FulltextIndex(corpusRules).search(question);
@@ -315,68 +309,5 @@ describe("generateEmbeddings (mocked transformers, no download)", () => {
       localModelPath: "/models/",
       backends: { onnx: { wasm: { wasmPaths: "/ort/" } } },
     });
-  });
-});
-
-describe("ingestion replacement scope by document name", () => {
-  let database: ArbiterDatabase;
-  beforeEach(async () => {
-    database = new ArbiterDatabase();
-    await database.open();
-  });
-  afterEach(async () => {
-    await database.delete();
-  });
-
-  const deps = (): IngestionDeps => ({
-    extract: async () => ({
-      rules: [
-        { article: "1.1", title: "a", content: "x", pageNumber: 1 },
-        { article: "1.2", title: "b", content: "y", pageNumber: 2 },
-      ],
-      totalPages: 2,
-      extractedAt: new Date(),
-    }),
-    embed: async (texts) => texts.map(() => [1, 0]),
-    modelId: "test-model",
-    database,
-  });
-  const jcf: RuleSourceMetadata = {
-    sourceType: "JCF",
-    name: "",
-    version: "2023",
-    language: "ja",
-  };
-  const file = new File(["%PDF-1.7"], "jcf.pdf", { type: "application/pdf" });
-
-  it("keeps different JCF documents and replaces only the same name", async () => {
-    await ingestRulesFromPDF(
-      file,
-      { ...jcf, name: "JCF競技規則" },
-      undefined,
-      deps()
-    );
-    await ingestRulesFromPDF(
-      file,
-      { ...jcf, name: "NAセミナー資料" },
-      undefined,
-      deps()
-    );
-    expect(await database.ruleSources.count()).toBe(2);
-    expect(await database.rules.count()).toBe(4);
-
-    await ingestRulesFromPDF(
-      file,
-      { ...jcf, name: "NAセミナー資料", version: "第4回 修正版" },
-      undefined,
-      deps()
-    );
-    const sources = await database.ruleSources.toArray();
-    expect(sources.map((s) => `${s.name}/${s.version}`).sort()).toEqual([
-      "JCF競技規則/2023",
-      "NAセミナー資料/第4回 修正版",
-    ]);
-    expect(await database.rules.count()).toBe(4);
-    expect(await database.embeddings.count()).toBe(4);
   });
 });

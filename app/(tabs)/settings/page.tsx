@@ -1,9 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { RuleIngestionProgress } from "@/lib/application/rule-ingestion";
+import type {
+  ExistingSourceAction,
+  RuleIngestionProgress,
+} from "@/lib/application/rule-ingestion";
 import type { RuleStatistics } from "@/lib/application/rule-library";
-import type { RuleLanguage, RuleSourceType } from "@/lib/domain/entities";
+import type {
+  RuleLanguage,
+  RuleSource,
+  RuleSourceType,
+} from "@/lib/domain/entities";
 
 type UploadableSource = Exclude<RuleSourceType, "commentary">;
 
@@ -14,6 +21,17 @@ interface FormState {
   effectiveDate: string;
   language: RuleLanguage;
   file: File | null;
+  /** 同じ種別の有効な登録済み資料 */
+  existing: RuleSource[];
+  /** 既存資料がある場合の扱い（明示的な選択が必須） */
+  onExisting: ExistingSourceAction | null;
+}
+
+/** <input type="date"> の "YYYY-MM-DD" をローカル日付として解釈する（UTC扱いによる日付ずれ防止） */
+function parseLocalDate(value: string): Date | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return undefined;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
 }
 
 const SOURCE_PRESETS: Record<
@@ -44,6 +62,7 @@ export default function SettingsPage() {
   const importingRef = useRef(false);
   const [stats, setStats] = useState<RuleStatistics | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const loadStats = useCallback(async () => {
     try {
@@ -59,9 +78,14 @@ export default function SettingsPage() {
     loadStats();
   }, [loadStats]);
 
-  const openForm = (sourceType: UploadableSource) => {
+  const openForm = async (sourceType: UploadableSource) => {
     const preset = SOURCE_PRESETS[sourceType];
     setNotice(null);
+    setConfirmDeleteId(null);
+    const { getActiveSourcesInScope } =
+      await import("@/lib/application/rule-library");
+    // 大会管理（Milestone 6）実装までは大会を指定できない
+    const existing = await getActiveSourcesInScope(sourceType, undefined);
     setForm({
       sourceType,
       name: preset.name,
@@ -69,8 +93,26 @@ export default function SettingsPage() {
       effectiveDate: "",
       language: preset.language,
       file: null,
+      existing,
+      onExisting: null,
     });
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleDelete = async (sourceId: string) => {
+    setConfirmDeleteId(null);
+    try {
+      const { deleteRuleSource } =
+        await import("@/lib/application/rule-library");
+      await deleteRuleSource(sourceId);
+      setNotice({ kind: "success", text: "資料を削除しました" });
+      await loadStats();
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text: `削除に失敗しました: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
   };
 
   const handleImport = async () => {
@@ -91,11 +133,10 @@ export default function SettingsPage() {
           name: form.name,
           version: form.version,
           language: form.language,
-          effectiveDate: form.effectiveDate
-            ? new Date(form.effectiveDate)
-            : undefined,
+          effectiveDate: parseLocalDate(form.effectiveDate),
           // 大会管理（Milestone 6）実装までは大会を指定できない
           tournamentId: undefined,
+          onExisting: form.onExisting ?? undefined,
         },
         setProgress
       );
@@ -132,6 +173,7 @@ export default function SettingsPage() {
     !!form.file &&
     !!form.name.trim() &&
     !!form.version.trim() &&
+    (form.existing.length === 0 || form.onExisting !== null) &&
     !busy;
 
   return (
@@ -272,9 +314,48 @@ export default function SettingsPage() {
                   className="mt-1 w-full text-sm"
                 />
               </label>
-              <p className="text-xs text-gray-500">
-                同じ種別・同じ資料名の登録済み資料は、この資料で置き換えられます。
-              </p>
+              {form.existing.length > 0 && (
+                <fieldset className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm">
+                  <legend className="font-semibold px-1">
+                    登録済みの資料があります
+                  </legend>
+                  <ul className="mb-2 list-disc pl-5">
+                    {form.existing.map((s) => (
+                      <li key={s.id}>
+                        {s.name}（{s.version}）
+                      </li>
+                    ))}
+                  </ul>
+                  <label className="flex items-start gap-2 py-2">
+                    <input
+                      type="radio"
+                      name="onExisting"
+                      checked={form.onExisting === "supersede"}
+                      onChange={() =>
+                        setForm({ ...form, onExisting: "supersede" })
+                      }
+                      className="mt-1"
+                    />
+                    <span>
+                      置き換える（登録済みの資料は旧版として保存し、検索対象から外す）
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 py-2">
+                    <input
+                      type="radio"
+                      name="onExisting"
+                      checked={form.onExisting === "keep-both"}
+                      onChange={() =>
+                        setForm({ ...form, onExisting: "keep-both" })
+                      }
+                      className="mt-1"
+                    />
+                    <span>
+                      両方を有効にする（別の資料の場合。同じ資料の別の版には使用しないでください）
+                    </span>
+                  </label>
+                </fieldset>
+              )}
               <div className="flex gap-2">
                 <button
                   type="submit"
@@ -299,13 +380,60 @@ export default function SettingsPage() {
             <ul className="mt-4 space-y-2 text-sm">
               {stats.sources.map(({ source, ruleCount, embeddingCount }) => (
                 <li key={source.id} className="border-t pt-2">
-                  <p className="font-semibold">
-                    {source.name}（{source.version}）
-                  </p>
-                  <p className="text-gray-600">
-                    {ruleCount}件の条文 / 意味検索用データ {embeddingCount}件 /{" "}
-                    {source.fileName}
-                  </p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">
+                        {source.name}（{source.version}）
+                        <span
+                          className={`ml-2 text-xs px-2 py-0.5 rounded ${
+                            source.status === "active"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-gray-200 text-gray-700"
+                          }`}
+                        >
+                          {source.status === "active" ? "現行" : "旧版"}
+                        </span>
+                      </p>
+                      <p className="text-gray-600">
+                        {ruleCount}件の条文 / 意味検索用データ {embeddingCount}
+                        件 / {source.fileName}
+                      </p>
+                    </div>
+                    {confirmDeleteId !== source.id && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setConfirmDeleteId(source.id)}
+                        className="shrink-0 min-h-[44px] px-3 py-2 text-red-700 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50"
+                      >
+                        削除
+                      </button>
+                    )}
+                  </div>
+                  {confirmDeleteId === source.id && (
+                    <div className="mt-2 p-3 bg-red-50 rounded-lg">
+                      <p className="mb-2 text-red-800">
+                        この資料と{ruleCount}
+                        件の条文を削除します。元に戻せません。
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(source.id)}
+                          className="flex-1 min-h-[44px] px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                        >
+                          削除する
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="flex-1 min-h-[44px] px-3 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200"
+                        >
+                          キャンセル
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

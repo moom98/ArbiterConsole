@@ -2,50 +2,44 @@
 /**
  * 埋め込みモデルを Hugging Face Hub からダウンロードし public/models/ に配置する。
  *
- *   npm run fetch-models
+ *   npm run fetch-models            # 未取得・ハッシュ不一致のファイルのみ取得
+ *   npm run fetch-models -- --force # 全て再取得
  *
  * アプリは実行時に HF Hub へアクセスしない（env.allowRemoteModels = false）。
- * このスクリプトはデプロイ前（ビルド環境）に一度だけ実行する。
- * 生成物（約120MB）は .gitignore 対象のためリポジトリにはコミットしない。
- *
- * モデルIDは lib/infrastructure/embeddings/generator.ts の EMBEDDING_MODEL_ID と
- * 一致させること（ADR-003）。
+ * リビジョンはコミットSHAに固定し、ダウンロード後にハッシュを検証する。
+ * 生成物（約135MB）は .gitignore 対象のためリポジトリにはコミットしない。
  */
-import { createWriteStream, existsSync, mkdirSync, statSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { fileURLToPath } from "node:url";
+import { FILES, MODEL_DIR, MODEL_ID, REVISION, verifyFile } from "./model-assets.mjs";
 
-const MODEL_ID = "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
-const REVISION = "main";
-const FILES = [
-  "config.json",
-  "tokenizer.json",
-  "tokenizer_config.json",
-  "special_tokens_map.json",
-  "onnx/model_quantized.onnx",
-];
-
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const modelDir = join(root, "public/models", MODEL_ID);
 const force = process.argv.includes("--force");
 
 for (const file of FILES) {
-  const target = join(modelDir, file);
-  if (!force && existsSync(target) && statSync(target).size > 0) {
-    console.log(`[models] skip (exists) ${file}`);
+  const target = join(MODEL_DIR, file.path);
+  if (!force && existsSync(target) && verifyFile(file, target)) {
+    console.log(`[models] ok (verified) ${file.path}`);
     continue;
   }
 
-  const url = `https://huggingface.co/${MODEL_ID}/resolve/${REVISION}/${file}`;
+  const url = `https://huggingface.co/${MODEL_ID}/resolve/${REVISION}/${file.path}`;
   console.log(`[models] downloading ${url}`);
   const response = await fetch(url);
   if (!response.ok || !response.body) {
     throw new Error(`Failed to download ${url}: ${response.status}`);
   }
   mkdirSync(dirname(target), { recursive: true });
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(target));
+  const partial = `${target}.partial`;
+  await pipeline(Readable.fromWeb(response.body), createWriteStream(partial));
+
+  if (!verifyFile(file, partial)) {
+    rmSync(partial, { force: true });
+    throw new Error(`Hash mismatch for ${file.path} (revision ${REVISION})`);
+  }
+  renameSync(partial, target);
+  console.log(`[models] verified ${file.path}`);
 }
 
-console.log(`[models] ${MODEL_ID} ready in public/models/`);
+console.log(`[models] ${MODEL_ID}@${REVISION.slice(0, 7)} ready in public/models/`);

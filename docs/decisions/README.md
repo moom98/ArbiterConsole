@@ -6,6 +6,14 @@ This directory contains Architecture Decision Records (ADRs) for the Arbiter Con
 
 ADRs document important architectural and design decisions made during the project lifecycle. They provide context for why certain approaches were chosen and help maintain consistency over time.
 
+## Index
+
+| ADR | Title | Status |
+| --- | --- | --- |
+| [ADR-001](./ADR-001-technology-stack.md) | Technology Stack Selection | Accepted |
+| [ADR-002](./ADR-002-decision-tree-llm-boundary.md) | Decision Tree and LLM Responsibility Boundary | Accepted |
+| [ADR-003](./ADR-003-offline-rule-search.md) | Offline Rule Search: Japanese Tokenization, Multilingual Embeddings, Self-hosted Assets | Accepted |
+
 ## Naming Convention
 
 ADRs should follow this naming pattern:

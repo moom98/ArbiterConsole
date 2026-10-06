@@ -1,209 +1,417 @@
-import type { Decision, Penalty } from "@/lib/domain/entities";
+import type {
+  Decision,
+  IllegalMoveFacts,
+  IllegalMoveSubtype,
+  PlayerColor,
+  RuleCitation,
+} from "@/lib/domain/entities";
+import type { DomainProviders } from "@/lib/domain/providers";
+import {
+  CITATIONS,
+  cite,
+  type CitationKey,
+} from "@/lib/domain/rules/citations";
+import {
+  QUESTIONS,
+  SUBTYPE_LABELS,
+  type FollowUpQuestion,
+} from "@/lib/domain/follow-up";
+import { buildDecision, type DecisionFields } from "./build-decision";
 
-export interface IllegalMoveStandardInput {
-  playerColor: "white" | "black";
-  clockPressed: boolean;
-  opponentMoved: boolean;
-  playerIncidentCount: number; // このプレイヤーの過去のIllegal Move回数
-  moveDescription?: string;
+export const DT_001_ID = "DT-001-illegal-move-standard" as const;
+export const DT_001_RULES_VERSION = "FIDE-2023";
+
+/**
+ * DT-001 の入力。Standard（FIDE Laws of Chess 2023, Article 7.5）専用。
+ * Rapid / Blitz の判断にはこの Tree を使用しない（要件 §17）。
+ */
+export interface IllegalMoveStandardInput extends IllegalMoveFacts {
+  /** 違反したプレーヤー */
+  playerColor: PlayerColor;
+  /**
+   * この対局で同じプレーヤーに対して既に違法手ペナルティ（7.5.5）が適用された回数。
+   * IncidentCounter が算出する。非負整数でなければならない。
+   */
+  playerIncidentCount: number;
+}
+
+export type DecisionTreeResult =
+  | { status: "decided"; decision: Decision }
+  | {
+      status: "needs-input";
+      decision: Decision;
+      questions: FollowUpQuestion[];
+    };
+
+const COLOR_JA: Record<PlayerColor, string> = { white: "白", black: "黒" };
+
+function opponentOf(color: PlayerColor): PlayerColor {
+  return color === "white" ? "black" : "white";
+}
+
+/** subtype ごとの、違法手とみなす根拠条文 */
+const SUBTYPE_ARTICLE: Record<IllegalMoveSubtype, CitationKey> = {
+  "illegal-move": "FIDE_7_5_1",
+  "promotion-not-replaced": "FIDE_7_5_2",
+  "clock-without-move": "FIDE_7_5_3",
+  "two-hands": "FIDE_7_5_4",
+};
+
+/** 7.5.1 による局面の復元・タッチムーブが適用される subtype */
+function replacesMove(subtype: IllegalMoveSubtype): boolean {
+  return subtype === "illegal-move" || subtype === "two-hands";
+}
+
+function isNonNegativeInteger(n: unknown): n is number {
+  return typeof n === "number" && Number.isInteger(n) && n >= 0;
 }
 
 /**
  * DT-001: Illegal Move (Standard)
- * FIDE Laws of Chess Article 7.5.4, 7.5.5
+ *
+ * FIDE Laws of Chess 2023 Article 7.5.1–7.5.5（および 4.3 / 4.7）に基づく決定木。
+ * 入力不足時は追加質問を返し、推測で判断しない。
  */
 export class IllegalMoveStandardTree {
-  /**
-   * Decision Treeを評価
-   */
-  evaluate(input: IllegalMoveStandardInput): Decision {
-    // 1. 時計が押されていない場合 → Illegal Move未成立
-    if (!input.clockPressed) {
-      return {
-        id: crypto.randomUUID(),
-        incidentId: "", // 後でセット
-        conclusion:
-          "時計が押されていないため、Illegal Moveは未成立です。プレイヤーに正しい手を指すよう指示してください。",
-        actions: ["プレイヤーに正しい手を指すよう伝える"],
-        intervention: "immediate",
-        penalties: [],
-        sources: [
-          {
-            article: "FIDE 7.5.1",
-            text: "An illegal move is completed once the player has pressed his clock.",
-            source: "FIDE",
-            priority: 10,
-          },
-        ],
-        confidence: "high",
-        escalationRecommended: false,
-        generatedBy: "decision-tree",
-        validatedAt: new Date(),
-        validationPassed: true,
-        createdAt: new Date(),
-      };
+  constructor(private readonly providers: DomainProviders) {}
+
+  evaluate(input: Partial<IllegalMoveStandardInput>): DecisionTreeResult {
+    // 1. 基本事実（互いに独立なので同時に質問する）
+    const basic: FollowUpQuestion[] = [];
+    if (input.playerColor === undefined) basic.push(QUESTIONS.playerColor);
+    if (input.subtype === undefined) basic.push(QUESTIONS.subtype);
+    if (input.gameEnded === undefined) basic.push(QUESTIONS.gameEnded);
+    if (basic.length > 0) return this.needsInput(basic);
+
+    const color = input.playerColor as PlayerColor;
+    const subtype = input.subtype as IllegalMoveSubtype;
+
+    // 2. 対局終了後に判明 → 訂正不可、結果は確定
+    if (input.gameEnded) return this.decided(this.gameEnded(color, subtype));
+
+    // 3. 時計を押したか（7.5.3 は定義上押している）
+    const clockPressed =
+      subtype === "clock-without-move" ? true : input.clockPressed;
+    if (clockPressed === undefined)
+      return this.needsInput([QUESTIONS.clockPressed]);
+    if (!clockPressed) {
+      return this.decided(
+        subtype === "two-hands"
+          ? this.twoHandsNotCompleted(color)
+          : this.notCompleted(color)
+      );
     }
 
-    // 2. 相手がすでに次の手を指した場合 → 訂正不可
-    if (input.opponentMoved) {
-      return {
-        id: crypto.randomUUID(),
-        incidentId: "",
-        conclusion:
-          "相手がすでに次の手を指したため、Illegal Moveは訂正できません。局面はそのまま続行されます。",
-        actions: [
-          "局面をそのまま続行させる",
-          "特別なペナルティはなし",
-          "今後の手順を監視する",
-        ],
-        intervention: "immediate",
-        penalties: [],
-        sources: [
-          {
-            article: "FIDE 7.5.3",
-            text: "If the opponent has made his move, the illegal move cannot be corrected.",
-            source: "FIDE",
-            priority: 10,
-          },
-        ],
-        confidence: "high",
-        escalationRecommended: false,
-        generatedBy: "decision-tree",
-        validatedAt: new Date(),
-        validationPassed: true,
-        createdAt: new Date(),
-      };
+    // 4. 違法手回数（システムが提供）。不正値で負けを出さない
+    if (!isNonNegativeInteger(input.playerIncidentCount)) {
+      return this.decided(this.invalidCount(color, input.playerIncidentCount));
     }
+    const priorCount = input.playerIncidentCount;
 
-    // 3. 1回目のIllegal Move → 相手に2分追加
-    if (input.playerIncidentCount === 0) {
-      const penalty: Penalty = {
-        type: "time-addition-opponent",
-        playerColor:
-          input.playerColor === "white" ? "black" : "white",
-        timeAdjustmentSeconds: 120,
-        description: `${input.playerColor === "white" ? "黒" : "白"}に2分追加`,
-      };
+    // 5. 1回目 → 相手に2分
+    if (priorCount === 0)
+      return this.decided(this.firstOffence(color, subtype));
 
-      return {
-        id: crypto.randomUUID(),
-        incidentId: "",
-        conclusion: `${input.playerColor === "white" ? "白" : "黒"}の1回目のIllegal Moveです。相手に2分を追加し、正しい手に訂正してください。`,
-        actions: [
-          "時計を止める",
-          "Illegal Moveを指摘する",
-          "局面を違法手の前に戻す",
-          `${input.playerColor === "white" ? "黒" : "白"}の時計に2分追加`,
-          "正しい手を指すよう指示",
-          "時計を再開",
-        ],
-        intervention: "immediate",
-        penalties: [penalty],
-        sources: [
-          {
-            article: "FIDE 7.5.4",
-            text: "If the arbiter observes an illegal move has been completed, he shall declare the game lost by the player, provided the opponent has not made his next move. If the arbiter does not intervene, the opponent is entitled to claim a win, provided the opponent has not made his next move.",
-            source: "FIDE",
-            priority: 10,
-          },
-          {
-            article: "FIDE 7.5.5",
-            text: "If during a game it is found that an illegal move has been completed, the position immediately before the irregularity shall be reinstated. If the position immediately before the irregularity cannot be determined, the game shall continue from the last identifiable position prior to the irregularity. Articles 4.3 and 4.7 apply to the move replacing the illegal move. The game shall then continue from this reinstated position.",
-            source: "FIDE",
-            priority: 10,
-          },
-          {
-            article: "JCF NA p.48",
-            text: "Standard timeではIllegal Move 1回目は相手に2分追加",
-            source: "JCF",
-            priority: 100,
-          },
-        ],
-        confidence: "high",
-        escalationRecommended: false,
-        generatedBy: "decision-tree",
-        validatedAt: new Date(),
-        validationPassed: true,
-        createdAt: new Date(),
-      };
+    // 6. 2回目 → 原則負け。ただし相手がメイト不可能ならドロー（7.5.5）
+    const canMate = input.opponentCanCheckmate;
+    if (canMate === undefined || canMate === "unknown") {
+      return this.needsInput(
+        [QUESTIONS.opponentCanCheckmate],
+        `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）の可能性があります。結論には、相手がメイト可能な局面かの確認が必要です（7.5.5 ただし書き）。`,
+        cite(
+          SUBTYPE_ARTICLE[subtype],
+          "FIDE_7_5_5",
+          "JCF_NA_P48_DRAW_EXCEPTION"
+        )
+      );
     }
+    if (canMate === false)
+      return this.decided(this.secondOffenceDraw(color, subtype));
+    return this.decided(this.secondOffenceLoss(color, subtype, priorCount));
+  }
 
-    // 4. 2回目以降のIllegal Move → Game Loss
-    const penalty: Penalty = {
-      type: "game-loss",
-      playerColor: input.playerColor,
-      description: `${input.playerColor === "white" ? "白" : "黒"}の負け`,
-    };
+  // ---------------------------------------------------------------------------
 
+  private decided(fields: DecisionFields): DecisionTreeResult {
     return {
-      id: crypto.randomUUID(),
+      status: "decided",
+      decision: buildDecision(this.providers, fields),
+    };
+  }
+
+  private needsInput(
+    questions: FollowUpQuestion[],
+    conclusion = "判断に必要な情報が不足しています。以下の質問に回答してください。",
+    sources: RuleCitation[] = []
+  ): DecisionTreeResult {
+    const decision = buildDecision(this.providers, {
+      ...this.base(),
+      kind: "follow-up-required",
+      conclusion,
+      actions: questions.map((q) => q.label),
+      intervention: "consult-ca",
+      penalties: [],
+      sources,
+      confidence: "low",
+      escalationRecommended: false,
+      missingFields: questions.map((q) => q.label),
+    });
+    return { status: "needs-input", decision, questions };
+  }
+
+  private base(): Pick<
+    DecisionFields,
+    "incidentId" | "treeId" | "rulesVersion"
+  > {
+    return {
       incidentId: "",
-      conclusion: `${input.playerColor === "white" ? "白" : "黒"}の${input.playerIncidentCount + 1}回目のIllegal Moveです。このプレイヤーの負けとなります。`,
+      treeId: DT_001_ID,
+      rulesVersion: DT_001_RULES_VERSION,
+    };
+  }
+
+  private gameEnded(
+    color: PlayerColor,
+    subtype: IllegalMoveSubtype
+  ): DecisionFields {
+    return {
+      ...this.base(),
+      kind: "recommendation",
+      conclusion: `対局終了後に判明した${COLOR_JA[color]}の違法手（${SUBTYPE_LABELS[subtype]}）です。訂正はできず、結果はそのまま確定します。`,
       actions: [
-        "時計を止める",
-        "Illegal Moveを指摘する",
-        `${input.playerColor === "white" ? "白" : "黒"}の負けを宣言`,
-        "結果を記録",
+        "局面・結果の訂正は行わない",
+        "結果をそのまま記録する",
+        "対局終了の有無が明確でない場合はCAへ確認する",
       ],
-      intervention: "immediate",
-      penalties: [penalty],
-      sources: [
-        {
-          article: "FIDE 7.5.5",
-          text: "After the action taken under Article 7.5.4, for the first two illegal moves by a player the arbiter shall give two minutes extra time to his opponent in each instance; for a third illegal move by the same player, the arbiter shall declare the game lost by this player.",
-          source: "FIDE",
-          priority: 10,
-        },
-        {
-          article: "JCF NA p.48",
-          text: "Standard timeではIllegal Move 2回目は即負け",
-          source: "JCF",
-          priority: 100,
-        },
-      ],
+      intervention: "no-intervention",
+      penalties: [],
+      sources: cite(
+        "FIDE_7_5_1",
+        "MANUAL_7_5_GAME_OVER",
+        "FIDE_8_7",
+        "JCF_NA_P47_GAME_OVER"
+      ),
       confidence: "high",
       escalationRecommended: false,
-      generatedBy: "decision-tree",
-      validatedAt: new Date(),
-      validationPassed: true,
-      createdAt: new Date(),
     };
   }
 
-  /**
-   * このDecision Treeが処理できるincident subtypeを返す
-   */
-  static getSupportedSubtypes(): string[] {
-    return ["illegal-move-standard"];
+  private notCompleted(color: PlayerColor): DecisionFields {
+    return {
+      ...this.base(),
+      kind: "recommendation",
+      conclusion: `${COLOR_JA[color]}は時計を押していないため、違法手は成立していません。違法手のペナルティはありません。`,
+      actions: [
+        "違法手としてのペナルティは科さない",
+        "プレーヤーが手を訂正する場合、タッチムーブ（4.3 / 4.7）が適用される：最初に触れた指せる駒を動かす",
+        "時計が押された時点で違法手が成立する",
+      ],
+      intervention: "no-intervention",
+      penalties: [],
+      sources: cite(
+        "FIDE_7_5_1",
+        "MANUAL_7_5_NOT_COMPLETED",
+        "FIDE_4_3",
+        "FIDE_4_7"
+      ),
+      confidence: "high",
+      escalationRecommended: false,
+    };
   }
 
-  /**
-   * 追加情報が必要かどうかを判定
-   */
-  static requiresFollowUp(
-    currentInput: Partial<IllegalMoveStandardInput>
-  ): {
-    required: boolean;
-    missingFields: string[];
-  } {
-    const missingFields: string[] = [];
+  private twoHandsNotCompleted(color: PlayerColor): DecisionFields {
+    return {
+      ...this.base(),
+      kind: "recommendation",
+      conclusion: `${COLOR_JA[color]}は時計を押していないため、7.5.4（両手による着手）の違法手は成立していません。ただし第4.1条（片手で指す）違反として介入が必要です。`,
+      actions: [
+        "時計を止めて介入する",
+        "違法手としてのペナルティ（7.5.5）は科さない",
+        "第4.1条違反への対応（12.9 の罰則の要否）はCAへ確認する",
+      ],
+      intervention: "immediate",
+      penalties: [],
+      sources: cite("FIDE_4_1", "MANUAL_4_INTERVENE", "FIDE_7_5_4"),
+      confidence: "medium",
+      escalationRecommended: true,
+      escalationReason: "第4.1条違反の罰則は決定木の対象外です",
+    };
+  }
 
-    if (currentInput.playerColor === undefined) {
-      missingFields.push("playerColor");
+  private invalidCount(color: PlayerColor, value: unknown): DecisionFields {
+    return {
+      ...this.base(),
+      kind: "manual-review",
+      conclusion: `${COLOR_JA[color]}のこの対局での違法手回数を確定できません（値: ${String(value)}）。判断を確定できません。`,
+      actions: [
+        "時計を止める",
+        "この対局の違法手の記録を確認する",
+        "CAへ確認する",
+      ],
+      intervention: "consult-ca",
+      penalties: [],
+      sources: cite("FIDE_7_5_5"),
+      confidence: "low",
+      escalationRecommended: true,
+      escalationReason: "違法手回数の履歴が不正または取得できません",
+    };
+  }
+
+  private restoreActions(
+    color: PlayerColor,
+    subtype: IllegalMoveSubtype
+  ): string[] {
+    switch (subtype) {
+      case "promotion-not-replaced":
+        return [
+          `${COLOR_JA[color]}のポーンを同じ色のクイーンに置き換える（7.5.2）`,
+        ];
+      case "clock-without-move":
+        return [`局面はそのまま、${COLOR_JA[color]}の手番で再開する（7.5.3）`];
+      default:
+        return [
+          "局面を違反直前の局面に戻す（特定できない場合は、違反前で特定できる直近の局面）",
+          "違法手の代わりの手にはタッチムーブ（4.3 / 4.7）が適用される：可能であれば最初に触れた駒（違法に動かした駒、または取った駒）で指す",
+        ];
     }
-    if (currentInput.clockPressed === undefined) {
-      missingFields.push("clockPressed");
-    }
-    if (currentInput.opponentMoved === undefined) {
-      missingFields.push("opponentMoved");
-    }
-    if (currentInput.playerIncidentCount === undefined) {
-      missingFields.push("playerIncidentCount");
-    }
+  }
+
+  private firstOffence(
+    color: PlayerColor,
+    subtype: IllegalMoveSubtype
+  ): DecisionFields {
+    const opp = opponentOf(color);
+    const sourceKeys: CitationKey[] = [SUBTYPE_ARTICLE[subtype]];
+    if (subtype !== "illegal-move" && subtype !== "promotion-not-replaced")
+      sourceKeys.push("FIDE_7_5_1");
+    sourceKeys.push("FIDE_7_5_5");
+    if (replacesMove(subtype))
+      sourceKeys.push(
+        "FIDE_4_3",
+        "FIDE_4_7",
+        "MANUAL_7_5_TOUCH_MOVE",
+        "JCF_NA_P47_TOUCH_MOVE"
+      );
+    if (subtype === "two-hands") sourceKeys.push("MANUAL_7_5_COUNT_ONCE");
+    sourceKeys.push(
+      "MANUAL_7_5_INCREMENT",
+      "MANUAL_7_5_INTERVENE",
+      "JCF_NA_P48_PENALTY"
+    );
+
+    const actions = [
+      "時計を止める",
+      ...this.restoreActions(color, subtype),
+      `${COLOR_JA[opp]}の時計に2分加算する（7.5.5）`,
+      `インクリメントがある場合、違法手で${COLOR_JA[color]}に加算されたインクリメント分を差し引く`,
+    ];
+    if (subtype === "two-hands")
+      actions.push(
+        "同じ手の中の複数の違反（例: 両手による違法キャスリング）は1回として数える"
+      );
+    actions.push(
+      `${COLOR_JA[color]}の2回目の違法手は原則として負けとなる（7.5.5）`,
+      "時計を再開する"
+    );
 
     return {
-      required: missingFields.length > 0,
-      missingFields,
+      ...this.base(),
+      kind: "recommendation",
+      conclusion: `${COLOR_JA[color]}の1回目の違法手（${SUBTYPE_LABELS[subtype]}）です。${COLOR_JA[opp]}に2分を加算します。`,
+      actions,
+      intervention: "immediate",
+      penalties: [
+        {
+          type: "time-addition-opponent",
+          playerColor: opp,
+          timeAdjustmentSeconds: 120,
+          description: `${COLOR_JA[opp]}に2分追加`,
+        },
+      ],
+      sources: cite(...sourceKeys),
+      confidence: "high",
+      escalationRecommended: false,
     };
   }
+
+  private secondOffenceLoss(
+    color: PlayerColor,
+    subtype: IllegalMoveSubtype,
+    priorCount: number
+  ): DecisionFields {
+    const inconsistent = priorCount >= 2;
+    return {
+      ...this.base(),
+      kind: "recommendation",
+      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）です。相手はメイト可能な局面のため、${COLOR_JA[color]}の負けとなります。`,
+      actions: [
+        "時計を止める",
+        `${COLOR_JA[color]}の負けを宣言する（7.5.5）`,
+        "結果を記録する",
+      ],
+      intervention: "immediate",
+      penalties: [
+        {
+          type: "game-loss",
+          playerColor: color,
+          description: `${COLOR_JA[color]}の負け`,
+        },
+      ],
+      sources: cite(
+        SUBTYPE_ARTICLE[subtype],
+        "FIDE_7_5_5",
+        "MANUAL_7_5_INTERVENE",
+        "JCF_NA_P48_PENALTY"
+      ),
+      confidence: inconsistent ? "medium" : "high",
+      escalationRecommended: inconsistent,
+      escalationReason: inconsistent
+        ? `記録上、${COLOR_JA[color]}にはすでに${priorCount}回の違法手ペナルティがあります。記録を確認してください。`
+        : undefined,
+    };
+  }
+
+  private secondOffenceDraw(
+    color: PlayerColor,
+    subtype: IllegalMoveSubtype
+  ): DecisionFields {
+    return {
+      ...this.base(),
+      kind: "recommendation",
+      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手はどのような合法手の連続でもメイトできない局面のため、ドローとなります。`,
+      actions: [
+        "時計を止める",
+        "ドローを宣言する（7.5.5 ただし書き）",
+        "結果を記録する",
+      ],
+      intervention: "immediate",
+      penalties: [
+        {
+          type: "draw",
+          playerColor: color,
+          description: "ドロー（相手がメイト不可能な局面）",
+        },
+      ],
+      sources: cite(
+        SUBTYPE_ARTICLE[subtype],
+        "FIDE_7_5_5",
+        "JCF_NA_P48_DRAW_EXCEPTION"
+      ),
+      confidence: "high",
+      escalationRecommended: false,
+    };
+  }
+
+  /** このDecision Treeが処理できる subtype */
+  static getSupportedSubtypes(): IllegalMoveSubtype[] {
+    return Object.keys(SUBTYPE_ARTICLE) as IllegalMoveSubtype[];
+  }
 }
+
+/** テスト・表示用: subtype と根拠条文の対応 */
+export const DT_001_SUBTYPE_ARTICLES: Record<IllegalMoveSubtype, string> = {
+  "illegal-move": CITATIONS.FIDE_7_5_1.article,
+  "promotion-not-replaced": CITATIONS.FIDE_7_5_2.article,
+  "clock-without-move": CITATIONS.FIDE_7_5_3.article,
+  "two-hands": CITATIONS.FIDE_7_5_4.article,
+};

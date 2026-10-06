@@ -113,9 +113,11 @@ npm run fetch-models
 オフライン動作のため、実行時アセットはすべて同一オリジンから配信します（[ADR-003](./docs/decisions/ADR-003-offline-rule-search.md)）。
 
 - `public/pdfjs/`, `public/ort/`: `npm run dev` / `npm run build` の前に `scripts/copy-runtime-assets.mjs` が node_modules から自動コピー
-- `public/models/`: `npm run fetch-models` で Hugging Face からダウンロード（デプロイ前に実行）
+- `public/models/`: `npm run fetch-models` で Hugging Face からダウンロード（デプロイ前に実行）。リビジョンはコミットSHAに固定され、ダウンロード後にファイルのハッシュを検証します
 
 いずれも生成物のためリポジトリには含めません（.gitignore 対象）。モデル未配置の場合、ルール検索はキーワード検索のみで動作します。
+
+`npm run build` はモデル未配置だとエラーで停止します（意味検索なしでのデプロイ防止）。開発・CIでモデル無しのままビルドする場合は明示的に `ALLOW_MISSING_MODEL=1` を指定してください。
 
 ### Development
 
@@ -130,8 +132,11 @@ npm run dev
 ### Build
 
 ```bash
-# Production build
+# Production build (requires `npm run fetch-models` first)
 npm run build
+
+# Build without the embedding model (development / CI only; keyword search only)
+ALLOW_MISSING_MODEL=1 npm run build
 
 # Start production server
 npm start
@@ -148,7 +153,7 @@ npm test
 
 ### 1. Rule Search
 
-1. 設定画面で資料種別（FIDE / JCF）を選び、資料名・版・PDFを指定してインポート（同種別の既存資料は置き換え）
+1. 設定画面で資料種別（FIDE / JCF）を選び、資料名・版・PDFを指定してインポート。同じ種別の有効な資料が既にある場合は、「置き換える（既存資料は旧版として保存し検索対象外）」か「両方を有効にする」かを画面上で選択します。登録済み資料は設定画面から削除できます
 2. システムが条文とページ番号を抽出し、embeddingsを生成（初回のみ、数分かかる場合があります）
 3. 検索画面でキーワード・条文番号を入力（例: "違法手", "7.5.4", "illegal move"）
 4. 結果には資料名・版・ページが表示され、タップで条文全文と出典を確認できます

@@ -62,6 +62,15 @@ bi-grams give high recall for short arbiter queries without any dictionary.
 | ONNX runtime WASM | `/ort/*.wasm` | `scripts/copy-runtime-assets.mjs` | runtime `CacheFirst` |
 | Embedding model | `/models/Xenova/...` | `npm run fetch-models` (manual, needs network) | runtime `CacheFirst` |
 
+The model download is pinned to Hugging Face commit
+`2c4055b12046f11709e9df2c122e59ffbdc2f900`, and each file is verified after
+download (SHA-256 for LFS files, git blob SHA-1 for small JSON files) before it
+is installed (`scripts/model-assets.mjs`). `prebuild` runs
+`scripts/check-model-assets.mjs`, which **fails the build** when the model is
+missing, so a deployment cannot silently ship without semantic search.
+Development/CI builds without the model must opt out explicitly with
+`ALLOW_MISSING_MODEL=1`.
+
 Transformers.js is configured with `allowRemoteModels = false`,
 `localModelPath = "/models/"` and `backends.onnx.wasm.wasmPaths = "/ort/"`.
 Transformers.js' own Cache API storage is disabled (`useBrowserCache = false`)
@@ -80,10 +89,15 @@ never be served from cache.
 
 - Vector (cosine, clamped to [0,1]; similarities below `vectorMinSimilarity`
   = 0.5 contribute 0, because unrelated in-domain articles still score
-  ~0.3–0.5) and full-text (Lunr score / max score, multiplied by the fraction
-  of query tokens matched so a single weak bi-gram hit is not inflated to 1.0)
-  are normalised before weighting (0.6 / 0.4); weights are re-normalised to the
-  methods that succeeded. `minScore` (0.25) applies once, to the fused score.
+  ~0.3–0.5) and full-text (Lunr score / max score, dampened by the fraction of
+  query tokens matched — at most halved, because long Japanese questions yield
+  many bi-grams and therefore low coverage) are normalised before weighting
+  (0.6 / 0.4); weights are re-normalised to the methods that succeeded.
+- `minScore` (0.25) applies to the fused score, but the top 3 full-text hits
+  are always kept. When only full-text search succeeded (e.g. model missing or
+  offline before the model was cached), `minScore` is not applied; results are
+  cut by rank (`limit`) and by relative score (≥ 10% of the best hit). This
+  degraded mode can show weaker matches; that is preferred over showing none.
   These thresholds are initial values to be tuned with real documents.
 - The in-memory Lunr index is rebuilt when a data stamp (rule count + source
   ids) changes, so an import in another tab is picked up.
@@ -102,14 +116,24 @@ never be served from cache.
   language, tournamentId, page count.
 - `Rule` gains `sourceId` and `page`. The PDF extractor rebuilds lines from
   pdf.js `hasEOL` / y-position and records the page of each article heading.
-- Importing a source with the same type **and the same document name** (and,
-  for tournament regulations, the same tournament) **replaces** the previous
-  source, its rules and its embeddings in one transaction, so old and current
-  editions of one document are never mixed (§30), while different documents of
-  the same type (e.g. JCF regulations and the NA seminar material) coexist.
-  Legacy rules imported before schema v3 (no `sourceId`) are replaced by the
-  next import of the same type. Keeping superseded editions for reference is
-  future work; search already excludes non-`active` sources.
+- When a source type already has an active source (tournament regulations:
+  per tournament), the import requires an explicit choice, made in Settings
+  via an in-page confirmation (§30: old and current rules must not be mixed
+  unconditionally):
+  - **supersede**: the existing sources become `superseded`; their rules are
+    kept for reference but excluded from search;
+  - **keep-both**: both stay active (for different documents of one type,
+    e.g. JCF regulations and the NA seminar material).
+  The check runs before PDF extraction and again inside the save transaction.
+  Matching on the free-text document name was rejected because a typo would
+  silently leave two editions active.
+- Settings lists every source with a current/old badge and a delete control
+  (in-page confirmation) that removes the source, its rules and embeddings.
+- Legacy rules imported before schema v3 (no `sourceId`, no edition info) are
+  deleted by the next import of the same type.
+- Japanese `第N条のM` is parsed as its own article `N-M` (not merged into
+  `第N条`), and the tokenizer maps `第N条のM` / `第N条` in text and queries to
+  the same `N-M` / `N` tokens.
 - Article headings are recognised only at line start and only when the
   previous line does not continue a paragraph (long line without a sentence
   terminator), to avoid wrapped cross-references becoming headings.
@@ -131,3 +155,12 @@ never be served from cache.
 - Embedding generation runs on the main thread in batches with yields to the
   event loop. Moving it to a Web Worker is a follow-up if import-time UI
   responsiveness proves insufficient on tablets.
+
+## Follow-ups
+
+- **Offline model warm-up**: the model and WASM are cached by the service
+  worker only on first use. A "prepare for offline use" action in Settings
+  (fetch `/models/**` and `/ort/*.wasm` while online and report cache status)
+  is needed so a device is guaranteed to work offline at the venue.
+- Web Worker for embedding generation; chunked embeddings for long articles;
+  tuning of the score thresholds with real FIDE/JCF documents.

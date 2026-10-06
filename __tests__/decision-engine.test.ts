@@ -109,32 +109,148 @@ describe("DecisionEngine", () => {
     });
   });
 
-  describe("rapid / blitz", () => {
+  describe("rapid / blitz routing", () => {
     it.each([
-      ["rapid", "competition-rules", "FIDE A.4"],
-      ["rapid", "basic-rules", "FIDE A.5.2"],
-      ["blitz", "competition-rules", "FIDE B.2"],
-      ["blitz", "basic-rules", "FIDE B.3"],
+      [
+        "rapid",
+        "competition-rules",
+        "DT-002-illegal-move-fast-competition",
+        "FIDE A.4",
+        60,
+      ],
+      [
+        "rapid",
+        "basic-rules",
+        "DT-003-illegal-move-fast-basic",
+        "FIDE A.5.2",
+        60,
+      ],
+      [
+        "blitz",
+        "competition-rules",
+        "DT-002-illegal-move-fast-competition",
+        "FIDE B.2",
+        undefined,
+      ],
+      [
+        "blitz",
+        "basic-rules",
+        "DT-003-illegal-move-fast-basic",
+        "FIDE B.3",
+        60,
+      ],
     ] as const)(
-      "%s / %s → not supported, consult CA, cites %s, never applies the standard tree",
-      (competitionType, supervisionRegime, article) => {
+      "%s / %s → %s (cites %s), never the standard tree",
+      (competitionType, supervisionRegime, treeId, article, seconds) => {
         const r = run({
-          incident: incident(fullFacts),
+          incident: incident({
+            ...fullFacts,
+            illegalMoveFacts: {
+              ...fullFacts.illegalMoveFacts,
+              opponentMadeNextMove: false,
+              detectedBy: "arbiter",
+            },
+          }),
           ruleset: {
             competitionType,
             supervisionRegime,
             rulesVersion: "FIDE-2023",
           },
-          illegalMoveHistory: hist(1, 0),
+          illegalMoveHistory: hist(0, 0),
         });
         expect(r.requiresFollowUp).toBe(false);
-        expect(r.decision.kind).toBe("not-supported");
-        expect(r.decision.intervention).toBe("consult-ca");
-        expect(r.decision.penalties).toHaveLength(0);
-        expect(r.decision.treeId).toBeUndefined();
+        expect(r.decision.treeId).toBe(treeId);
         expect(r.decision.sources[0].article).toBe(article);
+        expect(r.decision.penalties[0].type).toBe("time-addition-opponent");
+        expect(r.decision.penalties[0].timeAdjustmentSeconds).toBe(seconds);
+        expect(r.decision.penalties[0].timeAdjustmentSeconds).not.toBe(120);
       }
     );
+
+    it("A.5 asks the opponent-moved and detection questions together with the basic facts", () => {
+      const r = run({
+        ruleset: {
+          competitionType: "rapid",
+          supervisionRegime: "basic-rules",
+          rulesVersion: "FIDE-2023",
+        },
+        illegalMoveHistory: hist(0, 0),
+      });
+      expect(r.followUpQuestions.map((q) => q.id)).toEqual([
+        "playerColor",
+        "subtype",
+        "gameEnded",
+        "clockPressed",
+        "opponentMadeNextMove",
+        "detectedBy",
+      ]);
+    });
+
+    it("A.4 does not ask whether the opponent has moved", () => {
+      const r = run({
+        ruleset: {
+          competitionType: "rapid",
+          supervisionRegime: "competition-rules",
+          rulesVersion: "FIDE-2023",
+        },
+        illegalMoveHistory: hist(0, 0),
+      });
+      expect(r.followUpQuestions.map((q) => q.id)).not.toContain(
+        "opponentMadeNextMove"
+      );
+    });
+  });
+
+  describe("routing (clock-time / draw)", () => {
+    it("clock-time asks for the subtype, then routes flag-fall to DT-004", () => {
+      const first = run({
+        incident: incident({ category: "clock-time" }),
+        ruleset: STANDARD,
+      });
+      expect(first.requiresFollowUp).toBe(true);
+      expect(first.followUpQuestions.map((q) => q.id)).toEqual([
+        "clockTimeSubtype",
+      ]);
+      const answered = applyIncidentAnswers(
+        incident({ category: "clock-time" }),
+        {
+          clockTimeSubtype: "flag-fall",
+        }
+      );
+      const second = run({ incident: answered, ruleset: STANDARD });
+      expect(second.decision.treeId).toBe("DT-004-flag-fall");
+      expect(second.followUpQuestions.map((q) => q.id)).toContain("flagFallen");
+    });
+
+    it("draw asks for the subtype, then routes repetition to DT-005", () => {
+      const first = run({
+        incident: incident({ category: "draw" }),
+        ruleset: STANDARD,
+      });
+      expect(first.followUpQuestions.map((q) => q.id)).toEqual(["drawSubtype"]);
+      const answered = applyIncidentAnswers(incident({ category: "draw" }), {
+        drawSubtype: "fivefold-repetition",
+      });
+      const second = run({ incident: answered, ruleset: STANDARD });
+      expect(second.decision.treeId).toBe("DT-005-repetition");
+    });
+
+    it("draw 'other' and other clock problems go to manual review", () => {
+      for (const inc of [
+        incident({ category: "draw", subtype: "other" }),
+        incident({ category: "clock-time", subtype: "other" }),
+        incident({ category: "player-behavior" }),
+      ]) {
+        const r = run({ incident: inc, ruleset: STANDARD });
+        expect(r.decision.kind).toBe("manual-review");
+        expect(r.decision.intervention).toBe("consult-ca");
+      }
+    });
+
+    it("flag fall still requires an explicit ruleset", () => {
+      const r = run({ incident: incident({ category: "clock-time" }) });
+      expect(r.decision.kind).toBe("context-required");
+    });
   });
 
   describe("routing (standard)", () => {
@@ -221,7 +337,7 @@ describe("DecisionEngine", () => {
 
     it("routes other categories to manual review", () => {
       const r = run({
-        incident: incident({ category: "clock-time" }),
+        incident: incident({ category: "scoresheet" }),
         ruleset: STANDARD,
       });
       expect(r.decision.kind).toBe("manual-review");
@@ -243,5 +359,96 @@ describe("applyIncidentAnswers", () => {
   it("maps an unrecognised checkmate answer to unknown", () => {
     const inc = applyIncidentAnswers(incident(), { opponentCanCheckmate: "?" });
     expect(inc.illegalMoveFacts?.opponentCanCheckmate).toBe("unknown");
+  });
+});
+
+describe("applyIncidentAnswers (M4 questions)", () => {
+  it("stores flag-fall material counts and ignores out-of-range values", () => {
+    const inc = applyIncidentAnswers(
+      incident({ category: "clock-time", subtype: "flag-fall" }),
+      {
+        flagFallen: "black",
+        gameEndedBeforeFlag: "false",
+        movesNotCompleted: "true",
+        whiteRooks: "1",
+        whitePawns: "9",
+        blackQueens: "x",
+        materialConfirmed: "true",
+        positionFen: "  ",
+      }
+    );
+    expect(inc.playerColor).toBe("black");
+    expect(inc.flagFallFacts?.flagFallen).toBe("black");
+    expect(inc.flagFallFacts?.material?.white.rooks).toBe(1);
+    expect(inc.flagFallFacts?.material?.white.pawns).toBeUndefined();
+    expect(inc.flagFallFacts?.material?.black.queens).toBeUndefined();
+    expect(inc.flagFallFacts?.materialConfirmed).toBe(true);
+    expect(inc.flagFallFacts?.fen).toBeUndefined();
+  });
+
+  it("stores draw-claim answers and the subtype", () => {
+    const inc = applyIncidentAnswers(incident({ category: "draw" }), {
+      drawSubtype: "threefold-repetition-claim",
+      claimant: "white",
+      claimMode: "about-to-appear",
+      repetitionCheck: "auto",
+      positionsText: " 1. Nf3 Nf6 ",
+      intendedMove: "",
+    });
+    expect(inc.subtype).toBe("threefold-repetition-claim");
+    expect(inc.drawClaimFacts).toEqual({
+      subtype: "threefold-repetition-claim",
+      claimant: "white",
+      claimMode: "about-to-appear",
+      conditionCheck: "auto",
+      positionsText: "1. Nf3 Nf6",
+      intendedMove: undefined,
+    });
+  });
+
+  it("stores A.5.2 answers on illegal-move facts", () => {
+    const inc = applyIncidentAnswers(incident(), {
+      opponentMadeNextMove: "true",
+      detectedBy: "opponent-claim",
+    });
+    expect(inc.illegalMoveFacts).toEqual({
+      opponentMadeNextMove: true,
+      detectedBy: "opponent-claim",
+    });
+  });
+});
+
+describe("DecisionEngine — DT-005 automatic repetition check via injected port", () => {
+  it("analyses the move list with the port and draws on a correct claim", async () => {
+    const { chessJsPositionPort } =
+      await import("@/lib/infrastructure/chess/chess-js-position-port");
+    const engine = new DecisionEngine(fixedProviders(), {
+      positions: chessJsPositionPort,
+    });
+    const inc = applyIncidentAnswers(incident({ category: "draw" }), {
+      drawSubtype: "threefold-repetition-claim",
+      claimant: "black",
+      claimantHasMove: "true",
+      claimMode: "about-to-appear",
+      touchedPiece: "false",
+      moveWritten: "true",
+      repetitionCheck: "auto",
+      positionsText: "1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6 4. Ng1",
+      intendedMove: "Ng8",
+    });
+    const r = engine.processIncident({ incident: inc, ruleset: STANDARD });
+    expect(r.decision.treeId).toBe("DT-005-repetition");
+    expect(r.decision.penalties[0].type).toBe("draw");
+  });
+
+  it("without a port, the automatic check is reported as unavailable", () => {
+    const inc = applyIncidentAnswers(incident({ category: "draw" }), {
+      drawSubtype: "fivefold-repetition",
+      fivefoldCheck: "auto",
+      positionsText: "1. Nf3 Nf6",
+    });
+    const r = run({ incident: inc, ruleset: STANDARD });
+    expect(r.requiresFollowUp).toBe(true);
+    expect(r.decision.conclusion).toContain("利用できません");
   });
 });

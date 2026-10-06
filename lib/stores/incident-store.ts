@@ -21,6 +21,7 @@ import {
 } from "@/lib/domain/services/game-context";
 import { defaultProviders, type DomainProviders } from "@/lib/domain/providers";
 import { db as defaultDb, type ArbiterDatabase } from "@/lib/infrastructure/db";
+import { chessJsPositionPort } from "@/lib/infrastructure/chess/chess-js-position-port";
 import {
   ensureGameForContext,
   loadGameRecords,
@@ -71,7 +72,9 @@ function errorMessage(error: unknown): string {
  */
 export function createIncidentStore(deps: IncidentStoreDeps) {
   const { db, providers } = deps;
-  const engine = new DecisionEngine(providers);
+  const engine = new DecisionEngine(providers, {
+    positions: chessJsPositionPort,
+  });
 
   async function evaluate(incident: Incident): Promise<DecisionEngineResult> {
     const game = await db.games.get(incident.gameId);

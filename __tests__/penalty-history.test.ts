@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   EMPTY_FILTER,
   filterIncidentRecords,
+  illegalMoveCountsByGame,
   listGames,
   penaltyHistoryForGame,
   sortByReportedAtDesc,
@@ -198,5 +199,18 @@ describe("listGames / sortByReportedAtDesc", () => {
     const input = [a, b];
     expect(sortByReportedAtDesc(input)).toEqual([b, a]);
     expect(input).toEqual([a, b]);
+  });
+});
+
+describe("illegalMoveCountsByGame", () => {
+  it("returns penalised-only counts per game and colour", () => {
+    const records = [
+      entry({ game: G12, color: "white", penalties: [TIME_ADD_FOR("black")] }),
+      entry({ game: G12, color: "white", penalties: [] }),
+      entry({ game: G7, color: "black", penalties: [TIME_ADD_FOR("white")] }),
+    ];
+    const counts = illegalMoveCountsByGame(records);
+    expect(counts.get(G12.id)).toEqual({ white: 1, black: 0 });
+    expect(counts.get(G7.id)).toEqual({ white: 0, black: 1 });
   });
 });

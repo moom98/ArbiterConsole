@@ -232,3 +232,21 @@ export function penaltyHistoryForGame(
   };
   return { white: build("white"), black: build("black") };
 }
+
+/**
+ * 対局 × 色ごとの違法手回数（IncidentCounter のペナルティ適用済みのみ）。
+ * 一覧の「Illegal Move回数」バッジ用。
+ */
+export function illegalMoveCountsByGame(
+  records: readonly IncidentRecord[]
+): Map<string, Record<PlayerColor, number>> {
+  const counts = new Map<string, Record<PlayerColor, number>>();
+  const gameIds = new Set(records.map((r) => r.incident.gameId));
+  gameIds.forEach((gameId) => {
+    counts.set(
+      gameId,
+      IncidentCounter.countIllegalMovesByColor(records, gameId)
+    );
+  });
+  return counts;
+}

@@ -6,6 +6,10 @@ This directory contains Architecture Decision Records (ADRs) for the Arbiter Con
 
 ADRs document important architectural and design decisions made during the project lifecycle. They provide context for why certain approaches were chosen and help maintain consistency over time.
 
+## Index
+
+- [ADR-004: Explicit Ruleset Context and Illegal-Move Counting](ADR-004-explicit-ruleset-and-illegal-move-counting.md)
+
 ## Naming Convention
 
 ADRs should follow this naming pattern:

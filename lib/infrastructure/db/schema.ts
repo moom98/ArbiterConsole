@@ -8,6 +8,13 @@ import type {
   Embedding,
 } from "@/lib/domain/entities";
 
+/** 端末ローカルのアプリ状態（例: 最後に使用した報告コンテキスト） */
+export interface AppStateEntry {
+  key: string;
+  value: unknown;
+  updatedAt: Date;
+}
+
 export class ArbiterDatabase extends Dexie {
   tournaments!: EntityTable<Tournament, "id">;
   games!: EntityTable<Game, "id">;
@@ -15,9 +22,10 @@ export class ArbiterDatabase extends Dexie {
   decisions!: EntityTable<Decision, "id">;
   rules!: EntityTable<Rule, "id">;
   embeddings!: EntityTable<Embedding, "id">;
+  appState!: EntityTable<AppStateEntry, "key">;
 
-  constructor() {
-    super("ArbiterConsole");
+  constructor(name = "ArbiterConsole") {
+    super(name);
 
     this.version(1).stores({
       tournaments: "id, name, competitionType, startDate",
@@ -26,6 +34,13 @@ export class ArbiterDatabase extends Dexie {
       decisions: "id, incidentId, generatedBy, confidence, createdAt",
       rules: "id, source, tournamentId, article, priority",
       embeddings: "id, ruleId, model",
+    });
+
+    // v2: 違反プレーヤー単位の履歴参照と、最後に使用した報告コンテキストの保存
+    this.version(2).stores({
+      incidents:
+        "id, gameId, category, status, reportedAt, [gameId+playerColor]",
+      appState: "key",
     });
   }
 }

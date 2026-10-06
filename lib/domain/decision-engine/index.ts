@@ -1,243 +1,241 @@
-import type { Incident, Decision } from "@/lib/domain/entities";
+import type {
+  CompetitionType,
+  Decision,
+  Incident,
+  PlayerColor,
+  RuleCitation,
+  SupervisionRegime,
+} from "@/lib/domain/entities";
+import { SUPPORTED_RULES_VERSIONS } from "@/lib/domain/entities";
 import {
   IllegalMoveStandardTree,
-  type IllegalMoveStandardInput,
+  type PriorIllegalMove,
 } from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
+import {
+  buildDecision,
+  type DecisionFields,
+} from "@/lib/domain/decision-trees/build-decision";
+import { QUESTIONS, type FollowUpQuestion } from "@/lib/domain/follow-up";
+import { cite } from "@/lib/domain/rules/citations";
+import { defaultProviders, type DomainProviders } from "@/lib/domain/providers";
+
+/**
+ * 判断に用いる規則セット。すべて明示的に与えること（既定値を仮定しない）。
+ */
+export interface RulesetContext {
+  competitionType?: CompetitionType;
+  /** Rapid / Blitz の場合は必須（SupervisionRegime のコメント参照） */
+  supervisionRegime?: SupervisionRegime;
+  /** 例: "FIDE-2023" */
+  rulesVersion?: string;
+}
 
 export interface DecisionEngineContext {
   incident: Incident;
-  gameContext?: {
-    tournamentId: string;
-    gameId: string;
-    competitionType: "standard" | "rapid" | "blitz";
-    rapidRulesType?: "A4" | "A5";
-  };
-  playerIncidentHistory?: {
-    white: number;
-    black: number;
-  };
+  ruleset?: RulesetContext;
+  /**
+   * この対局で各プレーヤーに既に適用された違法手ペナルティの明細（IncidentCounter が算出）。
+   * 件数が回数になる。評価中の Incident 自身は含めないこと。
+   */
+  illegalMoveHistory?: Record<PlayerColor, PriorIllegalMove[]>;
 }
 
 export interface DecisionEngineResult {
   decision: Decision;
   requiresFollowUp: boolean;
-  missingFields?: string[];
+  /** requiresFollowUp の場合に回答が必要な質問 */
+  followUpQuestions: FollowUpQuestion[];
 }
+
+const COMPETITION_JA: Record<CompetitionType, string> = {
+  standard: "Standard",
+  rapid: "Rapid",
+  blitz: "Blitz",
+};
 
 /**
  * Decision Engine - Orchestrator
- * IncidentをDecision TreeまたはLLMにルーティング
+ * Incident を規則セットと種別に応じて Decision Tree へルーティングする。
+ * LLM は呼び出さない（ADR-002）。
  */
 export class DecisionEngine {
-  /**
-   * Incidentを処理してDecisionを生成
-   */
-  async processIncident(
-    context: DecisionEngineContext
-  ): Promise<DecisionEngineResult> {
-    const { incident, gameContext, playerIncidentHistory } = context;
+  constructor(private readonly providers: DomainProviders = defaultProviders) {}
 
-    // 1. Category/Subtypeに基づいてDecision Treeを選択
-    if (incident.category === "illegal-move") {
-      return this.processIllegalMove(
-        incident,
-        gameContext,
-        playerIncidentHistory
-      );
-    }
+  processIncident(context: DecisionEngineContext): DecisionEngineResult {
+    const { incident } = context;
+    const ruleset = context.ruleset ?? {};
 
-    // 2. Decision Treeが存在しない場合
-    return this.createManualReviewDecision(incident);
-  }
-
-  /**
-   * Illegal Move系の処理
-   */
-  private async processIllegalMove(
-    incident: Incident,
-    gameContext?: DecisionEngineContext["gameContext"],
-    playerIncidentHistory?: DecisionEngineContext["playerIncidentHistory"]
-  ): Promise<DecisionEngineResult> {
-    // 競技タイプに基づいて適切なTreeを選択
-    const competitionType = gameContext?.competitionType || "standard";
-
-    if (competitionType === "standard") {
-      return this.processIllegalMoveStandard(
-        incident,
-        playerIncidentHistory
-      );
-    }
-
-    // Rapid/Blitzの場合は未実装
-    return this.createManualReviewDecision(
-      incident,
-      "Rapid/Blitz timeのIllegal Move処理は現在実装されていません。"
-    );
-  }
-
-  /**
-   * Illegal Move Standard の処理
-   */
-  private async processIllegalMoveStandard(
-    incident: Incident,
-    playerIncidentHistory?: DecisionEngineContext["playerIncidentHistory"]
-  ): Promise<DecisionEngineResult> {
-    // Incidentの説明文から必要な情報を抽出（簡易版）
-    const input = this.parseIllegalMoveInput(
-      incident,
-      playerIncidentHistory
-    );
-
-    // Follow-upが必要かチェック
-    const followUpCheck =
-      IllegalMoveStandardTree.requiresFollowUp(input);
-    if (followUpCheck.required) {
-      return {
-        decision: this.createFollowUpDecision(
-          incident,
-          followUpCheck.missingFields
-        ),
-        requiresFollowUp: true,
-        missingFields: followUpCheck.missingFields,
-      };
-    }
-
-    // Decision Tree実行
-    const tree = new IllegalMoveStandardTree();
-    const decision = tree.evaluate(
-      input as IllegalMoveStandardInput
-    );
-
-    // Incident IDをセット
-    decision.incidentId = incident.id;
-
-    return {
-      decision,
-      requiresFollowUp: false,
-    };
-  }
-
-  /**
-   * Incident説明文からIllegalMoveStandardInputを抽出
-   */
-  private parseIllegalMoveInput(
-    incident: Incident,
-    playerIncidentHistory?: DecisionEngineContext["playerIncidentHistory"]
-  ): Partial<IllegalMoveStandardInput> {
-    const input: Partial<IllegalMoveStandardInput> = {};
-
-    // 簡易的なパース（実際にはより高度な解析が必要）
-    const desc = incident.description.toLowerCase();
-
-    // Player color detection
-    if (desc.includes("白") || desc.includes("white")) {
-      input.playerColor = "white";
-    } else if (desc.includes("黒") || desc.includes("black")) {
-      input.playerColor = "black";
-    }
-
-    // Clock pressed detection
-    if (
-      desc.includes("時計を押した") ||
-      desc.includes("clock pressed") ||
-      desc.includes("時計押下")
-    ) {
-      input.clockPressed = true;
-    } else if (desc.includes("時計を押していない")) {
-      input.clockPressed = false;
-    }
-
-    // Opponent moved detection
-    if (
-      desc.includes("相手が指した") ||
-      desc.includes("opponent moved")
-    ) {
-      input.opponentMoved = true;
+    // 1. 規則セットの明示を要求（domain.md rule 5）
+    const contextQuestions: FollowUpQuestion[] = [];
+    if (!ruleset.competitionType) {
+      contextQuestions.push(QUESTIONS.competitionType);
     } else if (
-      desc.includes("相手はまだ") ||
-      desc.includes("opponent has not")
+      ruleset.competitionType !== "standard" &&
+      !ruleset.supervisionRegime
     ) {
-      input.opponentMoved = false;
+      contextQuestions.push(QUESTIONS.supervisionRegime);
+    }
+    if (contextQuestions.length > 0 || !ruleset.rulesVersion) {
+      return this.contextRequired(
+        incident,
+        contextQuestions,
+        !ruleset.rulesVersion
+      );
+    }
+    if (
+      !(SUPPORTED_RULES_VERSIONS as readonly string[]).includes(
+        ruleset.rulesVersion
+      )
+    ) {
+      return this.terminal(incident, {
+        kind: "not-supported",
+        conclusion: `規則バージョン「${ruleset.rulesVersion}」には対応していません。判断を確定できません。`,
+        actions: ["CAへ確認してください。"],
+        escalationReason: "未対応の規則バージョンです",
+      });
     }
 
-    // Player incident count
-    if (input.playerColor && playerIncidentHistory) {
-      input.playerIncidentCount =
-        playerIncidentHistory[input.playerColor] || 0;
+    // 2. カテゴリ別ルーティング
+    if (incident.category === "illegal-move") {
+      if (ruleset.competitionType === "standard") {
+        return this.processIllegalMoveStandard(context, ruleset.rulesVersion);
+      }
+      return this.illegalMoveFastNotSupported(
+        incident,
+        ruleset.competitionType as Exclude<CompetitionType, "standard">,
+        ruleset.supervisionRegime as SupervisionRegime,
+        ruleset.rulesVersion
+      );
     }
 
-    return input;
-  }
-
-  /**
-   * Follow-upが必要な場合のDecision
-   */
-  private createFollowUpDecision(
-    incident: Incident,
-    missingFields: string[]
-  ): Decision {
-    const fieldNames: Record<string, string> = {
-      playerColor: "どちらのプレイヤーか（白/黒）",
-      clockPressed: "時計を押したかどうか",
-      opponentMoved: "相手が次の手を指したかどうか",
-      playerIncidentCount: "このプレイヤーの過去のIllegal Move回数",
-    };
-
-    const missingFieldsText = missingFields
-      .map((f) => `・${fieldNames[f] || f}`)
-      .join("\n");
-
-    return {
-      id: crypto.randomUUID(),
-      incidentId: incident.id,
-      conclusion: "追加情報が必要です。",
-      actions: ["以下の情報を確認してください：", missingFieldsText],
-      intervention: "consult-ca",
-      penalties: [],
-      sources: [],
-      confidence: "low",
-      escalationRecommended: true,
-      escalationReason: "必要な情報が不足しています",
-      generatedBy: "decision-tree",
-      validatedAt: new Date(),
-      validationPassed: true,
-      createdAt: new Date(),
-    };
-  }
-
-  /**
-   * Manual Review が必要な場合のDecision
-   */
-  private createManualReviewDecision(
-    incident: Incident,
-    reason?: string
-  ): DecisionEngineResult {
-    const decision: Decision = {
-      id: crypto.randomUUID(),
-      incidentId: incident.id,
+    return this.terminal(incident, {
+      kind: "manual-review",
       conclusion: "この事象は手動での確認が必要です。",
       actions: [
         "ルール検索で関連規則を確認してください。",
         "Chief Arbiterへ相談してください。",
       ],
+      escalationReason: "このカテゴリのDecision Treeは実装されていません",
+    });
+  }
+
+  private processIllegalMoveStandard(
+    context: DecisionEngineContext,
+    rulesVersion: string
+  ): DecisionEngineResult {
+    const { incident, illegalMoveHistory } = context;
+    const color = incident.playerColor;
+    const tree = new IllegalMoveStandardTree(this.providers);
+    const prior =
+      color && illegalMoveHistory ? illegalMoveHistory[color] : undefined;
+    const result = tree.evaluate({
+      ...incident.illegalMoveFacts,
+      playerColor: color,
+      playerIncidentCount: Array.isArray(prior) ? prior.length : undefined,
+      priorIllegalMoves: prior,
+    });
+    const decision = {
+      ...result.decision,
+      incidentId: incident.id,
+      rulesVersion,
+    };
+    if (result.status === "needs-input") {
+      return {
+        decision,
+        requiresFollowUp: true,
+        followUpQuestions: result.questions,
+      };
+    }
+    return { decision, requiresFollowUp: false, followUpQuestions: [] };
+  }
+
+  private illegalMoveFastNotSupported(
+    incident: Incident,
+    competitionType: Exclude<CompetitionType, "standard">,
+    regime: SupervisionRegime,
+    rulesVersion: string
+  ): DecisionEngineResult {
+    let sources: RuleCitation[];
+    if (competitionType === "rapid") {
+      sources =
+        regime === "competition-rules"
+          ? cite("FIDE_A_4", "FIDE_A_3", "FIDE_A_6")
+          : cite("FIDE_A_5_2", "FIDE_A_3", "FIDE_A_6");
+    } else {
+      sources =
+        regime === "competition-rules"
+          ? cite("FIDE_B_2", "FIDE_B_4")
+          : cite("FIDE_B_3", "FIDE_A_5_2", "FIDE_A_3", "FIDE_B_4");
+    }
+    return this.terminal(
+      incident,
+      {
+        kind: "not-supported",
+        conclusion: `${COMPETITION_JA[competitionType]}の違法手の判断支援は未対応です。Standard の判断は適用できません。CAへ確認してください。`,
+        actions: [
+          "時計を止める（必要な場合）",
+          "下記の条文を確認する",
+          "CAへ確認する",
+        ],
+        escalationReason: `${COMPETITION_JA[competitionType]}用のDecision Treeは未実装です`,
+        sources,
+      },
+      rulesVersion
+    );
+  }
+
+  private contextRequired(
+    incident: Incident,
+    questions: FollowUpQuestion[],
+    rulesVersionMissing: boolean
+  ): DecisionEngineResult {
+    const missing = questions.map((q) => q.label);
+    if (rulesVersionMissing) missing.push("規則バージョン");
+    const decision = this.build(incident, {
+      kind: "context-required",
+      conclusion:
+        "対局の規則セット（競技区分・規則バージョン等）が指定されていないため、判断できません。",
+      actions: ["対局コンテキストを設定してから再評価してください。"],
       intervention: "consult-ca",
       penalties: [],
       sources: [],
       confidence: "low",
-      escalationRecommended: true,
-      escalationReason:
-        reason ||
-        "このカテゴリのDecision Treeは実装されていません",
-      generatedBy: "decision-tree",
-      validatedAt: new Date(),
-      validationPassed: true,
-      createdAt: new Date(),
-    };
+      escalationRecommended: false,
+      missingFields: missing,
+    });
+    return { decision, requiresFollowUp: true, followUpQuestions: questions };
+  }
 
-    return {
-      decision,
-      requiresFollowUp: false,
-    };
+  private terminal(
+    incident: Incident,
+    fields: Pick<
+      DecisionFields,
+      "kind" | "conclusion" | "actions" | "escalationReason"
+    > & {
+      sources?: RuleCitation[];
+    },
+    rulesVersion?: string
+  ): DecisionEngineResult {
+    const decision = this.build(incident, {
+      ...fields,
+      rulesVersion,
+      intervention: "consult-ca",
+      penalties: [],
+      sources: fields.sources ?? [],
+      confidence: "low",
+      escalationRecommended: true,
+    });
+    return { decision, requiresFollowUp: false, followUpQuestions: [] };
+  }
+
+  private build(
+    incident: Incident,
+    fields: Omit<DecisionFields, "incidentId">
+  ): Decision {
+    return buildDecision(this.providers, {
+      ...fields,
+      incidentId: incident.id,
+    });
   }
 }
 

@@ -40,6 +40,8 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [progress, setProgress] = useState<RuleIngestionProgress | null>(null);
+  const [importing, setImporting] = useState(false);
+  const importingRef = useRef(false);
   const [stats, setStats] = useState<RuleStatistics | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -72,7 +74,10 @@ export default function SettingsPage() {
   };
 
   const handleImport = async () => {
-    if (!form || !form.file) return;
+    // 二重送信防止（state更新を待たずに同期的にロック）
+    if (!form || !form.file || importingRef.current) return;
+    importingRef.current = true;
+    setImporting(true);
     setNotice(null);
 
     try {
@@ -116,10 +121,12 @@ export default function SettingsPage() {
       });
     } finally {
       setProgress(null);
+      importingRef.current = false;
+      setImporting(false);
     }
   };
 
-  const busy = progress !== null;
+  const busy = importing || progress !== null;
   const canImport =
     !!form &&
     !!form.file &&
@@ -266,7 +273,7 @@ export default function SettingsPage() {
                 />
               </label>
               <p className="text-xs text-gray-500">
-                同じ種別の登録済み資料は、この資料で置き換えられます。
+                同じ種別・同じ資料名の登録済み資料は、この資料で置き換えられます。
               </p>
               <div className="flex gap-2">
                 <button

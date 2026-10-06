@@ -49,9 +49,10 @@ export async function validatePdfFile(
   if (!looksLikePdf) {
     throw new PdfValidationError("PDFファイルを選択してください");
   }
-  const header = new Uint8Array(await file.slice(0, 5).arrayBuffer());
-  const magic = String.fromCharCode(...Array.from(header));
-  if (magic !== "%PDF-") {
+  // PDF仕様上、ヘッダ "%PDF-" は先頭1024バイト以内にあればよい
+  const header = new Uint8Array(await file.slice(0, 1024).arrayBuffer());
+  const headText = Array.from(header, (b) => String.fromCharCode(b)).join("");
+  if (!headText.includes("%PDF-")) {
     throw new PdfValidationError("PDFファイルとして認識できません");
   }
 }
@@ -119,9 +120,10 @@ export async function extractPagesFromPDF(
   const data = new Uint8Array(await file.arrayBuffer());
   // pdfjs-dist v5以降は eval を使用しないため isEvalSupported オプションは存在しない
   const loadingTask = pdfjsLib.getDocument({ data });
-  const pdf = await loadingTask.promise;
 
   try {
+    // 読み込み失敗（破損・暗号化PDF）時も finally で worker を解放する
+    const pdf = await loadingTask.promise;
     const pages: ExtractedPage[] = [];
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
@@ -135,7 +137,6 @@ export async function extractPagesFromPDF(
     }
     return pages;
   } finally {
-    await pdf.cleanup();
     // loadingTask.destroy() でドキュメントとworkerのリソースを解放する
     await loadingTask.destroy();
   }
@@ -144,22 +145,50 @@ export async function extractPagesFromPDF(
 /**
  * 条文見出しの判定ルール（資料種別ごとに切り替え可能）
  */
+export interface HeadingPattern {
+  /** 1番目のグループが条文番号、2番目がタイトル */
+  regex: RegExp;
+  /**
+   * true の場合、直前の行が文の途中で折り返している（段落の続き）なら見出しとみなさない。
+   * 本文中の条文参照（"... under" + 改行 + "7.5.4 ..."）の誤検出を防ぐ。
+   */
+  requiresBlockBoundary?: boolean;
+}
+
 export interface ArticleParseOptions {
-  headingPatterns: RegExp[];
+  headingPatterns: HeadingPattern[];
 }
 
 // 数量の後に続く単位（"2 minutes", "10 秒" など）は見出しではない
 const UNIT_AFTER_NUMBER =
   /^(?:minutes?|mins?|seconds?|secs?|moves?|hours?|points?|games?|rounds?|%|分|秒|手|時間|点|局|回|年|月|日)/i;
 
+/** 条文番号の接頭辞: 付録 "A." やガイドライン "III." */
+const PREFIX = String.raw`(?:(?:[IVX]+|[A-Z])\.)`;
+
 /** "Article 7: Illegal moves" / "Article 7.5 ..." */
-const ARTICLE_KEYWORD =
-  /^Article\s+((?:[A-Z]\.)?\d{1,2}(?:\.\d{1,2})*)\b[.:]?\s*(.*)$/i;
+const ARTICLE_KEYWORD: HeadingPattern = {
+  regex: new RegExp(
+    String.raw`^Article\s+(${PREFIX}?\d{1,2}(?:\.\d{1,2})*)\b[.:]?\s*(.*)$`,
+    "i"
+  ),
+  requiresBlockBoundary: true,
+};
 /** "第7条 違法な手" */
-const JA_ARTICLE = /^第\s*(\d{1,3})\s*条\s*(.*)$/;
-/** "7.5.4 If ..." / "A.4.2 ..."（ドット区切りの階層番号のみ。単独の整数・年は対象外） */
-const DOTTED_NUMBER =
-  /^((?:[A-Z]\.)?\d{1,2}(?:\.\d{1,2})+)\.?(?:\s+|(?=[^\d\s.]))(.*)$/;
+const JA_ARTICLE: HeadingPattern = {
+  regex: /^第\s*(\d{1,3})\s*条\s*(.*)$/,
+  requiresBlockBoundary: true,
+};
+/**
+ * "7.5.4 If ..." / "A.4.2 ..." / "III.4 ..."
+ * ドット区切りの階層番号のみ（単独の整数・年は対象外）
+ */
+const DOTTED_NUMBER: HeadingPattern = {
+  regex: new RegExp(
+    String.raw`^(${PREFIX}\d{1,2}(?:\.\d{1,2})*|\d{1,2}(?:\.\d{1,2})+)\.?(?:\s+|(?=[^\d\s.]))(.*)$`
+  ),
+  requiresBlockBoundary: true,
+};
 
 export const DEFAULT_PARSE_OPTIONS: ArticleParseOptions = {
   headingPatterns: [ARTICLE_KEYWORD, JA_ARTICLE, DOTTED_NUMBER],
@@ -177,13 +206,29 @@ export function getParseOptionsForSource(
   }
 }
 
+const SENTENCE_END = /[.。:：;；!?！？)）]$/;
+const MIN_PARAGRAPH_LINE = 40;
+
+/** 直前の行が段落の途中（長い行で文末記号なし）か */
+function continuesParagraph(previousLine: string | undefined): boolean {
+  if (!previousLine) return false;
+  return (
+    previousLine.length >= MIN_PARAGRAPH_LINE &&
+    !SENTENCE_END.test(previousLine)
+  );
+}
+
 function matchHeading(
   line: string,
+  previousLine: string | undefined,
   options: ArticleParseOptions
 ): { article: string; title: string } | null {
   for (const pattern of options.headingPatterns) {
-    const m = pattern.exec(line);
+    const m = pattern.regex.exec(line);
     if (!m) continue;
+    if (pattern.requiresBlockBoundary && continuesParagraph(previousLine)) {
+      continue;
+    }
     const rest = (m[2] ?? "").trim();
     if (UNIT_AFTER_NUMBER.test(rest)) continue;
     return { article: m[1].toUpperCase(), title: rest };
@@ -232,10 +277,12 @@ export function parseArticlesFromPages(
   }
   const drafts: Draft[] = [];
   let current: Draft | null = null;
+  let previousLine: string | undefined;
 
   for (const page of pages) {
     for (const line of page.lines) {
-      const heading = matchHeading(line, options);
+      const heading = matchHeading(line, previousLine, options);
+      previousLine = line;
       if (heading) {
         current = {
           article: heading.article,

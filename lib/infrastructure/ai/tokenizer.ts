@@ -20,8 +20,8 @@ export interface SearchToken {
   kind: TokenKind;
 }
 
-// 条文番号: "7.5.4", "12.9", "A.4.2"（英字1文字 + 数字の階層）
-const ARTICLE_NUMBER = String.raw`(?:[a-z]\.)?\d+(?:\.\d+)+`;
+// 条文番号: "7.5.4", "12.9", "A.4.2", "III.4"（英字1文字/ローマ数字 + 数字の階層）
+const ARTICLE_NUMBER = String.raw`\b(?:[ivx]+|[a-z])\.\d+(?:\.\d+)*|\d+(?:\.\d+)+`;
 const WORD = String.raw`[a-z0-9]+(?:'[a-z]+)?`;
 const CJK = String.raw`[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー々〆ヶ]+`;
 
@@ -29,6 +29,41 @@ const TOKEN_PATTERN = new RegExp(
   `(${ARTICLE_NUMBER})|(${CJK})|(${WORD})`,
   "gu"
 );
+
+/**
+ * 英語の機能語（ほぼ全条文に出現しスコアのノイズになる）。
+ * インデックス時・クエリ時の両方で除外する。
+ */
+const ENGLISH_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "by",
+  "for",
+  "from",
+  "has",
+  "have",
+  "if",
+  "in",
+  "is",
+  "it",
+  "its",
+  "of",
+  "on",
+  "or",
+  "that",
+  "the",
+  "this",
+  "to",
+  "was",
+  "were",
+  "which",
+  "with",
+]);
 
 export function normalizeText(text: string): string {
   return text.normalize("NFKC").toLowerCase();
@@ -58,7 +93,7 @@ export function tokenizeDetailed(text: string): SearchToken[] {
       for (const gram of cjkBigrams(cjk)) {
         tokens.push({ text: gram, kind: "cjk" });
       }
-    } else if (word) {
+    } else if (word && !ENGLISH_STOP_WORDS.has(word)) {
       tokens.push({ text: word, kind: "word" });
     }
   }

@@ -1,11 +1,16 @@
 import lunr from "lunr";
 import type { Rule } from "@/lib/domain/entities";
-import { tokenize, tokenizeDetailed } from "./tokenizer";
+import { tokenize, tokenizeDetailed, type SearchToken } from "./tokenizer";
 
 export interface FulltextHit {
   ruleId: string;
   /** Lunrの生スコア（上限なし。ハイブリッド検索側で正規化する） */
   score: number;
+  /**
+   * クエリトークンのうち、この条文に一致したものの割合 (0, 1]。
+   * 弱い部分一致（bi-gram 1個だけ等）を正規化後に過大評価しないために使う。
+   */
+  coverage?: number;
 }
 
 /**
@@ -80,40 +85,72 @@ export class FulltextIndex {
       }
     });
 
-    return results
-      .slice(0, limit)
-      .map((r) => ({ ruleId: r.ref, score: r.score }));
+    const uniqueTokens = Array.from(
+      new Map(tokens.map((t) => [t.text, t])).values()
+    );
+
+    return results.slice(0, limit).map((r) => {
+      const matchedTerms = Object.keys(r.matchData.metadata);
+      const matched = uniqueTokens.filter((token) =>
+        matchedTerms.some((term) => tokenMatchesTerm(token, term))
+      ).length;
+      return {
+        ruleId: r.ref,
+        score: r.score,
+        coverage: matched / uniqueTokens.length,
+      };
+    });
+  }
+}
+
+function tokenMatchesTerm(token: SearchToken, term: string): boolean {
+  if (term === token.text) return true;
+  switch (token.kind) {
+    case "article":
+    case "word":
+      return term.startsWith(token.text);
+    case "cjk":
+      return Array.from(token.text).length === 1 && term.includes(token.text);
   }
 }
 
 let cachedIndex: FulltextIndex | null = null;
+let cachedStamp: string | null = null;
 let buildPromise: Promise<FulltextIndex> | null = null;
+let buildStamp: string | null = null;
 
 /**
  * インデックスを取得（構築中の場合は同じPromiseを共有し二重構築しない）
+ *
+ * @param stamp ルールデータの版を表す文字列。キャッシュ構築時と異なる場合
+ *   （別タブでの再インポート等）は再構築する。
  */
 export function getFulltextIndex(
-  loadRules: () => Promise<Rule[]>
+  loadRules: () => Promise<Rule[]>,
+  stamp: string = ""
 ): Promise<FulltextIndex> {
-  if (cachedIndex) {
+  if (cachedIndex && cachedStamp === stamp) {
     return Promise.resolve(cachedIndex);
   }
-  if (!buildPromise) {
+  if (!buildPromise || buildStamp !== stamp) {
     const promise = loadRules()
       .then((rules) => {
         const index = new FulltextIndex(rules);
-        // 構築中に clearFulltextIndex() された場合はキャッシュしない
+        // 構築中に clearFulltextIndex() や別の版での再構築が始まった場合はキャッシュしない
         if (buildPromise === promise) {
           cachedIndex = index;
+          cachedStamp = stamp;
         }
         return index;
       })
       .finally(() => {
         if (buildPromise === promise) {
           buildPromise = null;
+          buildStamp = null;
         }
       });
     buildPromise = promise;
+    buildStamp = stamp;
   }
   return buildPromise;
 }
@@ -123,5 +160,7 @@ export function getFulltextIndex(
  */
 export function clearFulltextIndex(): void {
   cachedIndex = null;
+  cachedStamp = null;
   buildPromise = null;
+  buildStamp = null;
 }

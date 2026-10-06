@@ -53,7 +53,8 @@ async function loadModel(): Promise<FeatureExtractor> {
   env.allowLocalModels = true;
   env.allowRemoteModels = false;
   env.localModelPath = LOCAL_MODEL_PATH;
-  env.useBrowserCache = true;
+  // Service Worker (next-pwa) の CacheFirst でキャッシュするため、二重保存を避ける
+  env.useBrowserCache = false;
   if (env.backends.onnx.wasm) {
     env.backends.onnx.wasm.wasmPaths = ORT_WASM_PATH;
   }

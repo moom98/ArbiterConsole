@@ -41,6 +41,11 @@ export interface HybridSearchOptions {
   fulltextWeight?: number;
   /** 正規化後の統合スコアに対する閾値 */
   minScore?: number;
+  /**
+   * ベクトル類似度の下限。これ未満の類似度は統合スコアに寄与しない
+   * （同一ドメインの無関係な条文でも0.3〜0.5程度の類似度になるため）
+   */
+  vectorMinSimilarity?: number;
 }
 
 export interface SearchCorpus {
@@ -65,13 +70,16 @@ export interface FuseOptions {
   vectorWeight: number;
   fulltextWeight: number;
   minScore: number;
+  /** これ未満のベクトル類似度は 0 として扱う（既定 0） */
+  vectorMinSimilarity?: number;
 }
 
 /**
  * 2つの検索結果を正規化して統合する（純粋関数）
  *
- * - Vector: コサイン類似度（[0,1] にクランプ済み）をそのまま使用
- * - Full-text: Lunrスコアは上限がないため最大値で割り [0,1] に正規化
+ * - Vector: コサイン類似度（[0,1] にクランプ）。vectorMinSimilarity 未満は 0
+ * - Full-text: Lunrスコアは上限がないため最大値で割り [0,1] に正規化し、
+ *   クエリトークンの一致割合（coverage）を掛ける
  * - 片方が利用不可（null）の場合は、利用可能な側の重みを1に再配分
  * - minScore は統合後のスコアに一度だけ適用
  */
@@ -98,13 +106,17 @@ export function fuseHits(
   };
 
   for (const hit of vectorHits ?? []) {
-    entry(hit.ruleId).vectorScore = Math.max(0, Math.min(1, hit.score));
+    const similarity = Math.max(0, Math.min(1, hit.score));
+    entry(hit.ruleId).vectorScore =
+      similarity >= (options.vectorMinSimilarity ?? 0) ? similarity : 0;
   }
 
   const maxFulltext = Math.max(0, ...(fulltextHits ?? []).map((h) => h.score));
   for (const hit of fulltextHits ?? []) {
-    entry(hit.ruleId).fulltextScore =
-      maxFulltext > 0 ? Math.max(0, hit.score) / maxFulltext : 0;
+    // 最大値で割るだけだと弱い最上位ヒットも1.0になるため、
+    // クエリトークンの一致割合（coverage）を掛けて弱い一致を抑える
+    const relative = maxFulltext > 0 ? Math.max(0, hit.score) / maxFulltext : 0;
+    entry(hit.ruleId).fulltextScore = relative * (hit.coverage ?? 1);
   }
 
   const results: FusedHit[] = [];
@@ -158,6 +170,7 @@ export async function hybridSearch(
     vectorWeight = 0.6,
     fulltextWeight = 0.4,
     minScore = 0.25,
+    vectorMinSimilarity = 0.5,
   } = options;
 
   if (!query.trim()) {
@@ -191,7 +204,7 @@ export async function hybridSearch(
   const fused = fuseHits(
     vectorOutcome.status === "fulfilled" ? vectorOutcome.value : null,
     fulltextOutcome.status === "fulfilled" ? fulltextOutcome.value : null,
-    { vectorWeight, fulltextWeight, minScore }
+    { vectorWeight, fulltextWeight, minScore, vectorMinSimilarity }
   );
 
   const ruleById = new Map(candidates.map((r) => [r.id, r]));
@@ -202,7 +215,9 @@ export async function hybridSearch(
     const rule = ruleById.get(hit.ruleId);
     if (!rule) continue;
     const methods: SearchMethod[] = [];
-    if (hit.vectorScore !== undefined) methods.push("vector");
+    if (hit.vectorScore !== undefined && hit.vectorScore > 0) {
+      methods.push("vector");
+    }
     if (hit.fulltextScore !== undefined && hit.fulltextScore > 0) {
       methods.push("fulltext");
     }
@@ -241,11 +256,26 @@ async function loadCorpusFromDb(): Promise<SearchCorpus> {
   return { rules, sources };
 }
 
+/**
+ * ルールデータの版。インポートのたびに RuleSource.id と Rule.id が新規発行されるため、
+ * 別タブで再インポートされた場合も変化を検出できる。
+ */
+async function getRuleDataStamp(): Promise<string> {
+  const [ruleCount, sourceIds] = await Promise.all([
+    db.rules.count(),
+    db.ruleSources.toCollection().primaryKeys(),
+  ]);
+  return `${ruleCount}:${sourceIds.map(String).sort().join(",")}`;
+}
+
 const defaultDeps: HybridSearchDeps = {
   loadCorpus: loadCorpusFromDb,
 
   async fulltext(query, candidates) {
-    const index = await getFulltextIndex(loadSearchableRules);
+    const index = await getFulltextIndex(
+      loadSearchableRules,
+      await getRuleDataStamp()
+    );
     const allowed = new Set(candidates.map((r) => r.id));
     return index.search(query).filter((hit) => allowed.has(hit.ruleId));
   },

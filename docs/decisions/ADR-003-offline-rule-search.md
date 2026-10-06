@@ -64,7 +64,9 @@ bi-grams give high recall for short arbiter queries without any dictionary.
 
 Transformers.js is configured with `allowRemoteModels = false`,
 `localModelPath = "/models/"` and `backends.onnx.wasm.wasmPaths = "/ort/"`.
-Generated assets are git-ignored (large binaries are not committed). Large
+Transformers.js' own Cache API storage is disabled (`useBrowserCache = false`)
+because the service worker already caches `/models/` — otherwise the ~120MB
+model would be stored twice. Generated assets are git-ignored (large binaries are not committed). Large
 files are excluded from the precache manifest (Workbox size limit) and cached on
 first use instead.
 
@@ -76,9 +78,15 @@ never be served from cache.
 
 ### 4. Hybrid search scoring and resilience
 
-- Vector (cosine, clamped to [0,1]) and full-text (Lunr score / max score)
+- Vector (cosine, clamped to [0,1]; similarities below `vectorMinSimilarity`
+  = 0.5 contribute 0, because unrelated in-domain articles still score
+  ~0.3–0.5) and full-text (Lunr score / max score, multiplied by the fraction
+  of query tokens matched so a single weak bi-gram hit is not inflated to 1.0)
   are normalised before weighting (0.6 / 0.4); weights are re-normalised to the
-  methods that succeeded. `minScore` applies once, to the fused score.
+  methods that succeeded. `minScore` (0.25) applies once, to the fused score.
+  These thresholds are initial values to be tuned with real documents.
+- The in-memory Lunr index is rebuilt when a data stamp (rule count + source
+  ids) changes, so an import in another tab is picked up.
 - Both searches run with `Promise.allSettled`; if one fails the other's results
   are returned with a notice. Only if both fail is an error shown.
 - Precedence Tournament > JCF > FIDE > commentary (§6) is an explicit stable
@@ -94,10 +102,17 @@ never be served from cache.
   language, tournamentId, page count.
 - `Rule` gains `sourceId` and `page`. The PDF extractor rebuilds lines from
   pdf.js `hasEOL` / y-position and records the page of each article heading.
-- Importing a source of the same type (and same tournament) **replaces** the
-  previous source, its rules and its embeddings in one transaction, so old and
-  current editions are never mixed (§30). Keeping superseded editions for
-  reference is future work; search already excludes non-`active` sources.
+- Importing a source with the same type **and the same document name** (and,
+  for tournament regulations, the same tournament) **replaces** the previous
+  source, its rules and its embeddings in one transaction, so old and current
+  editions of one document are never mixed (§30), while different documents of
+  the same type (e.g. JCF regulations and the NA seminar material) coexist.
+  Legacy rules imported before schema v3 (no `sourceId`) are replaced by the
+  next import of the same type. Keeping superseded editions for reference is
+  future work; search already excludes non-`active` sources.
+- Article headings are recognised only at line start and only when the
+  previous line does not continue a paragraph (long line without a sentence
+  terminator), to avoid wrapped cross-references becoming headings.
 
 ## Consequences
 
@@ -109,6 +124,10 @@ never be served from cache.
   missing, import still succeeds (full-text only) and a warning is shown.
 - Bi-gram indexing increases index size roughly proportionally to Japanese
   character count; acceptable for the expected corpus (hundreds of articles).
+- The model's maximum sequence length is 128 tokens and input is truncated,
+  so long articles are embedded from their opening text only (heading, title
+  and first sentences). Full-text search still covers the whole article.
+  Chunked embeddings (max over chunks) are a possible follow-up.
 - Embedding generation runs on the main thread in batches with yields to the
   event loop. Moving it to a Web Worker is a follow-up if import-time UI
   responsiveness proves insufficient on tablets.

@@ -91,7 +91,7 @@ export function validateMetadata(meta: RuleSourceMetadata): void {
 /**
  * PDFファイルからルールをインポートする
  *
- * 同じ資料種別（大会固有規定の場合は同じ大会）の既存資料は置き換える。
+ * 同じ資料種別・資料名（大会固有規定の場合は同じ大会）の既存資料は置き換える。
  * Embedding生成に失敗した場合は、全文検索のみ利用可能な状態で保存する。
  */
 export async function ingestRulesFromPDF(
@@ -211,7 +211,7 @@ export async function ingestRulesFromPDF(
 }
 
 /**
- * 同じ資料種別（大会固有規定は同じ大会）の既存資料・条文・Embeddingを削除し、
+ * 同じ資料種別・資料名（大会固有規定は同じ大会）の既存資料・条文・Embeddingを削除し、
  * 新しい資料に置き換える。1トランザクションで実行する。
  */
 export async function replaceRuleSource(
@@ -227,6 +227,11 @@ export async function replaceRuleSource(
   const sameScope = (r: { tournamentId?: string }) =>
     source.sourceType !== "tournament" ||
     r.tournamentId === source.tournamentId;
+  const normalizeName = (name: string) => name.trim().toLowerCase();
+  // 同じ種別・同じ資料名（大会固有規定は同じ大会）の資料のみ置き換える。
+  // 例: JCF規則 と NAセミナー資料 は別資料として共存する
+  const sameDocument = (s: RuleSource) =>
+    sameScope(s) && normalizeName(s.name) === normalizeName(source.name);
 
   await database.transaction(
     "rw",
@@ -238,7 +243,7 @@ export async function replaceRuleSource(
           .equals(source.sourceType)
           .toArray()
       )
-        .filter(sameScope)
+        .filter(sameDocument)
         .map((s) => s.id);
       const oldSourceIdSet = new Set(oldSourceIds);
 

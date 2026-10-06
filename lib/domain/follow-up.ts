@@ -666,6 +666,8 @@ export function applyIncidentAnswers(
       case "claimant":
         if (isOneOf(raw, ["white", "black"] as const)) {
           draw.claimant = raw;
+          // 誤ったクレームの時間加算は請求者の履歴に帰属させる（Penalty 履歴）
+          playerColor = raw;
           touchedDraw = true;
         }
         break;
@@ -723,6 +725,20 @@ export function applyIncidentAnswers(
   if (touchedFlag || incident.flagFallFacts) next.flagFallFacts = flag;
   if (touchedDraw || incident.drawClaimFacts) next.drawClaimFacts = draw;
   return next;
+}
+
+/**
+ * 構造化された追加質問で判断するカテゴリ（自由記述は任意のメモ）。
+ * それ以外のカテゴリは手動確認になるため、状況の説明を必須とする。
+ */
+export function usesStructuredQuestions(
+  category: Incident["category"]
+): boolean {
+  return (
+    category === "illegal-move" ||
+    category === "clock-time" ||
+    category === "draw"
+  );
 }
 
 /** game-context スコープの回答を解釈する（純粋関数） */

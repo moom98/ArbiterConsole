@@ -9,7 +9,11 @@ import type {
   IncidentCategory,
   SupervisionRegime,
 } from "@/lib/domain/entities";
-import { QUESTIONS, type IncidentQuestionId } from "@/lib/domain/follow-up";
+import {
+  QUESTIONS,
+  usesStructuredQuestions,
+  type IncidentQuestionId,
+} from "@/lib/domain/follow-up";
 import {
   validateReportContext,
   type ReportContext,
@@ -90,8 +94,9 @@ export default function ReportPage() {
     setStep("description");
   };
 
-  // 違法手は構造化された追加質問で判断するため、説明は任意
-  const descriptionRequired = selectedCategory !== "illegal-move";
+  // 違法手・時計（フラッグ）・ドロー（同一局面）は構造化された追加質問で判断するため、説明は任意
+  const descriptionRequired =
+    selectedCategory !== null && !usesStructuredQuestions(selectedCategory);
 
   const handleSubmit = async () => {
     if (!selectedCategory || contextErrors.length > 0) return;

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   EMPTY_FILTER,
+  countExcludedForMissingColor,
   filterIncidentRecords,
   illegalMoveCountsByGame,
   listGames,
@@ -176,6 +177,69 @@ describe("penaltyHistoryForGame", () => {
       "game-loss",
     ]);
     expect(h.white.illegalMoveCount).toBe(2);
+  });
+});
+
+describe("penaltyHistoryForGame with legacy incidents (no playerColor)", () => {
+  it("puts penalties of incidents without an offender into unknownOffender, not the penalty's target colour", () => {
+    // 旧データ: 白の違法手だが Incident.playerColor が未記録、ペナルティは「黒に2分追加」
+    const legacy = entry({
+      game: G12,
+      penalties: [TIME_ADD_FOR("black")],
+    });
+    const h = penaltyHistoryForGame([legacy], G12.id);
+    expect(h.black.penalties).toHaveLength(0);
+    expect(h.white.penalties).toHaveLength(0);
+    expect(h.unknownOffender).toHaveLength(1);
+    expect(h.unknownOffender[0].penalty.playerColor).toBe("black");
+    // IncidentCounter も色不明の Incident を数えない
+    expect(h.white.illegalMoveCount).toBe(0);
+    expect(h.black.illegalMoveCount).toBe(0);
+  });
+
+  it("keeps known-offender penalties in their colour alongside legacy ones", () => {
+    const h = penaltyHistoryForGame(
+      [
+        entry({ game: G12, penalties: [TIME_ADD_FOR("white")] }),
+        entry({
+          game: G12,
+          color: "white",
+          penalties: [TIME_ADD_FOR("black")],
+        }),
+      ],
+      G12.id
+    );
+    expect(h.white.penalties).toHaveLength(1);
+    expect(h.black.penalties).toHaveLength(0);
+    expect(h.unknownOffender).toHaveLength(1);
+  });
+});
+
+describe("countExcludedForMissingColor", () => {
+  const records = [
+    entry({ game: G12, color: "white" }),
+    entry({ game: G12 }),
+    entry({ game: G7 }),
+  ];
+
+  it("is zero when no colour filter is active", () => {
+    expect(countExcludedForMissingColor(records, EMPTY_FILTER)).toBe(0);
+  });
+
+  it("counts colourless incidents that match the other filters", () => {
+    expect(
+      countExcludedForMissingColor(records, {
+        ...EMPTY_FILTER,
+        playerColor: "black",
+      })
+    ).toBe(2);
+    expect(
+      countExcludedForMissingColor(records, {
+        ...EMPTY_FILTER,
+        gameId: G12.id,
+        playerColor: "black",
+      })
+    ).toBe(1);
   });
 });
 

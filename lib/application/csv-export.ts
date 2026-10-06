@@ -16,13 +16,18 @@ import {
 export const UTF8_BOM = "﻿";
 
 /**
+ * 数式として解釈されうる先頭文字（= + @ タブ CR、数値や単独の "-" 以外の "-"）
+ */
+const FORMULA_PREFIX = /^(?:[=+@\t\r]|-(?!$|\d+(?:\.\d+)?$))/;
+
+/**
  * 1セルを RFC 4180 に従ってエスケープする。
  * ダブルクォートは "" に二重化し、セル全体を "..." で囲む。
- * 表計算ソフトで数式として解釈されうる先頭文字（= + @）には ' を前置する。
+ * 表計算ソフトで数式として解釈されうる先頭文字には ' を前置する。
  */
 export function escapeCsvCell(value: string | number | boolean): string {
   let s = String(value);
-  if (/^[=+@]/.test(s)) s = `'${s}`;
+  if (FORMULA_PREFIX.test(s)) s = `'${s}`;
   return `"${s.replace(/"/g, '""')}"`;
 }
 

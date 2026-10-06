@@ -26,6 +26,18 @@ describe("escapeCsvCell / toCsv (RFC 4180)", () => {
     expect(escapeCsvCell("=SUM(A1)")).toBe(`"'=SUM(A1)"`);
     expect(escapeCsvCell("+1")).toBe(`"'+1"`);
     expect(escapeCsvCell("-")).toBe('"-"');
+    expect(escapeCsvCell("@cmd")).toBe(`"'@cmd"`);
+    expect(escapeCsvCell("\tx")).toBe(`"'\tx"`);
+    expect(escapeCsvCell("\rx")).toBe(`"'\rx"`);
+    expect(escapeCsvCell("-1+cmd")).toBe(`"'-1+cmd"`);
+    expect(escapeCsvCell("-A1")).toBe(`"'-A1"`);
+  });
+
+  it("keeps plain negative numbers and a lone dash untouched", () => {
+    expect(escapeCsvCell("-120")).toBe('"-120"');
+    expect(escapeCsvCell("-1.5")).toBe('"-1.5"');
+    expect(escapeCsvCell(-120)).toBe('"-120"');
+    expect(escapeCsvCell("a=b")).toBe('"a=b"');
   });
 
   it("handles Japanese text unchanged", () => {

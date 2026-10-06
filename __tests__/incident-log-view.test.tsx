@@ -109,4 +109,55 @@ describe("IncidentLogView", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(document.activeElement).toBe(row);
   });
+
+  it("restores focus to the tapped row even if the tap did not focus it (Safari)", async () => {
+    const list = await renderLoaded();
+    const row = within(list).getAllByRole("button")[1];
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.click(row);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "閉じる" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(row);
+  });
+
+  it("traps Tab focus inside the dialog", async () => {
+    const list = await renderLoaded();
+    fireEvent.click(within(list).getAllByRole("button")[0]);
+    const dialog = await screen.findByRole("dialog");
+    const buttons = within(dialog).getAllByRole("button");
+    const first = buttons[0];
+    const last = buttons[buttons.length - 1];
+
+    last.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(first);
+
+    first.focus();
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(last);
+
+    // ダイアログ外にフォーカスがある場合も中へ戻す
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(first);
+  });
+
+  it("hints how many colourless legacy incidents a colour filter hides", async () => {
+    const legacy = entry({ game: G7, minute: 40 });
+    await db.incidents.put(legacy.incident);
+    await db.decisions.put(legacy.decision!);
+    await renderLoaded();
+    expect(screen.queryByText(/色情報のない旧データ/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "白" }));
+    expect(screen.getByText(/色情報のない旧データ1\s*件/)).toBeTruthy();
+  });
+
+  it("shows only the error, not the empty-state message, when loading fails", async () => {
+    await db.delete();
+    db.close();
+    render(<IncidentLogView db={db} />);
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.queryByText("インシデント履歴はまだありません")).toBeNull();
+  });
 });

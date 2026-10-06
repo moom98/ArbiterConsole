@@ -6,6 +6,11 @@ interface DialogProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /**
+   * 閉じたときにフォーカスを戻す要素。
+   * 省略時は開いた時点の activeElement（Safari ではタップでボタンにフォーカスが移らないため指定推奨）
+   */
+  returnFocus?: () => HTMLElement | null;
 }
 
 const FOCUSABLE =
@@ -17,12 +22,14 @@ const FOCUSABLE =
  * - Escape で閉じる、Tab でダイアログ内をループ
  * - 開いたときに閉じるボタンへフォーカスし、閉じたら元の要素へ戻す
  */
-export function Dialog({ title, onClose, children }: DialogProps) {
+export function Dialog({ title, onClose, children, returnFocus }: DialogProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const returnFocusRef = useRef(returnFocus);
+  returnFocusRef.current = returnFocus;
 
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -42,13 +49,11 @@ export function Dialog({ title, onClose, children }: DialogProps) {
       const first = focusables[0];
       const last = focusables[focusables.length - 1];
       const active = document.activeElement;
-      if (
-        e.shiftKey &&
-        (active === first || !panelRef.current.contains(active))
-      ) {
+      const outside = !panelRef.current.contains(active);
+      if (e.shiftKey && (active === first || outside)) {
         e.preventDefault();
         last.focus();
-      } else if (!e.shiftKey && active === last) {
+      } else if (!e.shiftKey && (active === last || outside)) {
         e.preventDefault();
         first.focus();
       }
@@ -61,7 +66,8 @@ export function Dialog({ title, onClose, children }: DialogProps) {
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = overflow;
-      previouslyFocused?.focus?.();
+      const target = returnFocusRef.current?.() ?? previouslyFocused;
+      target?.focus?.();
     };
   }, []);
 

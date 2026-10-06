@@ -47,6 +47,7 @@ export function IncidentRow({
         type="button"
         onClick={() => onSelect(incident.id)}
         aria-haspopup="dialog"
+        data-incident-id={incident.id}
         className="w-full min-h-12 text-left bg-white rounded-lg shadow hover:shadow-md p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
       >
         <div className="flex items-start justify-between gap-2 mb-1">

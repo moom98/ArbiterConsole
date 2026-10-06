@@ -194,43 +194,75 @@ export interface PlayerPenaltyHistory {
   penalties: PenaltyHistoryItem[];
 }
 
+export interface GamePenaltyHistory {
+  white: PlayerPenaltyHistory;
+  black: PlayerPenaltyHistory;
+  /**
+   * 違反者（Incident.playerColor）が記録されていない Incident のペナルティ（旧データ）。
+   * Penalty.playerColor は「ペナルティが作用する側」なので違反者の推定には使わない。
+   */
+  unknownOffender: PenaltyHistoryItem[];
+}
+
 /**
  * 対局内の Penalty 履歴をプレーヤー（違反者）ごとに返す（要件 §25）。
  *
  * ペナルティは違反者（Incident.playerColor）に帰属させる。
  * 例えば「相手に2分追加」は Penalty.playerColor が相手でも、違反者の履歴に入る。
+ * 違反者が記録されていない Incident は unknownOffender に入れる（推測しない）。
  */
 export function penaltyHistoryForGame(
   records: readonly IncidentRecord[],
   gameId: string
-): Record<PlayerColor, PlayerPenaltyHistory> {
+): GamePenaltyHistory {
   const illegal = IncidentCounter.illegalMoveHistory(records, gameId);
-  const build = (color: PlayerColor): PlayerPenaltyHistory => {
-    const penalties: PenaltyHistoryItem[] = [];
-    for (const record of records) {
-      const { incident } = record;
-      if (incident.gameId !== gameId) continue;
-      const decision = decisionOf(record);
-      if (!decision) continue;
-      for (const penalty of decision.penalties) {
-        const offender = incident.playerColor ?? penalty.playerColor;
-        if (offender !== color) continue;
-        penalties.push({
-          incidentId: incident.id,
-          reportedAt: incident.reportedAt,
-          penalty,
-        });
-      }
-    }
-    penalties.sort((a, b) => a.reportedAt.getTime() - b.reportedAt.getTime());
-    return {
-      color,
-      illegalMoveCount: illegal[color].length,
-      illegalMoves: illegal[color],
-      penalties,
-    };
+  const buckets: Record<PlayerColor | "unknown", PenaltyHistoryItem[]> = {
+    white: [],
+    black: [],
+    unknown: [],
   };
-  return { white: build("white"), black: build("black") };
+  for (const record of records) {
+    const { incident } = record;
+    if (incident.gameId !== gameId) continue;
+    const decision = decisionOf(record);
+    if (!decision) continue;
+    const bucket = buckets[incident.playerColor ?? "unknown"];
+    for (const penalty of decision.penalties) {
+      bucket.push({
+        incidentId: incident.id,
+        reportedAt: incident.reportedAt,
+        penalty,
+      });
+    }
+  }
+  const byTime = (a: PenaltyHistoryItem, b: PenaltyHistoryItem) =>
+    a.reportedAt.getTime() - b.reportedAt.getTime();
+  const build = (color: PlayerColor): PlayerPenaltyHistory => ({
+    color,
+    illegalMoveCount: illegal[color].length,
+    illegalMoves: illegal[color],
+    penalties: buckets[color].sort(byTime),
+  });
+  return {
+    white: build("white"),
+    black: build("black"),
+    unknownOffender: buckets.unknown.sort(byTime),
+  };
+}
+
+/**
+ * プレーヤー色フィルタ適用時に、色情報（Incident.playerColor）がないために
+ * 除外された Incident の数（旧データの案内表示用）。
+ */
+export function countExcludedForMissingColor(
+  records: readonly IncidentRecord[],
+  filter: IncidentLogFilter
+): number {
+  if (filter.playerColor === FILTER_ALL) return 0;
+  return filterIncidentRecords(records, {
+    ...filter,
+    playerColor: FILTER_ALL,
+  }).filter((r) => r.incident.playerColor === undefined).length;
 }
 
 /**

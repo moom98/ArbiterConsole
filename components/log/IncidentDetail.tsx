@@ -1,8 +1,7 @@
-import type { PlayerColor } from "@/lib/domain/entities";
 import {
   decisionOf,
   type IncidentLogEntry,
-  type PlayerPenaltyHistory,
+  type GamePenaltyHistory,
 } from "@/lib/domain/services/penalty-history";
 import {
   COLOR_LABELS,
@@ -19,7 +18,7 @@ import { PenaltyHistoryPanel } from "./PenaltyHistoryPanel";
 
 interface IncidentDetailProps {
   entry: IncidentLogEntry;
-  gameHistory: Record<PlayerColor, PlayerPenaltyHistory>;
+  gameHistory: GamePenaltyHistory;
   onClose: () => void;
 }
 

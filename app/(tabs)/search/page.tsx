@@ -1,68 +1,107 @@
 "use client";
 
-import { useState } from "react";
-import { hybridSearch } from "@/lib/infrastructure/ai";
-import type { ScoredRule } from "@/lib/infrastructure/ai";
+import { useRef, useState } from "react";
+import type {
+  HybridSearchResponse,
+  RuleSearchResult,
+} from "@/lib/infrastructure/ai";
+import type { RuleSource, RuleSourceType } from "@/lib/domain/entities";
+
+const SOURCE_LABEL: Record<RuleSourceType, string> = {
+  tournament: "大会規定",
+  JCF: "JCF",
+  FIDE: "FIDE",
+  commentary: "解説",
+};
+
+function formatDate(date?: Date): string | null {
+  return date ? new Date(date).toLocaleDateString("ja-JP") : null;
+}
+
+function sourceLine(result: RuleSearchResult): string {
+  const source = result.source;
+  const parts = [
+    source ? `${source.name}（${source.version}）` : "出典情報なし",
+    result.rule.page ? `p.${result.rule.page}` : null,
+  ];
+  return parts.filter(Boolean).join(" ");
+}
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<ScoredRule[]>([]);
+  const [response, setResponse] = useState<HybridSearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<RuleSearchResult | null>(null);
+  const requestIdRef = useRef(0);
 
   const handleSearch = async () => {
-    if (!query.trim()) {
+    const trimmed = query.trim();
+    if (!trimmed || loading) {
       return;
     }
 
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
+    setSelected(null);
 
     try {
-      const searchResults = await hybridSearch(query, {
+      const { hybridSearch } = await import("@/lib/infrastructure/ai");
+      // 大会管理（Milestone 6）実装までは大会未選択。大会固有規定は対象外になる
+      const searchResponse = await hybridSearch(trimmed, {
+        tournamentId: undefined,
         limit: 10,
-        vectorWeight: 0.6,
-        fulltextWeight: 0.4,
-        minScore: 0.3,
       });
-
-      setResults(searchResults);
+      if (requestId !== requestIdRef.current) return;
+      setResponse(searchResponse);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       console.error("Search error:", err);
+      setResponse(null);
       setError(
         "検索中にエラーが発生しました。ルールデータが登録されているか確認してください。"
       );
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
+  if (selected) {
+    return <ArticleDetail result={selected} onBack={() => setSelected(null)} />;
+  }
+
+  const results = response?.results ?? [];
+  const related = response?.related ?? [];
+
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <h1 className="text-2xl font-bold mb-4">ルール検索</h1>
 
-      <div className="mb-6">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="例: 違法手の処理、時間切れ、ドロー..."
-            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleSearch();
-              }
-            }}
-          />
-          <button
-            onClick={handleSearch}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            検索
-          </button>
-        </div>
-      </div>
+      <form
+        className="mb-6 flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleSearch();
+        }}
+      >
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="例: 7.5.4、違法手、時計押し忘れ"
+          className="flex-1 min-w-0 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button
+          type="submit"
+          disabled={loading || !query.trim()}
+          className="min-h-[48px] px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-400"
+        >
+          {loading ? "検索中" : "検索"}
+        </button>
+      </form>
 
       {loading && (
         <div className="text-center py-12">
@@ -77,54 +116,179 @@ export default function SearchPage() {
         </div>
       )}
 
-      {!loading && !error && results.length === 0 && (
+      {!loading && !error && response === null && (
         <div className="text-center py-12 text-gray-500">
-          <svg
-            className="w-16 h-16 mx-auto mb-4 text-gray-300"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
           <p>検索キーワードを入力してください</p>
           <p className="text-sm mt-2">
-            FIDE Laws of Chess、JCF規則、大会特別規定から検索します
+            条文番号・キーワード・自然文で、登録済みの FIDE Laws of Chess /
+            JCF規則から検索します
           </p>
         </div>
       )}
 
-      {!loading && !error && results.length > 0 && (
-        <div className="space-y-4">
-          {results.map((result, index) => (
-            <div key={index} className="bg-white rounded-lg shadow p-4">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <h3 className="font-semibold">{result.rule.article}</h3>
-                  <p className="text-sm text-gray-600">{result.rule.title}</p>
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                    {result.rule.source}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    Score: {result.score.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-              <p className="text-sm text-gray-700 mt-2">
-                {result.rule.content.substring(0, 200)}
-                {result.rule.content.length > 200 && "..."}
+      {!loading && !error && response !== null && (
+        <>
+          {response.failures.vector && (
+            <p className="mb-3 text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-3">
+              意味検索を利用できないため、キーワード一致の結果のみ表示しています
+            </p>
+          )}
+          {response.failures.fulltext && (
+            <p className="mb-3 text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-3">
+              キーワード検索を利用できないため、意味検索の結果のみ表示しています
+            </p>
+          )}
+
+          {results.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>該当する条文が見つかりませんでした</p>
+              <p className="text-sm mt-2">
+                別のキーワードや条文番号で検索してください
               </p>
             </div>
-          ))}
-        </div>
+          ) : (
+            <ul className="space-y-3">
+              {results.map((result) => (
+                <li key={result.rule.id}>
+                  <ResultCard result={result} onSelect={setSelected} />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {related.length > 0 && (
+            <section className="mt-6">
+              <h2 className="text-sm font-semibold text-gray-600 mb-1">
+                関連する可能性のある条文
+              </h2>
+              <p className="text-xs text-gray-500 mb-2">
+                一般的な語のみが一致しています。内容を確認してください。
+              </p>
+              <ul className="space-y-2 opacity-80">
+                {related.map((result) => (
+                  <li key={result.rule.id}>
+                    <ResultCard result={result} onSelect={setSelected} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
       )}
+    </div>
+  );
+}
+
+function ResultCard({
+  result,
+  onSelect,
+}: {
+  result: RuleSearchResult;
+  onSelect: (result: RuleSearchResult) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(result)}
+      className="w-full text-left bg-white rounded-lg shadow p-4 active:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    >
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <h3 className="font-semibold">
+          {result.rule.article}
+          {result.rule.title && (
+            <span className="ml-2 font-normal text-gray-700">
+              {result.rule.title}
+            </span>
+          )}
+        </h3>
+        <span className="shrink-0 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+          {SOURCE_LABEL[result.rule.source]}
+        </span>
+      </div>
+      <p className="text-xs text-gray-500 mb-2">{sourceLine(result)}</p>
+      <p className="text-sm text-gray-700 line-clamp-3">
+        {result.rule.content}
+      </p>
+    </button>
+  );
+}
+
+function SourceInfo({ source }: { source: RuleSource }) {
+  const rows: Array<[string, string | null]> = [
+    ["資料名", source.name],
+    ["版", source.version],
+    ["公開日", formatDate(source.publishedDate)],
+    ["有効開始日", formatDate(source.effectiveDate)],
+    ["言語", source.language === "ja" ? "日本語" : "英語"],
+    ["ファイル", source.fileName],
+  ];
+  return (
+    <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-sm">
+      {rows
+        .filter(([, value]) => value)
+        .map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="text-gray-500">{label}</dt>
+            <dd className="text-gray-800 break-words">{value}</dd>
+          </div>
+        ))}
+    </dl>
+  );
+}
+
+function ArticleDetail({
+  result,
+  onBack,
+}: {
+  result: RuleSearchResult;
+  onBack: () => void;
+}) {
+  const { rule, source } = result;
+  return (
+    <div className="p-4 sm:p-6">
+      <button
+        type="button"
+        onClick={onBack}
+        className="min-h-[48px] mb-4 px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200"
+      >
+        ← 検索結果に戻る
+      </button>
+
+      <div className="bg-white rounded-lg shadow p-4 mb-4">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <h1 className="text-xl font-bold">
+            {rule.article}
+            {rule.title && (
+              <span className="block text-base font-normal text-gray-700">
+                {rule.title}
+              </span>
+            )}
+          </h1>
+          <span className="shrink-0 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+            {SOURCE_LABEL[rule.source]}
+          </span>
+        </div>
+        <p className="text-sm text-gray-600 mb-4">{sourceLine(result)}</p>
+        <p className="whitespace-pre-wrap text-gray-900 leading-relaxed">
+          {rule.content}
+        </p>
+      </div>
+
+      <div className="bg-white rounded-lg shadow p-4">
+        <h2 className="font-semibold mb-2">出典</h2>
+        {source ? (
+          <SourceInfo source={source} />
+        ) : (
+          <p className="text-sm text-gray-500">
+            出典情報がありません。資料を再インポートしてください。
+          </p>
+        )}
+        {rule.page && (
+          <p className="text-sm text-gray-600 mt-2">
+            原文ページ: p.{rule.page}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

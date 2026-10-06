@@ -20,13 +20,16 @@ export interface SearchToken {
   kind: TokenKind;
 }
 
-// 条文番号: "7.5.4", "12.9", "A.4.2", "III.4"（英字1文字/ローマ数字 + 数字の階層）
-const ARTICLE_NUMBER = String.raw`\b(?:[ivx]+|[a-z])\.\d+(?:\.\d+)*|\d+(?:\.\d+)+`;
+// 条文番号: "7.5.4", "12.9", "A.4.2", "III.4"（英字1文字/ローマ数字 + 数字の階層）,
+// "3-2"（第3条の2。normalizeText で変換）
+const ARTICLE_NUMBER = String.raw`\b(?:[ivx]+|[a-z])\.\d+(?:\.\d+)*|\d+(?:\.\d+)+|\d+-\d+`;
+// 項目記号: "(a)", "(ii)"。"a" は機能語として除外されるため別トークンにする
+const SUB_PARAGRAPH = String.raw`\((?:[a-z]|[ivx]+)\)`;
 const WORD = String.raw`[a-z0-9]+(?:'[a-z]+)?`;
 const CJK = String.raw`[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー々〆ヶ]+`;
 
 const TOKEN_PATTERN = new RegExp(
-  `(${ARTICLE_NUMBER})|(${CJK})|(${WORD})`,
+  `(${ARTICLE_NUMBER})|(${SUB_PARAGRAPH})|(${CJK})|(${WORD})`,
   "gu"
 );
 
@@ -66,7 +69,15 @@ const ENGLISH_STOP_WORDS = new Set([
 ]);
 
 export function normalizeText(text: string): string {
-  return text.normalize("NFKC").toLowerCase();
+  return (
+    text
+      .normalize("NFKC")
+      .toLowerCase()
+      // "第3条の2" → "3-2", "第7条" → "7"（PDF抽出時の条文番号表記と揃える）
+      .replace(/第\s*(\d+)\s*条(?:\s*の\s*(\d+))?/g, (_, n, sub) =>
+        sub ? ` ${n}-${sub} ` : ` ${n} `
+      )
+  );
 }
 
 function cjkBigrams(run: string): string[] {
@@ -86,9 +97,11 @@ export function tokenizeDetailed(text: string): SearchToken[] {
   const normalized = normalizeText(text);
 
   for (const match of Array.from(normalized.matchAll(TOKEN_PATTERN))) {
-    const [, article, cjk, word] = match;
+    const [, article, subParagraph, cjk, word] = match;
     if (article) {
       tokens.push({ text: article, kind: "article" });
+    } else if (subParagraph) {
+      tokens.push({ text: subParagraph, kind: "word" });
     } else if (cjk) {
       for (const gram of cjkBigrams(cjk)) {
         tokens.push({ text: gram, kind: "cjk" });

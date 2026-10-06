@@ -153,6 +153,8 @@ export interface HeadingPattern {
    * 本文中の条文参照（"... under" + 改行 + "7.5.4 ..."）の誤検出を防ぐ。
    */
   requiresBlockBoundary?: boolean;
+  /** 既定（グループ1=条文番号, 2=タイトル）以外の取り出し方をする場合 */
+  extract?: (match: RegExpExecArray) => { article: string; title: string };
 }
 
 export interface ArticleParseOptions {
@@ -175,9 +177,16 @@ const ARTICLE_KEYWORD: HeadingPattern = {
   requiresBlockBoundary: true,
 };
 /** "第7条 違法な手" */
+/**
+ * "第7条 違法な手" / "第3条の2 ..."（枝番号は "3-2" として別条文に扱う）
+ */
 const JA_ARTICLE: HeadingPattern = {
-  regex: /^第\s*(\d{1,3})\s*条\s*(.*)$/,
+  regex: /^第\s*(\d{1,3})\s*条(?:\s*の\s*(\d{1,3}))?\s*(.*)$/,
   requiresBlockBoundary: true,
+  extract: (m) => ({
+    article: m[2] ? `${m[1]}-${m[2]}` : m[1],
+    title: m[3] ?? "",
+  }),
 };
 /**
  * "7.5.4 If ..." / "A.4.2 ..." / "III.4 ..."
@@ -229,9 +238,12 @@ function matchHeading(
     if (pattern.requiresBlockBoundary && continuesParagraph(previousLine)) {
       continue;
     }
-    const rest = (m[2] ?? "").trim();
+    const { article, title } = pattern.extract
+      ? pattern.extract(m)
+      : { article: m[1], title: m[2] ?? "" };
+    const rest = title.trim();
     if (UNIT_AFTER_NUMBER.test(rest)) continue;
-    return { article: m[1].toUpperCase(), title: rest };
+    return { article: article.toUpperCase(), title: rest };
   }
   return null;
 }

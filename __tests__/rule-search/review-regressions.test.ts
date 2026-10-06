@@ -204,6 +204,48 @@ describe("long Japanese natural-language question (offline / weak vector)", () =
   });
 });
 
+describe("Japanese article branch numbers and sub-paragraphs", () => {
+  it("tokenises 第N条のM as N-M and 第N条 as N", () => {
+    expect(tokenize("第3条の2")).toEqual(["3-2"]);
+    expect(tokenize("第 7 条に従う")).toEqual(["7", "に従", "従う"]);
+  });
+
+  it("keeps (a)-style sub-paragraph markers", () => {
+    expect(tokenize("Article 6.10 (a) and (ii)")).toEqual([
+      "article",
+      "6.10",
+      "(a)",
+      "(ii)",
+    ]);
+  });
+
+  it("parses 第N条のM as its own article and does not merge it into 第N条", () => {
+    const parsed = parseArticlesFromPages([
+      {
+        pageNumber: 4,
+        lines: [
+          "第3条 時計",
+          "時計を押す。",
+          "第3条の2 電子機器",
+          "携帯電話を持ち込まない。",
+        ],
+      },
+    ]);
+    expect(parsed.map((r) => [r.article, r.title])).toEqual([
+      ["3", "時計"],
+      ["3-2", "電子機器"],
+    ]);
+  });
+
+  it("finds 第3条の2 by the same notation in a query", () => {
+    const index = new FulltextIndex([
+      makeRule({ id: "a3", article: "3", content: "時計" }),
+      makeRule({ id: "a3-2", article: "3-2", content: "電子機器" }),
+    ]);
+    expect(index.search("第3条の2")[0]?.ruleId).toBe("a3-2");
+  });
+});
+
 describe("article parsing regressions", () => {
   it("does not treat a wrapped cross-reference as a heading", () => {
     const parsed = parseArticlesFromPages([

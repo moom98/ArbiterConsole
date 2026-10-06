@@ -97,11 +97,41 @@ export async function findActiveSourcesInScope(
   );
 }
 
-export function getActiveSourcesInScope(
+/**
+ * 出典情報のない旧データ（スキーマv3以前に取り込まれ sourceId を持たない条文）の件数。
+ * 同じ種別・範囲の次回インポート時に削除される。
+ */
+export async function countLegacyRulesInScope(
+  database: ArbiterDatabase,
   sourceType: RuleSourceType,
   tournamentId: string | undefined
-): Promise<RuleSource[]> {
-  return findActiveSourcesInScope(db, sourceType, tournamentId);
+): Promise<number> {
+  const rules = await database.rules
+    .where("source")
+    .equals(sourceType)
+    .toArray();
+  return rules.filter(
+    (r) => !r.sourceId && inScope(r, sourceType, tournamentId)
+  ).length;
+}
+
+export interface ImportScopeInfo {
+  /** 同じ種別（大会固有規定は同じ大会）の有効な資料 */
+  activeSources: RuleSource[];
+  /** インポート時に削除される出典情報のない旧データの件数 */
+  legacyRuleCount: number;
+}
+
+export async function getImportScopeInfo(
+  sourceType: RuleSourceType,
+  tournamentId: string | undefined,
+  database: ArbiterDatabase = db
+): Promise<ImportScopeInfo> {
+  const [activeSources, legacyRuleCount] = await Promise.all([
+    findActiveSourcesInScope(database, sourceType, tournamentId),
+    countLegacyRulesInScope(database, sourceType, tournamentId),
+  ]);
+  return { activeSources, legacyRuleCount };
 }
 
 /**

@@ -23,6 +23,8 @@ interface FormState {
   file: File | null;
   /** 同じ種別の有効な登録済み資料 */
   existing: RuleSource[];
+  /** インポート時に削除される出典情報のない旧データ（v3以前）の件数 */
+  legacyRuleCount: number;
   /** 既存資料がある場合の扱い（明示的な選択が必須） */
   onExisting: ExistingSourceAction | null;
 }
@@ -82,10 +84,11 @@ export default function SettingsPage() {
     const preset = SOURCE_PRESETS[sourceType];
     setNotice(null);
     setConfirmDeleteId(null);
-    const { getActiveSourcesInScope } =
+    const { getImportScopeInfo } =
       await import("@/lib/application/rule-library");
     // 大会管理（Milestone 6）実装までは大会を指定できない
-    const existing = await getActiveSourcesInScope(sourceType, undefined);
+    const { activeSources: existing, legacyRuleCount } =
+      await getImportScopeInfo(sourceType, undefined);
     setForm({
       sourceType,
       name: preset.name,
@@ -94,6 +97,7 @@ export default function SettingsPage() {
       language: preset.language,
       file: null,
       existing,
+      legacyRuleCount,
       onExisting: null,
     });
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -173,7 +177,8 @@ export default function SettingsPage() {
     !!form.file &&
     !!form.name.trim() &&
     !!form.version.trim() &&
-    (form.existing.length === 0 || form.onExisting !== null) &&
+    ((form.existing.length === 0 && form.legacyRuleCount === 0) ||
+      form.onExisting !== null) &&
     !busy;
 
   return (
@@ -314,46 +319,73 @@ export default function SettingsPage() {
                   className="mt-1 w-full text-sm"
                 />
               </label>
-              {form.existing.length > 0 && (
+              {(form.existing.length > 0 || form.legacyRuleCount > 0) && (
                 <fieldset className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm">
                   <legend className="font-semibold px-1">
-                    登録済みの資料があります
+                    登録済みのデータがあります
                   </legend>
-                  <ul className="mb-2 list-disc pl-5">
-                    {form.existing.map((s) => (
-                      <li key={s.id}>
-                        {s.name}（{s.version}）
-                      </li>
-                    ))}
-                  </ul>
-                  <label className="flex items-start gap-2 py-2">
-                    <input
-                      type="radio"
-                      name="onExisting"
-                      checked={form.onExisting === "supersede"}
-                      onChange={() =>
-                        setForm({ ...form, onExisting: "supersede" })
-                      }
-                      className="mt-1"
-                    />
-                    <span>
-                      置き換える（登録済みの資料は旧版として保存し、検索対象から外す）
-                    </span>
-                  </label>
-                  <label className="flex items-start gap-2 py-2">
-                    <input
-                      type="radio"
-                      name="onExisting"
-                      checked={form.onExisting === "keep-both"}
-                      onChange={() =>
-                        setForm({ ...form, onExisting: "keep-both" })
-                      }
-                      className="mt-1"
-                    />
-                    <span>
-                      両方を有効にする（別の資料の場合。同じ資料の別の版には使用しないでください）
-                    </span>
-                  </label>
+                  {form.existing.length > 0 && (
+                    <ul className="mb-2 list-disc pl-5">
+                      {form.existing.map((s) => (
+                        <li key={s.id}>
+                          {s.name}（{s.version}）
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {form.legacyRuleCount > 0 && (
+                    <p className="mb-2 font-semibold text-red-700">
+                      出典情報のない旧データ{form.legacyRuleCount}
+                      件を削除します
+                    </p>
+                  )}
+                  {form.existing.length > 0 ? (
+                    <>
+                      <label className="flex items-start gap-2 py-2">
+                        <input
+                          type="radio"
+                          name="onExisting"
+                          checked={form.onExisting === "supersede"}
+                          onChange={() =>
+                            setForm({ ...form, onExisting: "supersede" })
+                          }
+                          className="mt-1"
+                        />
+                        <span>
+                          置き換える（登録済みの資料は旧版として保存し、検索対象から外す）
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-2 py-2">
+                        <input
+                          type="radio"
+                          name="onExisting"
+                          checked={form.onExisting === "keep-both"}
+                          onChange={() =>
+                            setForm({ ...form, onExisting: "keep-both" })
+                          }
+                          className="mt-1"
+                        />
+                        <span>
+                          両方を有効にする（別の資料の場合。同じ資料の別の版には使用しないでください）
+                        </span>
+                      </label>
+                    </>
+                  ) : (
+                    <label className="flex items-start gap-2 py-2">
+                      <input
+                        type="checkbox"
+                        checked={form.onExisting !== null}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            onExisting: e.target.checked ? "supersede" : null,
+                          })
+                        }
+                        className="mt-1"
+                      />
+                      <span>旧データを削除して取り込む</span>
+                    </label>
+                  )}
                 </fieldset>
               )}
               <div className="flex gap-2">

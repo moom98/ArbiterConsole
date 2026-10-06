@@ -14,7 +14,11 @@ import {
   type GenerateEmbeddingsOptions,
 } from "@/lib/infrastructure/embeddings/generator";
 import type { PDFExtractionResult } from "@/lib/infrastructure/pdf/extractor";
-import { findActiveSourcesInScope, inScope } from "./rule-library";
+import {
+  findActiveSourcesInScope,
+  getImportScopeInfo,
+  inScope,
+} from "./rule-library";
 
 /**
  * ルール資料の取り込み（アプリケーションサービス）
@@ -85,12 +89,22 @@ export class RuleIngestionError extends Error {}
 
 /** 既存の有効な資料があり、扱い（onExisting）の指定が必要な場合のエラー */
 export class ExistingSourceDecisionRequired extends RuleIngestionError {
-  constructor(readonly existing: RuleSource[]) {
-    super(
-      `有効な資料が既に登録されています（${existing
-        .map((s) => `${s.name} ${s.version}`)
-        .join("、")}）。置き換えるか併存させるかを選択してください`
-    );
+  constructor(
+    readonly existing: RuleSource[],
+    readonly legacyRuleCount: number = 0
+  ) {
+    const parts: string[] = [];
+    if (existing.length > 0) {
+      parts.push(
+        `有効な資料が既に登録されています（${existing
+          .map((s) => `${s.name} ${s.version}`)
+          .join("、")}）`
+      );
+    }
+    if (legacyRuleCount > 0) {
+      parts.push(`出典情報のない旧データ${legacyRuleCount}件が削除されます`);
+    }
+    super(`${parts.join("。")}。扱いを選択してください`);
   }
 }
 
@@ -129,13 +143,13 @@ export async function ingestRulesFromPDF(
   validateMetadata(meta);
 
   // 時間のかかる抽出の前に、既存資料の扱いが指定されているか確認する
-  const existing = await findActiveSourcesInScope(
-    deps.database,
+  const { activeSources, legacyRuleCount } = await getImportScopeInfo(
     meta.sourceType,
-    meta.tournamentId
+    meta.tournamentId,
+    deps.database
   );
-  if (existing.length > 0 && !meta.onExisting) {
-    throw new ExistingSourceDecisionRequired(existing);
+  if ((activeSources.length > 0 || legacyRuleCount > 0) && !meta.onExisting) {
+    throw new ExistingSourceDecisionRequired(activeSources, legacyRuleCount);
   }
 
   onProgress?.({
@@ -251,7 +265,8 @@ export async function ingestRulesFromPDF(
 /**
  * 新しい資料・条文・Embeddingを1トランザクションで保存する。
  *
- * - 同じ種別（大会固有規定は同じ大会）の有効な資料がある場合、onExisting が必須。
+ * - 同じ種別（大会固有規定は同じ大会）の有効な資料、または出典情報のない旧データが
+ *   ある場合、onExisting が必須。
  *   "supersede" なら既存資料を旧版（superseded）にする（条文は保持、検索対象外）。
  * - sourceId を持たない旧データ（スキーマv3以前、出典情報なし）は同じ種別・範囲なら削除する。
  */
@@ -275,17 +290,6 @@ export async function saveRuleSource(
         source.sourceType,
         source.tournamentId
       );
-      if (existing.length > 0) {
-        if (!onExisting) {
-          throw new ExistingSourceDecisionRequired(existing);
-        }
-        if (onExisting === "supersede") {
-          for (const old of existing) {
-            await database.ruleSources.update(old.id, { status: "superseded" });
-          }
-        }
-      }
-
       const legacyRuleIds = (
         await database.rules.where("source").equals(source.sourceType).toArray()
       )
@@ -294,6 +298,18 @@ export async function saveRuleSource(
             !r.sourceId && inScope(r, source.sourceType, source.tournamentId)
         )
         .map((r) => r.id);
+
+      if ((existing.length > 0 || legacyRuleIds.length > 0) && !onExisting) {
+        throw new ExistingSourceDecisionRequired(
+          existing,
+          legacyRuleIds.length
+        );
+      }
+      if (onExisting === "supersede") {
+        for (const old of existing) {
+          await database.ruleSources.update(old.id, { status: "superseded" });
+        }
+      }
       if (legacyRuleIds.length > 0) {
         await database.embeddings.where("ruleId").anyOf(legacyRuleIds).delete();
         await database.rules.bulkDelete(legacyRuleIds);

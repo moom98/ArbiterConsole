@@ -11,6 +11,7 @@ import { ArbiterDatabase } from "@/lib/infrastructure/db";
 import {
   deleteRuleSource,
   findActiveSourcesInScope,
+  getImportScopeInfo,
 } from "@/lib/application/rule-library";
 import { selectCandidates } from "@/lib/infrastructure/ai/hybrid-search";
 import type { Embedding, Rule } from "@/lib/domain/entities";
@@ -260,7 +261,22 @@ describe("saveRuleSource / deleteRuleSource", () => {
 
     const source = makeSource();
     const fresh = makeRule({ source: "FIDE", sourceId: source.id });
-    await saveRuleSource(database, source, [fresh], [embeddingFor(fresh)]);
+    // legacy data counts as existing data: deleting it needs an explicit choice
+    await expect(
+      saveRuleSource(database, source, [fresh], [embeddingFor(fresh)])
+    ).rejects.toMatchObject({ legacyRuleCount: 1 });
+    expect(await getImportScopeInfo("FIDE", undefined, database)).toEqual({
+      activeSources: [],
+      legacyRuleCount: 1,
+    });
+
+    await saveRuleSource(
+      database,
+      source,
+      [fresh],
+      [embeddingFor(fresh)],
+      "supersede"
+    );
 
     expect((await database.rules.toArray()).map((r) => r.id)).toEqual([
       fresh.id,

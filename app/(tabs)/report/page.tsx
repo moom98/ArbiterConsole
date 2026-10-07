@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useIncidentStore } from "@/lib/stores/incident-store";
 import { DecisionDisplay } from "@/components/features/DecisionDisplay";
 import { FollowUpQuestions } from "@/components/features/FollowUpQuestions";
+import { IncidentTextClassifier } from "@/components/features/IncidentTextClassifier";
+import type { IncidentClassification } from "@/lib/domain/llm/types";
 import type {
   CompetitionType,
   IncidentCategory,
@@ -60,17 +62,23 @@ export default function ReportPage() {
   const [selectedCategory, setSelectedCategory] =
     useState<IncidentCategory | null>(null);
   const [description, setDescription] = useState("");
+  // 自由記述の分類（提案）で確定した subtype（カテゴリが一致する場合のみ送信）
+  const [suggestion, setSuggestion] = useState<IncidentClassification | null>(
+    null
+  );
   const [draft, setDraft] = useState<ContextDraft>({});
 
   const {
     currentDecision,
     followUpQuestions,
     isProcessing,
+    llmPending,
     error,
     lastContext,
     loadLastContext,
     submitIncident,
     answerFollowUp,
+    retryEvaluation,
     reset,
   } = useIncidentStore();
 
@@ -107,6 +115,18 @@ export default function ReportPage() {
 
   const handleCategorySelect = (category: IncidentCategory) => {
     setSelectedCategory(category);
+    setSuggestion(null);
+    setStep("description");
+  };
+
+  // 分類の提案を採用: カテゴリと説明をプレフィルする（判断は決定木・判断支援が行う）
+  const handleApplySuggestion = (
+    classification: IncidentClassification,
+    text: string
+  ) => {
+    setSelectedCategory(classification.category);
+    setSuggestion(classification);
+    setDescription(text);
     setStep("description");
   };
 
@@ -121,6 +141,10 @@ export default function ReportPage() {
     const res = await submitIncident({
       context: draft as ReportContext,
       category: selectedCategory,
+      subtype:
+        suggestion?.category === selectedCategory
+          ? suggestion.subtype
+          : undefined,
       description,
       arbiterObserved: true,
     });
@@ -138,6 +162,7 @@ export default function ReportPage() {
     setStep("context");
     setSelectedCategory(null);
     setDescription("");
+    setSuggestion(null);
     reset();
   };
 
@@ -364,6 +389,10 @@ export default function ReportPage() {
               {error}
             </div>
           )}
+          <IncidentTextClassifier
+            disabled={isProcessing || contextErrors.length > 0}
+            onApply={handleApplySuggestion}
+          />
           <p className="text-gray-600 mb-4">
             発生したインシデントのカテゴリを選択してください
           </p>
@@ -488,7 +517,11 @@ export default function ReportPage() {
               )}
             </div>
           ) : (
-            <DecisionDisplay decision={currentDecision} />
+            <DecisionDisplay
+              decision={currentDecision}
+              onRetry={() => void retryEvaluation()}
+              retrying={isProcessing}
+            />
           )}
           <button
             onClick={handleReset}
@@ -504,7 +537,11 @@ export default function ReportPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-8 text-center">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-            <p className="text-lg font-semibold">判断支援を準備中...</p>
+            <p className="text-lg font-semibold">
+              {llmPending
+                ? "AI参考情報を取得中...（オンライン）"
+                : "判断支援を準備中..."}
+            </p>
           </div>
         </div>
       )}

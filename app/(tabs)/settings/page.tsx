@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useTournamentStore } from "@/lib/stores/tournament-store";
+import { formatRulesetSummary } from "@/lib/domain/services/tournament-profile";
 import type {
   ExistingSourceAction,
   RuleIngestionProgress,
@@ -20,6 +23,9 @@ interface FormState {
   version: string;
   effectiveDate: string;
   language: RuleLanguage;
+  /** 大会特別規定の場合は選択中の大会（必須） */
+  tournamentId?: string;
+  tournamentName?: string;
   file: File | null;
   /** 同じ種別の有効な登録済み資料 */
   existing: RuleSource[];
@@ -65,6 +71,15 @@ export default function SettingsPage() {
   const [stats, setStats] = useState<RuleStatistics | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const {
+    active: activeTournament,
+    tournaments,
+    load: loadTournaments,
+  } = useTournamentStore();
+
+  useEffect(() => {
+    void loadTournaments();
+  }, [loadTournaments]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -84,14 +99,25 @@ export default function SettingsPage() {
     const preset = SOURCE_PRESETS[sourceType];
     setNotice(null);
     setConfirmDeleteId(null);
+    // 大会特別規定は選択中の大会に紐づける（大会未選択では登録できない）
+    const tournament =
+      sourceType === "tournament" ? activeTournament : undefined;
+    if (sourceType === "tournament" && !tournament) {
+      setNotice({
+        kind: "error",
+        text: "大会特別規定を登録するには、先に大会を選択してください",
+      });
+      return;
+    }
     const { getImportScopeInfo } =
       await import("@/lib/application/rule-library");
-    // 大会管理（Milestone 6）実装までは大会を指定できない
     const { activeSources: existing, legacyRuleCount } =
-      await getImportScopeInfo(sourceType, undefined);
+      await getImportScopeInfo(sourceType, tournament?.id);
     setForm({
       sourceType,
-      name: preset.name,
+      tournamentId: tournament?.id,
+      tournamentName: tournament?.name,
+      name: preset.name || (tournament ? `${tournament.name} 大会規定` : ""),
       version: "",
       effectiveDate: "",
       language: preset.language,
@@ -138,8 +164,7 @@ export default function SettingsPage() {
           version: form.version,
           language: form.language,
           effectiveDate: parseLocalDate(form.effectiveDate),
-          // 大会管理（Milestone 6）実装までは大会を指定できない
-          tournamentId: undefined,
+          tournamentId: form.tournamentId,
           onExisting: form.onExisting ?? undefined,
         },
         setProgress
@@ -234,12 +259,15 @@ export default function SettingsPage() {
                 </button>
               ))}
               <button
-                disabled
-                className="w-full min-h-[48px] px-4 py-3 bg-gray-300 text-gray-600 rounded-lg text-left"
+                onClick={() => openForm("tournament")}
+                disabled={busy || !activeTournament}
+                className="w-full min-h-[48px] px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-left disabled:bg-gray-300 disabled:text-gray-600"
               >
-                大会特別規定をアップロード
+                {SOURCE_PRESETS.tournament.label} をアップロード
                 <span className="block text-xs">
-                  大会管理機能の実装後に利用できます
+                  {activeTournament
+                    ? `対象: ${activeTournament.name}（検索で最優先）`
+                    : "先に大会を作成・選択してください"}
                 </span>
               </button>
             </div>
@@ -255,6 +283,11 @@ export default function SettingsPage() {
             >
               <p className="font-semibold">
                 {SOURCE_PRESETS[form.sourceType].label}
+                {form.tournamentName && (
+                  <span className="block text-sm font-normal text-gray-700">
+                    対象大会: {form.tournamentName}
+                  </span>
+                )}
               </p>
               <label className="block text-sm">
                 資料名
@@ -426,6 +459,13 @@ export default function SettingsPage() {
                           {source.status === "active" ? "現行" : "旧版"}
                         </span>
                       </p>
+                      {source.sourceType === "tournament" && (
+                        <p className="text-gray-700">
+                          大会:{" "}
+                          {tournaments.find((t) => t.id === source.tournamentId)
+                            ?.name ?? "（削除済みの大会）"}
+                        </p>
+                      )}
                       <p className="text-gray-600">
                         {ruleCount}件の条文 / 意味検索用データ {embeddingCount}
                         件 / {source.fileName}
@@ -479,7 +519,34 @@ export default function SettingsPage() {
 
         <section className="bg-white rounded-lg shadow p-4">
           <h2 className="text-lg font-semibold mb-2">大会設定</h2>
-          <p className="text-sm text-gray-500">Milestone 6で実装予定</p>
+          {activeTournament ? (
+            <p className="text-sm mb-2">
+              <span className="font-semibold">{activeTournament.name}</span>
+              <span className="block text-gray-600">
+                {formatRulesetSummary(activeTournament)}
+              </span>
+            </p>
+          ) : (
+            <p className="text-sm text-gray-600 mb-2">
+              大会が選択されていません
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Link
+              href="/tournament"
+              className="flex-1 flex items-center justify-center min-h-[48px] px-3 border border-gray-300 rounded-lg"
+            >
+              大会の選択・管理
+            </Link>
+            {activeTournament && (
+              <Link
+                href={`/tournament/${encodeURIComponent(activeTournament.id)}`}
+                className="flex-1 flex items-center justify-center min-h-[48px] px-3 border border-gray-300 rounded-lg"
+              >
+                ラウンド・プロファイル
+              </Link>
+            )}
+          </div>
         </section>
 
         <section className="bg-white rounded-lg shadow p-4">

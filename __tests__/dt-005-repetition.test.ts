@@ -24,6 +24,8 @@ function analysis(
       targetOccurrences: 3,
       maxOccurrences: 3,
       halfmoveClock: 0,
+      maxHalfmoveClock: 0,
+      sideToMove: "white",
       positions: 9,
       format: "moves",
       ...over,
@@ -236,7 +238,10 @@ describe("DT-005 75-move rule (9.6.2)", () => {
       conditionCheck: "auto",
       positionsText: "...",
       lastMoveCheckmate: false,
-      analysis: analysis({ halfmoveClock: 150 }),
+      analysis: analysis({
+        maxHalfmoveClock: 150,
+        seventyFiveReachedWithCheckmate: false,
+      }),
     });
     expect(met.decision.penalties[0].type).toBe("draw");
     const notMet = run({
@@ -244,7 +249,7 @@ describe("DT-005 75-move rule (9.6.2)", () => {
       conditionCheck: "auto",
       positionsText: "...",
       lastMoveCheckmate: false,
-      analysis: analysis({ halfmoveClock: 149 }),
+      analysis: analysis({ maxHalfmoveClock: 149 }),
     });
     expect(notMet.decision.intervention).toBe("no-intervention");
   });
@@ -254,8 +259,80 @@ describe("DT-005 75-move rule (9.6.2)", () => {
       conditionCheck: "auto",
       positionsText: "...",
       lastMoveCheckmate: false,
-      analysis: analysis({ halfmoveClock: 160, format: "fens" }),
+      analysis: analysis({ maxHalfmoveClock: 160, format: "fens" }),
     });
     expect(r.decision.kind).toBe("manual-review");
+  });
+});
+
+describe("DT-005 review regressions", () => {
+  it("B1: 9.2.1 auto check without the intended move asks for it instead of deciding", () => {
+    const r = run({
+      ...CLAIM,
+      claimMode: "about-to-appear",
+      moveWritten: true,
+      conditionCheck: "auto",
+      positionsText: "1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6 4. Ng1",
+      analysis: analysis({ targetOccurrences: 2 }),
+    });
+    expect(r.status).toBe("needs-input");
+    expect(r.decision.penalties).toHaveLength(0);
+    expect(ids(r)).toContain("intendedMove");
+    expect(r.decision.conclusion).toContain("記入した次の手");
+  });
+
+  it("L5: auto check where the claimant is not the side to move asks again", () => {
+    const r = run({
+      ...CLAIM,
+      claimant: "black",
+      conditionCheck: "auto",
+      positionsText: "...",
+      analysis: analysis({ sideToMove: "white" }),
+    });
+    expect(r.status).toBe("needs-input");
+    expect(r.decision.penalties).toHaveLength(0);
+  });
+
+  it("B2: 75-move rule uses the maximum halfmove clock, not the last position", () => {
+    const r = run({
+      subtype: "75-move-rule",
+      competitionType: "standard",
+      conditionCheck: "auto",
+      positionsText: "...",
+      analysis: analysis({
+        halfmoveClock: 0,
+        maxHalfmoveClock: 152,
+        seventyFiveReachedWithCheckmate: false,
+      }),
+    });
+    expect(r.decision.penalties[0].type).toBe("draw");
+  });
+
+  it("B2: checkmate on the move reaching 75 moves takes precedence (from the move list)", () => {
+    const r = run({
+      subtype: "75-move-rule",
+      competitionType: "standard",
+      conditionCheck: "auto",
+      positionsText: "...",
+      analysis: analysis({
+        maxHalfmoveClock: 150,
+        seventyFiveReachedWithCheckmate: true,
+      }),
+    });
+    expect(r.decision.penalties).toHaveLength(0);
+    expect(r.decision.conclusion).toContain("チェックメイトが優先");
+  });
+
+  it("R2: incorrect claim in Blitz B.2 suggests 2 minutes (literal reading) without applying it", () => {
+    const r = run({
+      ...CLAIM,
+      competitionType: "blitz",
+      supervisionRegime: "competition-rules",
+      conditionCheck: "not-met",
+    });
+    expect(r.decision.penalties[0].timeAdjustmentSeconds).toBeUndefined();
+    expect(r.decision.conclusion).toContain("2分（文言上の解釈・要確認）");
+    expect(r.decision.escalationRecommended).toBe(true);
+    expect(r.decision.confidence).toBe("medium");
   });
 });

@@ -307,7 +307,7 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
       await submit("draw", STANDARD_CTX);
       await answer({ drawSubtype: "threefold-repetition-claim" });
       await answer({
-        claimant: "white",
+        claimant: "black",
         claimantHasMove: "true",
         claimMode: "just-appeared",
         touchedPiece: "false",
@@ -316,12 +316,12 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
         repetitionCheck: "auto",
         positionsText: "1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6 4. Ng1",
       });
-      // 初期局面からの Ng1 の後の局面（黒番・Nf6）は2回のみ → 誤ったクレーム
+      // 黒番で 4.Ng1 の後の局面は2回目のみ → 誤ったクレーム（白に2分）
       expect(final.decision.treeId).toBe("DT-005-repetition");
       expect(final.decision.penalties[0]).toEqual(
         expect.objectContaining({
           type: "time-addition-opponent",
-          playerColor: "black",
+          playerColor: "white",
           timeAdjustmentSeconds: 120,
         })
       );

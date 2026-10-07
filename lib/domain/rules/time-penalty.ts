@@ -8,12 +8,22 @@ import type { CitationKey } from "./citations";
  * - Rapid（A.4 / A.5 とも）:  1分（A.3 は Appendix A の共通条項）
  * - Blitz B.3（basic-rules）: 1分（B.3 が A.3 を明示的に準用）
  * - Blitz B.2（competition-rules）: 原典で確定できない。
- *   B.2 は "Competition Rules shall apply" とのみ規定し、A.3 を参照していない。
- *   1分か2分かを推測せず、CA 確認とする（ADR-005）。
+ *   B.2 は Competition Rules（7.5.5 / 9.5.3: 2分）を適用し、A.3 の1分規定を準用するのは B.3 のみ。
+ *   文言上は2分と読めるが確定できないため、2分を「文言上の解釈・要確認」として提示し、
+ *   自動適用はせず CA 確認とする（ADR-005）。
  */
 export type TimePenaltyRule =
   | { kind: "fixed"; seconds: number; sources: CitationKey[] }
-  | { kind: "unverified"; reason: string; sources: CitationKey[] };
+  | {
+      kind: "unverified";
+      reason: string;
+      /** 文言上の解釈による提示値（自動適用しない） */
+      suggestedSeconds: number;
+      sources: CitationKey[];
+    };
+
+/** 未確定の加算時間を提示するときの表記 */
+export const UNVERIFIED_AMOUNT_NOTE = "（文言上の解釈・要確認）";
 
 export function opponentTimePenalty(
   competitionType: CompetitionType,
@@ -35,7 +45,8 @@ export function opponentTimePenalty(
   return {
     kind: "unverified",
     reason:
-      "Blitz B.2（Competition Rules）での加算時間は原典で確定できません（B.2 は A.3 の1分規定を参照していません）",
+      "B.2 は Competition Rules（7.5.5 / 9.5.3: 2分）を適用します。A.3 の1分規定を準用するのは B.3 のみのため、文言上は2分ですが、CA・大会規定で確認してください。",
+    suggestedSeconds: 120,
     sources: ["FIDE_B_2", "FIDE_B_3", "FIDE_A_3"],
   };
 }

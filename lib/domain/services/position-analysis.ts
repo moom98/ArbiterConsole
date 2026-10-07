@@ -16,6 +16,7 @@ export interface NormalizedPosition {
   /** FEN の halfmove clock（ポーンの移動・駒取りからの半手数） */
   halfmoveClock: number;
   isCheckmate: boolean;
+  sideToMove: "white" | "black";
 }
 
 export interface ChessPositionPort {
@@ -31,13 +32,28 @@ export interface RepetitionAnalysis {
   targetOccurrences: number;
   /** いずれかの局面の最大出現回数 */
   maxOccurrences: number;
-  /** 最後の局面までの、ポーンの移動・駒取りのない半手数（FEN の halfmove clock） */
+  /** 最後の局面の、ポーンの移動・駒取りのない半手数（FEN の halfmove clock） */
   halfmoveClock: number;
+  /**
+   * 解析した全局面での halfmove clock の最大値。
+   * 9.6.2 は途中で一度でも 75手（150半手）に達すれば成立する。
+   */
+  maxHalfmoveClock: number;
+  /**
+   * 150半手に初めて達した局面がチェックメイトか（9.6.2: その手がメイトならメイトが優先）。
+   * 150半手に達していなければ undefined。
+   */
+  seventyFiveReachedWithCheckmate?: boolean;
+  /** 入力された局面列の最後の局面（記入した手を指す前）の手番 */
+  sideToMove: "white" | "black";
   /** 解析した局面数 */
   positions: number;
   /** 入力形式 */
   format: "moves" | "fens";
 }
+
+/** 75手 = 両プレーヤー各75手 = 150 半手（9.6.2） */
+export const SEVENTY_FIVE_MOVES_PLIES = 150;
 
 const FEN_LIKE = /^[pnbrqkPNBRQK1-8]+(\/[pnbrqkPNBRQK1-8]+){7}(\s|$)/;
 
@@ -87,11 +103,22 @@ export function analyzeRepetition(
 
   const counts = new Map<string, number>();
   let last: NormalizedPosition | undefined;
+  let sideToMove: "white" | "black" = "white";
+  let maxHalfmoveClock = 0;
+  let seventyFiveReachedWithCheckmate: boolean | undefined;
+  const historyLength = intendedMove ? fens.length - 1 : fens.length;
   for (let i = 0; i < fens.length; i++) {
     const n = port.normalize(fens[i]);
     if (!n.ok)
       return { ok: false, error: `${i + 1}番目の局面が不正です: ${n.error}` };
     counts.set(n.key, (counts.get(n.key) ?? 0) + 1);
+    if (n.halfmoveClock > maxHalfmoveClock) maxHalfmoveClock = n.halfmoveClock;
+    if (
+      seventyFiveReachedWithCheckmate === undefined &&
+      n.halfmoveClock >= SEVENTY_FIVE_MOVES_PLIES
+    )
+      seventyFiveReachedWithCheckmate = n.isCheckmate;
+    if (i === historyLength - 1) sideToMove = n.sideToMove;
     last = n;
   }
   return {
@@ -99,6 +126,9 @@ export function analyzeRepetition(
     targetOccurrences: counts.get(last!.key) ?? 0,
     maxOccurrences: Math.max(...Array.from(counts.values())),
     halfmoveClock: last!.halfmoveClock,
+    maxHalfmoveClock,
+    seventyFiveReachedWithCheckmate,
+    sideToMove,
     positions: fens.length,
     format,
   };

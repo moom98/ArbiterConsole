@@ -51,12 +51,42 @@ function legalEnPassantSquare(chess: Chess): string {
 
 const RESULT_TOKENS = new Set(["1-0", "0-1", "1/2-1/2", "½-½", "*"]);
 
-function tokenizeMoves(text: string): string[] {
+/** 全角英数字・記号を半角に変換する（例: "１．Ｎｆ３" → "1.Nf3"） */
+function toHalfWidth(text: string): string {
   return text
-    .replace(/\{[^}]*\}/g, " ")
-    .replace(/\([^)]*\)/g, " ")
+    .replace(/[\uFF01-\uFF5E]/g, (c) =>
+      String.fromCharCode(c.charCodeAt(0) - 0xfee0)
+    )
+    .replace(/\u3000/g, " ");
+}
+
+/** 入れ子の変化（括弧）を取り除く */
+function stripVariations(text: string): string {
+  let out = "";
+  let depth = 0;
+  for (const ch of text) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    else if (depth === 0) out += ch;
+  }
+  return out;
+}
+
+function tokenizeMoves(text: string): string[] {
+  const body = stripVariations(
+    toHalfWidth(text)
+      .replace(/\[[^\]]*\]/g, " ") // PGN ヘッダタグ
+      .replace(/\{[^}]*\}/g, " ") // コメント
+      .replace(/;[^\n]*/g, " ")
+  ).replace(/\$\d+/g, " "); // NAG
+  return body
     .split(/\s+/)
-    .map((t) => t.replace(/^\d+\.(\.\.)?/, "").trim())
+    .map((t) =>
+      t
+        .replace(/^\d+\.(\.\.)?/, "")
+        .replace(/[!?]+$/, "")
+        .trim()
+    )
     .filter((t) => t !== "" && !RESULT_TOKENS.has(t) && !/^\d+\.*$/.test(t));
 }
 
@@ -70,13 +100,14 @@ export const chessJsPositionPort: ChessPositionPort = {
       fields[0],
       chess.turn(),
       normalizedCastling(chess),
-      legalEnPassantSquare(chess),
+      fields[3] === "-" ? "-" : legalEnPassantSquare(chess),
     ].join(" ");
     return {
       ok: true,
       key,
       halfmoveClock: Number(fields[4]) || 0,
       isCheckmate: chess.isCheckmate(),
+      sideToMove: chess.turn() === "w" ? "white" : "black",
     };
   },
 
@@ -98,7 +129,7 @@ export const chessJsPositionPort: ChessPositionPort = {
       } catch {
         return {
           ok: false,
-          error: `${i + 1}手目（半手）「${token}」を指せません`,
+          error: `${Math.floor(i / 2) + 1}${i % 2 === 0 ? "." : "..."} ${token} は直前の局面で合法手ではありません（${i + 1}半手目）`,
         };
       }
       fens.push(chess.fen());

@@ -127,3 +127,37 @@ describe("analyzeRepetition", () => {
     expect(r.halfmoveClock).toBe(8);
   });
 });
+
+describe("analyzeRepetition — review regressions", () => {
+  it("B2: 75 moves reached mid-sequence is detected even after a later capture", () => {
+    const shuffle = Array.from({ length: 38 }, () => "Nf3 Nf6 Ng1 Ng8").join(
+      " "
+    );
+    const r = analyzeRepetition(port, `1. e4 d5 ${shuffle} exd5`);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.halfmoveClock).toBe(0);
+    expect(r.maxHalfmoveClock).toBe(152);
+    expect(r.seventyFiveReachedWithCheckmate).toBe(false);
+  });
+
+  it("L5: reports the side to move before the intended move", () => {
+    const r = analyzeRepetition(port, "1. Nf3 Nf6 2. Ng1", "Ng8");
+    if (!r.ok) throw new Error(r.error);
+    expect(r.sideToMove).toBe("black");
+  });
+
+  it("L2: accepts headers, nested variations, comments and full-width move numbers", () => {
+    const r = analyzeRepetition(
+      port,
+      '[Event "Test"]\n１．Ｎｆ３ Nf6 (1... d5 (1... e5)) {comment} 2. Ng1! Ng8 *'
+    );
+    if (!r.ok) throw new Error(r.error);
+    expect(r.targetOccurrences).toBe(2);
+  });
+
+  it("L2: illegal move error names the move", () => {
+    const r = analyzeRepetition(port, "1. e4 e5 2. Ke3");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("Ke3");
+  });
+});

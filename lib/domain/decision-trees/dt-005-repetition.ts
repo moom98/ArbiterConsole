@@ -12,15 +12,19 @@ import { QUESTIONS, type FollowUpQuestion } from "@/lib/domain/follow-up";
 import {
   formatMinutes,
   opponentTimePenalty,
+  UNVERIFIED_AMOUNT_NOTE,
 } from "@/lib/domain/rules/time-penalty";
-import type { RepetitionAnalysis } from "@/lib/domain/services/position-analysis";
+import {
+  SEVENTY_FIVE_MOVES_PLIES,
+  type RepetitionAnalysis,
+} from "@/lib/domain/services/position-analysis";
 import type { DecisionTreeResult } from "./dt-001-illegal-move-standard";
 import { COLOR_JA, TreeOutput, opponentOf } from "./tree-support";
 
 export const DT_005_ID = "DT-005-repetition" as const;
 
 /** 75手 = 両プレーヤー各75手 = 150 半手 */
-export const SEVENTY_FIVE_MOVES_PLIES = 150;
+export { SEVENTY_FIVE_MOVES_PLIES } from "@/lib/domain/services/position-analysis";
 
 export interface RepetitionInput extends DrawClaimFacts {
   competitionType: CompetitionType;
@@ -72,7 +76,9 @@ export class RepetitionTree {
     check: ConditionCheck | undefined,
     analysis: RepetitionInput["analysis"],
     positionsText: string | undefined,
-    autoOutcome: (r: RepetitionAnalysis) => Outcome
+    autoOutcome: (r: RepetitionAnalysis) => Outcome,
+    /** 自動判定の前提を検証する（不整合ならエラー文を返す） */
+    validate?: (r: RepetitionAnalysis) => string | undefined
   ):
     { outcome: Outcome; auto?: RepetitionAnalysis } | { error: string } | null {
     if (check === undefined) return null;
@@ -85,13 +91,15 @@ export class RepetitionTree {
     if (!analysis) return { error: "局面の自動判定は利用できません。" };
     if (!analysis.ok)
       return { error: `入力を解析できません: ${analysis.error}` };
+    const invalid = validate?.(analysis.result);
+    if (invalid) return { error: invalid };
     return { outcome: autoOutcome(analysis.result), auto: analysis.result };
   }
 
   private autoLine(a: RepetitionAnalysis | undefined): string[] {
     if (!a) return [];
     return [
-      `自動判定: ${a.positions}局面を解析（${a.format === "moves" ? "棋譜" : "FEN"}）。対象局面の出現 ${a.targetOccurrences}回 / 最大 ${a.maxOccurrences}回 / ポーン移動・駒取りなし ${a.halfmoveClock}半手`,
+      `自動判定: ${a.positions}局面を解析（${a.format === "moves" ? "棋譜" : "FEN"}）。対象局面の出現 ${a.targetOccurrences}回 / 最大 ${a.maxOccurrences}回 / ポーン移動・駒取りなし 最大 ${a.maxHalfmoveClock}半手`,
       "自動判定は入力に依存する。両プレーヤーの面前で対局を再現して確認する",
     ];
   }
@@ -162,12 +170,25 @@ export class RepetitionTree {
       }
     }
 
-    const resolved = this.resolveCheck(
-      input.conditionCheck,
-      input.analysis,
-      input.positionsText,
-      (r) => (r.targetOccurrences >= 3 ? "met" : "not-met")
-    );
+    const intendedMissing =
+      input.claimMode === "about-to-appear" &&
+      input.conditionCheck === "auto" &&
+      !input.intendedMove;
+    const resolved = intendedMissing
+      ? {
+          error:
+            "9.2.1 のクレームを自動判定するには、記入した次の手（例: Ng8）を入力してください。",
+        }
+      : this.resolveCheck(
+          input.conditionCheck,
+          input.analysis,
+          input.positionsText,
+          (r) => (r.targetOccurrences >= 3 ? "met" : "not-met"),
+          (r) =>
+            r.sideToMove !== claimant
+              ? `入力された手順の最後の局面は${COLOR_JA[r.sideToMove]}の手番です。クレームした${COLOR_JA[claimant]}の手番になるまでの手順を入力してください。`
+              : undefined
+        );
     if (resolved === null || "error" in resolved) {
       const qs: FollowUpQuestion[] = [
         QUESTIONS.repetitionCheck,
@@ -272,13 +293,14 @@ export class RepetitionTree {
       input.supervisionRegime
     );
     const amount =
-      rule.kind === "fixed" ? formatMinutes(rule.seconds) : undefined;
+      rule.kind === "fixed"
+        ? formatMinutes(rule.seconds)
+        : `${formatMinutes(rule.suggestedSeconds)}${UNVERIFIED_AMOUNT_NOTE}`;
+    // 未確定の加算時間は提示のみ（timeAdjustmentSeconds は設定しない）
     const penalty: Penalty = {
       type: "time-addition-opponent",
       playerColor: opp,
-      description: amount
-        ? `${COLOR_JA[opp]}に${amount}追加`
-        : `${COLOR_JA[opp]}に時間を追加（加算時間はCAへ確認）`,
+      description: `${COLOR_JA[opp]}に${amount}追加`,
     };
     if (rule.kind === "fixed") penalty.timeAdjustmentSeconds = rule.seconds;
 
@@ -296,14 +318,16 @@ export class RepetitionTree {
 
     return this.out.decided({
       kind: "recommendation",
-      conclusion: amount
-        ? `${COLOR_JA[claimant]}のクレームは誤りです（同一局面が3回未満）。${COLOR_JA[opp]}に${amount}を加算し、対局を続行します。`
-        : `${COLOR_JA[claimant]}のクレームは誤りです（同一局面が3回未満）。${COLOR_JA[opp]}に時間を加算し（加算時間はCAへ確認）、対局を続行します。`,
+      conclusion:
+        `${COLOR_JA[claimant]}のクレームは誤りです（同一局面が3回未満）。${COLOR_JA[opp]}に${amount}を加算し、対局を続行します。` +
+        (rule.kind === "unverified"
+          ? "B.2 は Competition Rules（7.5.5 / 9.5.3: 2分）を適用し、A.3 の1分規定を準用するのは B.3 のみのため文言上は2分ですが、CA・大会規定で確認してください。"
+          : ""),
       actions: [
         ...this.autoLine(auto),
-        amount
+        rule.kind === "fixed"
           ? `${COLOR_JA[opp]}の残り時間に${amount}加算する（9.5.3${input.competitionType === "standard" ? "" : " / A.3"}）`
-          : `${COLOR_JA[opp]}の残り時間に時間を加算する。加算時間（1分 / 2分）はCAへ確認する`,
+          : `${COLOR_JA[opp]}の残り時間に${amount}加算する（9.5.3）。CA・大会規定で加算時間を確認する`,
         ...(intended
           ? [
               "記入した手を指させる（第3条・第4条に従う。違法な手なら、その駒で別の手を指す）",
@@ -388,7 +412,8 @@ export class RepetitionTree {
       input.positionsText,
       (r) =>
         r.format === "moves"
-          ? r.halfmoveClock >= SEVENTY_FIVE_MOVES_PLIES
+          ? // 9.6.2: 途中で一度でも 150 半手に達していれば成立
+            r.maxHalfmoveClock >= SEVENTY_FIVE_MOVES_PLIES
             ? "met"
             : "not-met"
           : // FEN の halfmove clock は入力者が記入した値のため、確定には使わない
@@ -397,7 +422,13 @@ export class RepetitionTree {
     const missing: FollowUpQuestion[] = [];
     if (resolved === null || "error" in resolved)
       missing.push(QUESTIONS.seventyFiveCheck, QUESTIONS.positionsText);
-    if (input.lastMoveCheckmate === undefined)
+    // 自動判定（棋譜）では、150半手に達した局面がメイトかを棋譜から求める
+    const autoCheckmate =
+      resolved && !("error" in resolved) && resolved.auto
+        ? resolved.auto.seventyFiveReachedWithCheckmate
+        : undefined;
+    const lastMoveCheckmate = autoCheckmate ?? input.lastMoveCheckmate;
+    if (lastMoveCheckmate === undefined && input.conditionCheck !== "auto")
       missing.push(QUESTIONS.lastMoveCheckmate);
     if (missing.length > 0 || resolved === null || "error" in resolved) {
       return this.out.needsInput(
@@ -407,7 +438,7 @@ export class RepetitionTree {
       );
     }
 
-    if (resolved.outcome === "met" && input.lastMoveCheckmate) {
+    if (resolved.outcome === "met" && lastMoveCheckmate) {
       return this.out.decided({
         kind: "recommendation",
         conclusion:

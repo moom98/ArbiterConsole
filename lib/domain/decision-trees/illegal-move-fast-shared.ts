@@ -15,6 +15,7 @@ import {
 import {
   opponentTimePenalty,
   formatMinutes,
+  UNVERIFIED_AMOUNT_NOTE,
 } from "@/lib/domain/rules/time-penalty";
 import {
   describePriorIllegalMoves,
@@ -188,7 +189,10 @@ export function evaluateFastPenalty(
       ...ctx.regimeSources,
       article,
       "FIDE_7_5_5",
-      "MANUAL_A_ONE_MINUTE"
+      // A.3 の1分規定の解説は Rapid のみ（Blitz B.2 には適用されない）
+      ...(ctx.competitionType === "rapid"
+        ? (["MANUAL_A_ONE_MINUTE"] as const)
+        : [])
     ),
     confidence:
       inconsistent || subtype === "clock-without-move" ? "medium" : "high",
@@ -319,14 +323,12 @@ function firstOffence(
   const amount =
     rule.kind === "fixed"
       ? formatMinutes(rule.seconds)
-      : "（加算時間はCAへ確認）";
+      : `${formatMinutes(rule.suggestedSeconds)}${UNVERIFIED_AMOUNT_NOTE}`;
+  // 未確定の加算時間は提示のみ（timeAdjustmentSeconds は設定しない）
   const penalty: Penalty = {
     type: "time-addition-opponent",
     playerColor: opp,
-    description:
-      rule.kind === "fixed"
-        ? `${COLOR_JA[opp]}に${amount}追加`
-        : `${COLOR_JA[opp]}に時間を追加（加算時間はCAへ確認）`,
+    description: `${COLOR_JA[opp]}に${amount}追加`,
   };
   if (rule.kind === "fixed") penalty.timeAdjustmentSeconds = rule.seconds;
 
@@ -339,7 +341,7 @@ function firstOffence(
     ...restoreActions(color, subtype),
     rule.kind === "fixed"
       ? `${COLOR_JA[opp]}の時計に${amount}加算する（7.5.5 / A.3）`
-      : `${COLOR_JA[opp]}の時計に時間を加算する。加算時間（1分 / 2分）はCAへ確認する`,
+      : `${COLOR_JA[opp]}の時計に${amount}加算する。CA・大会規定で加算時間を確認する`,
     `インクリメントがある場合、違法手で${COLOR_JA[color]}に加算されたインクリメント分を差し引く`
   );
   if (subtype === "two-hands")
@@ -355,7 +357,7 @@ function firstOffence(
   return out.decided({
     kind: "recommendation",
     conclusion: unverified
-      ? `${label}: ${COLOR_JA[color]}の1回目の違法手（${SUBTYPE_LABELS[subtype]}）です。${COLOR_JA[opp]}に時間を加算します（加算時間はCAへ確認）。`
+      ? `${label}: ${COLOR_JA[color]}の1回目の違法手（${SUBTYPE_LABELS[subtype]}）です。${COLOR_JA[opp]}に${amount}を加算します。B.2 は Competition Rules（7.5.5 / 9.5.3: 2分）を適用し、A.3 の1分規定を準用するのは B.3 のみのため文言上は2分ですが、CA・大会規定で確認してください。`
       : `${label}: ${COLOR_JA[color]}の1回目の違法手（${SUBTYPE_LABELS[subtype]}）です。${COLOR_JA[opp]}に${amount}を加算します。`,
     actions,
     intervention: "immediate",

@@ -441,6 +441,29 @@ describe("DecisionEngine — DT-005 automatic repetition check via injected port
     expect(r.decision.penalties[0].type).toBe("draw");
   });
 
+  it("B1 regression: 9.2.1 auto check with a blank intended move is a follow-up, not a penalty", async () => {
+    const { chessJsPositionPort } =
+      await import("@/lib/infrastructure/chess/chess-js-position-port");
+    const engine = new DecisionEngine(fixedProviders(), {
+      positions: chessJsPositionPort,
+    });
+    const inc = applyIncidentAnswers(incident({ category: "draw" }), {
+      drawSubtype: "threefold-repetition-claim",
+      claimant: "black",
+      claimantHasMove: "true",
+      claimMode: "about-to-appear",
+      touchedPiece: "false",
+      moveWritten: "true",
+      repetitionCheck: "auto",
+      positionsText: "1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6 4. Ng1",
+      intendedMove: "",
+    });
+    const r = engine.processIncident({ incident: inc, ruleset: STANDARD });
+    expect(r.requiresFollowUp).toBe(true);
+    expect(r.decision.penalties).toHaveLength(0);
+    expect(r.followUpQuestions.map((q) => q.id)).toContain("intendedMove");
+  });
+
   it("without a port, the automatic check is reported as unavailable", () => {
     const inc = applyIncidentAnswers(incident({ category: "draw" }), {
       drawSubtype: "fivefold-repetition",

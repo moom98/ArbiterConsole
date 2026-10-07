@@ -1,3 +1,8 @@
+# Cloudflare Workers (OpenNext / Wrangler)
+.open-next/
+.wrangler/
+.dev.vars
+
 # dependencies
 /node_modules
 /.pnp

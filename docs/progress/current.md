@@ -1,7 +1,7 @@
 # Current Progress
 
-**Last updated:** 2026-10-07
-**Working branch:** `feature/m4-and-review-fixes`. It is not merged to `main`. Pushed to `origin` only if a later note says so.
+**Last updated:** 2026-10-08
+**Working branch:** `feature/m4-and-review-fixes`, pushed to `origin`. PR #1 to `main` is open, and the user merges it.
 
 This file is the handoff for a fresh Claude session. Do not rely on conversation history.
 `docs/IMPLEMENTATION_STATUS.md` is a stale 2024 snapshot. Use this file and `docs/progress/milestones/` instead.
@@ -28,11 +28,17 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
   - **Voice input** (part of Milestone 8).
   - **Multilingual support.**
   - **Further tournament-management features.** Tournament management itself is already implemented in M6.
-- **Deploy once:** the user wants to try a deployment once the work before those items is finished, i.e. now that M5–M7 are merged.
-  - Deploying is outward-facing. **Confirm the target, account and env with the user before deploying.**
-  - The LLM routes need a Node server. A static export would not work, so Vercel is the natural fit.
-  - Build command: `npm run fetch-models && npm run build`. The prebuild step fails if the embedding model is missing.
-  - Required env: `GEMINI_API_KEY`, plus either `LLM_ACCESS_TOKEN` or `LLM_ALLOW_UNAUTHENTICATED=1` behind platform authentication. See README and `.env.example`.
+- **Deploy once (decided 2026-10-08):**
+  - **Target:** Cloudflare Workers via OpenNext (ADR-009).
+  - **AI protection:** `LLM_ACCESS_TOKEN`.
+  - **Branch:** production comes from `main` after the user merges PR #1.
+  - **No embedding model in the first deploy:** keyword search only, because the 118 MB model exceeds the 25 MiB per-file limit on Workers.
+  - **Deploy steps (README → Deploy):**
+    1. The user runs `npx wrangler login`.
+    2. `npx wrangler secret put GEMINI_API_KEY` and `npx wrangler secret put LLM_ACCESS_TOKEN`. The user enters the values.
+    3. `ALLOW_MISSING_MODEL=1 npm run cf:deploy`.
+  - Deploying is outward-facing. **Get the user's go-ahead before running `cf:deploy`.**
+  - **Status:** config built and verified locally with `wrangler dev`; not deployed yet.
 - **Model change (requested earlier):** the user will change the classification and reasoning models in a later task. Only `GEMINI_MODEL_CLASSIFIER` and `GEMINI_MODEL_REASONING` (env) and the defaults in `lib/infrastructure/llm/server/config.ts` need to change. See `milestones/milestone-5.md` → "Changing models later".
 
 ## Important implementation decisions
@@ -53,6 +59,9 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 - **ADR-008:** the round checklist.
   - Templates are code, and customisation stores references to them.
   - Dexie v7. v6 is unused, and future schema versions must be ≥ 8.
+- **ADR-009:** Cloudflare Workers through OpenNext.
+  - Next.js 14.2.35 with `@opennextjs/cloudflare@~1.15.1`. Do not bump to 1.16+ without moving to Next 15.5+/16.
+  - Transformers.js and onnxruntime-node are aliased out of the server bundle.
 - **Citations:** every citation is quoted verbatim from `docs/reference/rules/` PDFs and locked by `__tests__/citations.test.ts`. Never add a ruling without a verified source.
 - **Development cycle** (`.claude/rules/development-cycle.md`):
   - Implement, then run checks, then a separate read-only reviewer agent, then fixes, then re-review.
@@ -83,6 +92,18 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `scripts/check-model-assets.mjs` (prebuild)
 
 ## Tests and verification performed
+
+**Deployment prep (ADR-009, 2026-10-08):**
+
+- Next.js 14.2.35:
+  - tsc is clean;
+  - 48 files / 745 tests pass;
+  - eslint reports 0 errors;
+  - the Node build succeeds.
+- `opennextjs-cloudflare build` succeeds. The worker is 1.28 MiB gzip.
+- Checked locally with `wrangler dev`:
+  - all pages and assets;
+  - the AI routes: fail closed (503), 401 without the token, the Gemini SDK reached with the token, fair-play text rejected (400).
 
 On the Milestone 7 branch after merging M5, which is the content merged into `feature/m4-and-review-fixes`:
 
@@ -116,14 +137,19 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 ## Unresolved questions
 
 - Whether the user's federation applies 1 or 2 minutes for Blitz B.2 (adequate supervision).
-- **Deployment:** target platform, account, domain, and how the AI routes are protected (access token or platform auth). Ask the user.
+- **Custom domain:** whether to use one, or the default `*.workers.dev` URL.
+- **Embedding model hosting:** how to restore semantic search later, e.g. R2 plus an ADR-003 update.
 
 ## Next steps
 
-1. **Deployment (Milestone 10.1) once the user confirms the details.**
-   - Add the platform config (e.g. `vercel.json` with the build command above) and set the env vars.
-   - Deploy, then check HTTPS, PWA install and the AI routes in production.
-2. Later, if the user wants:
+1. **Deployment (Milestone 10.1).**
+   - The config is ready.
+   - Once the user has logged in to Cloudflare, set the secrets and given the go-ahead, run `ALLOW_MISSING_MODEL=1 npm run cf:deploy`.
+   - Then check HTTPS, PWA install, the AI routes (token entered in Settings → AI設定) and keyword search in production.
+2. **Follow-ups found during deployment prep:**
+   - Host the embedding model so semantic search works again.
+   - Upgrade to Next.js 15.5+/16 and the current OpenNext adapter. Next 14 is EOL.
+3. Later, if the user wants:
    - **Milestone 8 without voice input:** clock guide, player Q&A mode, UX polish.
    - **Milestone 9:** Playwright E2E, performance.
    - **Milestone 10.2/10.3:** user and developer docs.

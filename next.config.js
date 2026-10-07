@@ -161,13 +161,13 @@ const nextConfig = {
     serverComponentsExternalPackages: ["@google/genai"],
   },
   webpack: (config, { isServer }) => {
-    // Transformers.jsはブラウザ専用とするため、サーバー側ではonnxruntime-nodeを除外
+    // Transformers.jsはブラウザ専用（generator.ts の動的 import はブラウザでのみ実行される）。
+    // サーバー側では空モジュールにして、onnxruntime-node のネイティブバイナリ（.node）が
+    // サーバーの出力に含まれないようにする（Cloudflare Workers ではバンドルできない。ADR-009）
     if (isServer) {
-      config.externals = config.externals || [];
-      config.externals.push({
-        "onnxruntime-node": "commonjs onnxruntime-node",
-        "@xenova/transformers": "commonjs @xenova/transformers",
-      });
+      config.resolve.alias = config.resolve.alias || {};
+      config.resolve.alias["@xenova/transformers"] = false;
+      config.resolve.alias["onnxruntime-node"] = false;
     }
 
     // .nodeファイルをignore

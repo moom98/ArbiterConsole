@@ -184,10 +184,32 @@ ALLOW_MISSING_MODEL=1 npm run build
 npm start
 ```
 
+### Deploy（Cloudflare Workers。ADR-009）
+
+OpenNext アダプター（`@opennextjs/cloudflare` 1.15.x。Next.js 14 対応の最終系列）で Workers にデプロイします。
+埋め込みモデル（118MB）は Workers の1ファイル上限（25MiB）を超えるため、現在はモデルなし（キーワード検索のみ）で配信します。
+
+```bash
+# 1. Cloudflare にログイン（初回のみ。ブラウザが開きます）
+npx wrangler login
+
+# 2. シークレットを設定（初回・変更時のみ。値は入力プロンプトで渡し、リポジトリには書かない）
+npx wrangler secret put GEMINI_API_KEY
+npx wrangler secret put LLM_ACCESS_TOKEN   # アービターに配布するトークン（設定画面の「AI設定」で入力）
+
+# 3. ビルドしてデプロイ
+ALLOW_MISSING_MODEL=1 npm run cf:deploy
+
+# ローカルで Workers 上の動作を確認する場合（.dev.vars に GEMINI_API_KEY / LLM_ACCESS_TOKEN を書く。.gitignore 済み）
+ALLOW_MISSING_MODEL=1 npm run cf:preview
+```
+
+- 本番で `LLM_ACCESS_TOKEN` が未設定の場合、AI機能は 503 で無効になります（ADR-007）。
+- Gemini キーには Google Cloud 側でクォータと予算アラートを設定してください（レート制限はインスタンスごと）。
+
 ### Testing
 
 ```bash
-# Run tests (currently has dependency issues)
 npm test
 ```
 

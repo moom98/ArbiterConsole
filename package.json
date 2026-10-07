@@ -10,7 +10,10 @@
     "test": "vitest",
     "predev": "node scripts/copy-runtime-assets.mjs",
     "prebuild": "node scripts/copy-runtime-assets.mjs && node scripts/check-model-assets.mjs",
-    "fetch-models": "node scripts/fetch-model-assets.mjs"
+    "fetch-models": "node scripts/fetch-model-assets.mjs",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
   },
   "dependencies": {
     "@google/genai": "2.27.0",
@@ -19,7 +22,7 @@
     "clsx": "^2.1.1",
     "dexie": "^4.4.6",
     "lunr": "^2.3.9",
-    "next": "14.2.18",
+    "next": "14.2.35",
     "next-pwa": "^5.6.0",
     "pdfjs-dist": "^6.4.299",
     "react": "^18.3.1",
@@ -27,6 +30,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "~1.15.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@types/lunr": "^2.3.7",
@@ -38,8 +42,9 @@
     "@vitejs/plugin-react": "^6.1.2",
     "@vitest/ui": "^5.0.3",
     "autoprefixer": "^10.0.1",
+    "esbuild": "0.28.1",
     "eslint": "^8",
-    "eslint-config-next": "14.2.18",
+    "eslint-config-next": "14.2.35",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.6",
     "fake-indexeddb": "^6.2.5",
@@ -49,6 +54,7 @@
     "prettier": "^3.9.9",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "wrangler": "^4.148.0"
   }
 }

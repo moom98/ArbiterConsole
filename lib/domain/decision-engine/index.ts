@@ -5,6 +5,7 @@ import type {
   PlayerColor,
   RuleCitation,
   SupervisionRegime,
+  TournamentOverrides,
 } from "@/lib/domain/entities";
 import { SUPPORTED_RULES_VERSIONS } from "@/lib/domain/entities";
 import {
@@ -44,6 +45,11 @@ export interface RulesetContext {
   supervisionRegime?: SupervisionRegime;
   /** 例: "FIDE-2023" */
   rulesVersion?: string;
+  /**
+   * 大会規定による明示的な上書き（出典付き）。未指定なら上書きなし。
+   * 現在は Blitz B.2 の加算時間のみ参照する（ADR-005 / ADR-006）。
+   */
+  tournamentOverrides?: TournamentOverrides;
 }
 
 export interface DecisionEngineContext {
@@ -156,6 +162,7 @@ export class DecisionEngine {
           subtype: incident.subtype,
           competitionType,
           supervisionRegime: regime,
+          tournamentOverrides: ruleset.tournamentOverrides,
         };
         if (facts.conditionCheck === "auto" && facts.positionsText) {
           if (this.deps.positions) {
@@ -237,6 +244,7 @@ export class DecisionEngine {
       playerColor: color,
       playerIncidentCount: Array.isArray(prior) ? prior.length : undefined,
       priorIllegalMoves: prior,
+      tournamentOverrides: context.ruleset?.tournamentOverrides,
     };
     const result =
       regime === "competition-rules"

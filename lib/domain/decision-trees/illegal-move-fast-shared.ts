@@ -5,6 +5,7 @@ import type {
   Penalty,
   PlayerColor,
   SupervisionRegime,
+  TournamentOverrides,
 } from "@/lib/domain/entities";
 import { cite, type CitationKey } from "@/lib/domain/rules/citations";
 import {
@@ -13,9 +14,11 @@ import {
   type FollowUpQuestion,
 } from "@/lib/domain/follow-up";
 import {
+  appliedPenaltySeconds,
   opponentTimePenalty,
-  formatMinutes,
-  UNVERIFIED_AMOUNT_NOTE,
+  timePenaltyAmount,
+  timePenaltyCitations,
+  tournamentPenaltyNote,
 } from "@/lib/domain/rules/time-penalty";
 import {
   describePriorIllegalMoves,
@@ -46,6 +49,8 @@ export interface FastPenaltyContext {
   opponentCanCheckmate?: boolean | "unknown";
   /** 判断の根拠として先頭に追加する条文（A.4 / A.5.2 / B.2 / B.3 など） */
   regimeSources: CitationKey[];
+  /** 大会規定による明示的な上書き（Blitz B.2 の加算時間のみ参照。ADR-006） */
+  tournamentOverrides?: TournamentOverrides;
 }
 
 export const FAST_SUBTYPE_ARTICLE: Record<IllegalMoveSubtype, CitationKey> = {
@@ -217,6 +222,8 @@ export interface IllegalMoveFastInput {
   /** IncidentCounter が算出した、この対局での違法手ペナルティ回数 */
   playerIncidentCount: number;
   priorIllegalMoves?: PriorIllegalMove[];
+  /** 大会規定による明示的な上書き（DecisionEngine が大会から渡す） */
+  tournamentOverrides?: TournamentOverrides;
 }
 
 /**
@@ -305,7 +312,11 @@ function firstOffence(
 ): DecisionTreeResult {
   const { color, subtype } = ctx;
   const opp = opponentOf(color);
-  const rule = opponentTimePenalty(ctx.competitionType, ctx.regime);
+  const rule = opponentTimePenalty(
+    ctx.competitionType,
+    ctx.regime,
+    ctx.tournamentOverrides
+  );
   const article = FAST_SUBTYPE_ARTICLE[subtype];
 
   const keys: CitationKey[] = [...ctx.regimeSources, article];
@@ -320,17 +331,15 @@ function firstOffence(
     keys.push("MANUAL_7_5_3_CLOCK_IN_ERROR");
   keys.push("MANUAL_7_5_FAST_INCREMENT");
 
-  const amount =
-    rule.kind === "fixed"
-      ? formatMinutes(rule.seconds)
-      : `${formatMinutes(rule.suggestedSeconds)}${UNVERIFIED_AMOUNT_NOTE}`;
+  const amount = timePenaltyAmount(rule);
   // 未確定の加算時間は提示のみ（timeAdjustmentSeconds は設定しない）
   const penalty: Penalty = {
     type: "time-addition-opponent",
     playerColor: opp,
     description: `${COLOR_JA[opp]}に${amount}追加`,
   };
-  if (rule.kind === "fixed") penalty.timeAdjustmentSeconds = rule.seconds;
+  const applied = appliedPenaltySeconds(rule);
+  if (applied !== undefined) penalty.timeAdjustmentSeconds = applied;
 
   const actions = ["時計を止める"];
   if (subtype === "clock-without-move")
@@ -341,7 +350,9 @@ function firstOffence(
     ...restoreActions(color, subtype),
     rule.kind === "fixed"
       ? `${COLOR_JA[opp]}の時計に${amount}加算する（7.5.5 / A.3）`
-      : `${COLOR_JA[opp]}の時計に${amount}加算する。CA・大会規定で加算時間を確認する`,
+      : rule.kind === "tournament"
+        ? `${COLOR_JA[opp]}の時計に${amount}加算する（7.5.5 / ${tournamentPenaltyNote(rule)}）`
+        : `${COLOR_JA[opp]}の時計に${amount}加算する。CA・大会規定で加算時間を確認する`,
     `インクリメントがある場合、違法手で${COLOR_JA[color]}に加算されたインクリメント分を差し引く`
   );
   if (subtype === "two-hands")
@@ -358,11 +369,13 @@ function firstOffence(
     kind: "recommendation",
     conclusion: unverified
       ? `${label}: ${COLOR_JA[color]}の1回目の違法手（${SUBTYPE_LABELS[subtype]}）です。${COLOR_JA[opp]}に${amount}を加算します。B.2 は Competition Rules（7.5.5 / 9.5.3: 2分）を適用し、A.3 の1分規定を準用するのは B.3 のみのため文言上は2分ですが、CA・大会規定で確認してください。`
-      : `${label}: ${COLOR_JA[color]}の1回目の違法手（${SUBTYPE_LABELS[subtype]}）です。${COLOR_JA[opp]}に${amount}を加算します。`,
+      : rule.kind === "tournament"
+        ? `${label}: ${COLOR_JA[color]}の1回目の違法手（${SUBTYPE_LABELS[subtype]}）です。${COLOR_JA[opp]}に${amount}を加算します。${tournamentPenaltyNote(rule)}`
+        : `${label}: ${COLOR_JA[color]}の1回目の違法手（${SUBTYPE_LABELS[subtype]}）です。${COLOR_JA[opp]}に${amount}を加算します。`,
     actions,
     intervention: "immediate",
     penalties: [penalty],
-    sources: cite(...keys),
+    sources: timePenaltyCitations(rule, keys),
     confidence:
       unverified || subtype === "clock-without-move" ? "medium" : "high",
     escalationRecommended: unverified,

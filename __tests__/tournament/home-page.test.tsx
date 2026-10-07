@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   cleanup,
   fireEvent,
@@ -114,5 +114,21 @@ describe("Home page", () => {
     expect(await service.getActiveTournament()).toMatchObject({
       id: other.id,
     });
+  });
+
+  it("shows a load error with retry", async () => {
+    const { service } = useTournamentStore.getState();
+    await service.saveTournamentProfile(profileInput({ name: "秋季大会" }));
+    const spy = vi
+      .spyOn(service, "listTournaments")
+      .mockRejectedValueOnce(new Error("db closed"));
+    render(<HomePage />);
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "db closed"
+    );
+    expect(screen.queryByRole("link", { name: "大会を作成" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "再試行" }));
+    expect(await screen.findByText("秋季大会", { selector: "p" })).toBeTruthy();
+    spy.mockRestore();
   });
 });

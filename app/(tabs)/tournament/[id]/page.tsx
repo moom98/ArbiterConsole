@@ -127,7 +127,7 @@ export default function TournamentDetailPage() {
       <div>
         <Link
           href="/tournament"
-          className="inline-flex items-center min-h-11 text-sm text-blue-700 underline"
+          className="inline-flex items-center min-h-12 text-sm text-blue-700 underline"
         >
           大会一覧
         </Link>
@@ -316,7 +316,7 @@ export default function TournamentDetailPage() {
                     await service.removePlayer(p.id);
                   })
                 }
-                className="min-h-11 px-3 text-sm text-red-700"
+                className="min-h-12 px-3 text-sm text-red-700"
               >
                 削除
               </button>
@@ -332,7 +332,7 @@ export default function TournamentDetailPage() {
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="min-h-11 px-3 text-blue-700 underline"
+              className="min-h-12 px-3 text-blue-700 underline"
             >
               編集
             </button>
@@ -380,7 +380,7 @@ export default function TournamentDetailPage() {
         )}
         <Link
           href="/settings"
-          className="mt-3 inline-flex items-center min-h-11 text-blue-700 underline"
+          className="mt-3 inline-flex items-center min-h-12 text-blue-700 underline"
         >
           大会特別規定（PDF）を登録する（設定）
         </Link>

@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useIncidentStore } from "@/lib/stores/incident-store";
 import { useTournamentStore } from "@/lib/stores/tournament-store";
-import { TournamentGamePicker } from "@/components/tournament/TournamentGamePicker";
+import {
+  AD_HOC_WARNING,
+  TournamentGamePicker,
+} from "@/components/tournament/TournamentGamePicker";
 import { DecisionDisplay } from "@/components/features/DecisionDisplay";
 import { FollowUpQuestions } from "@/components/features/FollowUpQuestions";
 import type {
@@ -72,6 +75,7 @@ export default function ReportPage() {
   const {
     active: activeTournament,
     loaded: tournamentsLoaded,
+    error: tournamentError,
     rounds,
     service: tournamentService,
     load: loadTournaments,
@@ -288,7 +292,7 @@ export default function ReportPage() {
           {step !== "result" && (
             <button
               onClick={() => setStep("context")}
-              className="min-h-11 px-3 text-sm text-blue-600 hover:underline"
+              className="min-h-12 px-3 text-sm text-blue-600 hover:underline"
             >
               変更
             </button>
@@ -335,70 +339,81 @@ export default function ReportPage() {
         <p className="text-gray-500">読み込み中...</p>
       )}
 
-      {step === "context" && tournamentsLoaded && !tournamentMode && (
-        <div className="space-y-5">
-          {activeTournament && (
-            <button
-              type="button"
-              onClick={() => setUseAdHoc(false)}
-              className="min-h-12 px-3 text-blue-700 underline"
-            >
-              「{activeTournament.name}」の対局から選ぶ
-            </button>
-          )}
-          <p className="text-gray-600">
-            {lastContext
-              ? "対局を確認してください（前回の値を表示しています。ラウンド・ボードが正しいか確認）"
-              : "対局を指定してください"}
-          </p>
-
-          <fieldset>
-            <legend className="font-semibold mb-2">
-              {QUESTIONS.competitionType.label}
-            </legend>
-            <div className="grid grid-cols-3 gap-2">
-              {QUESTIONS.competitionType.options.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  aria-pressed={draft.competitionType === opt.value}
-                  onClick={() =>
-                    setDraft((d) => ({
-                      ...d,
-                      competitionType: opt.value as CompetitionType,
-                    }))
-                  }
-                  className={`min-h-14 rounded-lg border-2 font-semibold ${
-                    draft.competitionType === opt.value
-                      ? "border-blue-600 bg-blue-50"
-                      : "border-gray-200"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+      {/* 大会の読み込みに失敗した場合は暗黙に暫定へ切り替えず、再試行を促す */}
+      {step === "context" &&
+        tournamentsLoaded &&
+        tournamentError &&
+        !useAdHoc && (
+          <div
+            role="alert"
+            className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm space-y-2"
+          >
+            <p>大会情報を読み込めませんでした: {tournamentError}</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void loadTournaments()}
+                className="flex-1 min-h-12 px-3 bg-blue-600 text-white rounded-lg font-semibold"
+              >
+                再試行
+              </button>
+              <button
+                type="button"
+                onClick={() => setUseAdHoc(true)}
+                className="flex-1 min-h-12 px-3 bg-white border border-gray-300 rounded-lg"
+              >
+                暫定の対局で報告
+              </button>
             </div>
-          </fieldset>
+          </div>
+        )}
 
-          {needsRegime && (
+      {step === "context" &&
+        tournamentsLoaded &&
+        !tournamentMode &&
+        (!tournamentError || useAdHoc) && (
+          <div className="space-y-5">
+            {activeTournament && (
+              <div
+                role="alert"
+                className="p-3 bg-yellow-50 border border-yellow-300 rounded-lg text-sm text-yellow-900"
+              >
+                <p className="font-semibold">
+                  暫定の対局で報告します。{AD_HOC_WARNING}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setUseAdHoc(false)}
+                  className="mt-1 min-h-12 px-3 text-blue-700 underline"
+                >
+                  「{activeTournament.name}」の対局から選ぶ
+                </button>
+              </div>
+            )}
+            <p className="text-gray-600">
+              {lastContext
+                ? "対局を確認してください（前回の値を表示しています。ラウンド・ボードが正しいか確認）"
+                : "対局を指定してください"}
+            </p>
+
             <fieldset>
               <legend className="font-semibold mb-2">
-                {QUESTIONS.supervisionRegime.label}
+                {QUESTIONS.competitionType.label}
               </legend>
-              <div className="grid grid-cols-1 gap-2">
-                {QUESTIONS.supervisionRegime.options.map((opt) => (
+              <div className="grid grid-cols-3 gap-2">
+                {QUESTIONS.competitionType.options.map((opt) => (
                   <button
                     key={opt.value}
                     type="button"
-                    aria-pressed={draft.supervisionRegime === opt.value}
+                    aria-pressed={draft.competitionType === opt.value}
                     onClick={() =>
                       setDraft((d) => ({
                         ...d,
-                        supervisionRegime: opt.value as SupervisionRegime,
+                        competitionType: opt.value as CompetitionType,
                       }))
                     }
-                    className={`min-h-14 px-4 rounded-lg border-2 text-left font-semibold ${
-                      draft.supervisionRegime === opt.value
+                    className={`min-h-14 rounded-lg border-2 font-semibold ${
+                      draft.competitionType === opt.value
                         ? "border-blue-600 bg-blue-50"
                         : "border-gray-200"
                     }`}
@@ -408,80 +423,109 @@ export default function ReportPage() {
                 ))}
               </div>
             </fieldset>
-          )}
 
-          <fieldset>
-            <legend className="font-semibold mb-2">規則バージョン</legend>
-            <div className="grid grid-cols-1 gap-2">
-              {RULES_VERSION_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  aria-pressed={draft.rulesVersion === opt.value}
-                  onClick={() =>
-                    setDraft((d) => ({ ...d, rulesVersion: opt.value }))
-                  }
-                  className={`min-h-14 px-4 rounded-lg border-2 text-left font-semibold ${
-                    draft.rulesVersion === opt.value
-                      ? "border-blue-600 bg-blue-50"
-                      : "border-gray-200"
-                  }`}
-                >
-                  {opt.label}
-                </button>
+            {needsRegime && (
+              <fieldset>
+                <legend className="font-semibold mb-2">
+                  {QUESTIONS.supervisionRegime.label}
+                </legend>
+                <div className="grid grid-cols-1 gap-2">
+                  {QUESTIONS.supervisionRegime.options.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      aria-pressed={draft.supervisionRegime === opt.value}
+                      onClick={() =>
+                        setDraft((d) => ({
+                          ...d,
+                          supervisionRegime: opt.value as SupervisionRegime,
+                        }))
+                      }
+                      className={`min-h-14 px-4 rounded-lg border-2 text-left font-semibold ${
+                        draft.supervisionRegime === opt.value
+                          ? "border-blue-600 bg-blue-50"
+                          : "border-gray-200"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+
+            <fieldset>
+              <legend className="font-semibold mb-2">規則バージョン</legend>
+              <div className="grid grid-cols-1 gap-2">
+                {RULES_VERSION_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    aria-pressed={draft.rulesVersion === opt.value}
+                    onClick={() =>
+                      setDraft((d) => ({ ...d, rulesVersion: opt.value }))
+                    }
+                    className={`min-h-14 px-4 rounded-lg border-2 text-left font-semibold ${
+                      draft.rulesVersion === opt.value
+                        ? "border-blue-600 bg-blue-50"
+                        : "border-gray-200"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="grid grid-cols-2 gap-3">
+              {(
+                [
+                  ["round", "ラウンド"],
+                  ["boardNumber", "ボード"],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="block">
+                  <span className="block font-semibold mb-2">{label}</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    value={draft[key] ?? ""}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        [key]:
+                          e.target.value === ""
+                            ? undefined
+                            : Number(e.target.value),
+                      }))
+                    }
+                    className="w-full min-h-14 px-4 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </label>
               ))}
             </div>
-          </fieldset>
 
-          <div className="grid grid-cols-2 gap-3">
-            {(
-              [
-                ["round", "ラウンド"],
-                ["boardNumber", "ボード"],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key} className="block">
-                <span className="block font-semibold mb-2">{label}</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  value={draft[key] ?? ""}
-                  onChange={(e) =>
-                    setDraft((d) => ({
-                      ...d,
-                      [key]:
-                        e.target.value === ""
-                          ? undefined
-                          : Number(e.target.value),
-                    }))
-                  }
-                  className="w-full min-h-14 px-4 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </label>
-            ))}
+            {contextErrors.length > 0 && Object.keys(draft).length > 0 && (
+              <ul className="text-sm text-red-700 list-disc ml-5">
+                {contextErrors.map((e) => (
+                  <li key={e}>{e}</li>
+                ))}
+              </ul>
+            )}
+
+            <button
+              type="button"
+              disabled={contextErrors.length > 0}
+              onClick={() =>
+                setStep(selectedCategory ? "description" : "category")
+              }
+              className="w-full min-h-14 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold"
+            >
+              この対局で報告
+            </button>
           </div>
-
-          {contextErrors.length > 0 && Object.keys(draft).length > 0 && (
-            <ul className="text-sm text-red-700 list-disc ml-5">
-              {contextErrors.map((e) => (
-                <li key={e}>{e}</li>
-              ))}
-            </ul>
-          )}
-
-          <button
-            type="button"
-            disabled={contextErrors.length > 0}
-            onClick={() =>
-              setStep(selectedCategory ? "description" : "category")
-            }
-            className="w-full min-h-14 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold"
-          >
-            この対局で報告
-          </button>
-        </div>
-      )}
+        )}
 
       {/* Category Selection */}
       {step === "category" && (
@@ -500,7 +544,7 @@ export default function ReportPage() {
               <button
                 type="button"
                 onClick={() => setStep("context")}
-                className="mt-2 min-h-11 px-3 text-blue-600 underline"
+                className="mt-2 min-h-12 px-3 text-blue-600 underline"
               >
                 対局の設定へ戻る
               </button>
@@ -557,7 +601,7 @@ export default function ReportPage() {
             </h2>
             <button
               onClick={() => setStep("category")}
-              className="min-h-11 px-3 text-sm text-blue-600 hover:underline"
+              className="min-h-12 px-3 text-sm text-blue-600 hover:underline"
             >
               カテゴリを変更
             </button>

@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   cleanup,
   fireEvent,
@@ -137,5 +137,65 @@ describe("Report page — game context from the active tournament", () => {
         })) as HTMLButtonElement
       ).disabled
     ).toBe(true);
+  });
+
+  it("ad-hoc while a tournament is active requires a confirm and shows the history warning", async () => {
+    await seedTournament();
+    render(<ReportPage />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "大会を使わずに報告（暫定の対局）",
+      })
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "違法手回数・ペナルティ履歴は大会の対局とは別に数えられます"
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "暫定の対局で報告する" })
+    );
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "暫定の対局で報告します"
+    );
+    expect(screen.getByText("対局を指定してください")).toBeTruthy();
+  });
+
+  it("other board: an empty round is a validation error, not a fallback", async () => {
+    await seedTournament();
+    render(<ReportPage />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "その他のボード（番号を入力）",
+      })
+    );
+    const [round, board] = screen.getAllByRole("spinbutton");
+    expect((round as HTMLInputElement).value).toBe("2");
+    fireEvent.change(round, { target: { value: "" } });
+    fireEvent.change(board, { target: { value: "7" } });
+    expect(
+      screen.getByText("ラウンドは1以上の整数で入力してください")
+    ).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "この対局で報告",
+        }) as HTMLButtonElement
+      ).disabled
+    ).toBe(true);
+  });
+
+  it("shows a tournament load error with retry instead of silently using ad-hoc", async () => {
+    await seedTournament();
+    const { service } = useTournamentStore.getState();
+    const spy = vi
+      .spyOn(service, "listTournaments")
+      .mockRejectedValueOnce(new Error("db closed"));
+    render(<ReportPage />);
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "db closed"
+    );
+    expect(screen.queryByText("対局を指定してください")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "再試行" }));
+    expect(await screen.findByRole("button", { name: /ボード4/ })).toBeTruthy();
+    spy.mockRestore();
   });
 });

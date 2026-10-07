@@ -25,6 +25,10 @@ export interface TournamentGamePickerProps {
   onUseAdHoc: () => void;
 }
 
+/** 大会がある状態で暫定の対局を使う場合の注意（違法手回数の履歴が分かれる） */
+export const AD_HOC_WARNING =
+  "大会の対局に紐づかないため、この対局の違法手回数・ペナルティ履歴は大会の対局とは別に数えられます。";
+
 function playersLine(game: Game): string | null {
   const w = game.white.name;
   const b = game.black.name;
@@ -48,17 +52,20 @@ export function TournamentGamePicker(props: TournamentGamePickerProps) {
     disabled,
   } = props;
   const [otherOpen, setOtherOpen] = useState(false);
+  const [confirmAdHoc, setConfirmAdHoc] = useState(false);
   const [otherRound, setOtherRound] = useState<string>("");
   const [otherBoard, setOtherBoard] = useState<string>("");
   const blocked = disabled || rulesetErrors.length > 0;
 
-  const otherRoundNumber = Number(otherRound || selectedRound || "");
-  const otherBoardNumber = Number(otherBoard);
-  const otherValid =
-    Number.isInteger(otherRoundNumber) &&
-    otherRoundNumber >= 1 &&
-    Number.isInteger(otherBoardNumber) &&
-    otherBoardNumber >= 1;
+  // 空欄は前の値にフォールバックせず、入力エラーとする
+  const otherRoundNumber = otherRound.trim() === "" ? NaN : Number(otherRound);
+  const otherBoardNumber = otherBoard.trim() === "" ? NaN : Number(otherBoard);
+  const otherErrors: string[] = [];
+  if (!(Number.isInteger(otherRoundNumber) && otherRoundNumber >= 1))
+    otherErrors.push("ラウンドは1以上の整数で入力してください");
+  if (!(Number.isInteger(otherBoardNumber) && otherBoardNumber >= 1))
+    otherErrors.push("ボード番号は1以上の整数で入力してください");
+  const otherValid = otherErrors.length === 0;
 
   return (
     <div className="space-y-4">
@@ -82,7 +89,7 @@ export function TournamentGamePicker(props: TournamentGamePickerProps) {
           </ul>
           <Link
             href={`/tournament/${encodeURIComponent(tournament.id)}`}
-            className="inline-flex items-center min-h-11 text-blue-700 underline"
+            className="inline-flex items-center min-h-12 text-blue-700 underline"
           >
             大会設定を開く
           </Link>
@@ -171,7 +178,12 @@ export function TournamentGamePicker(props: TournamentGamePickerProps) {
         {!otherOpen ? (
           <button
             type="button"
-            onClick={() => setOtherOpen(true)}
+            onClick={() => {
+              setOtherRound(
+                selectedRound !== null ? String(selectedRound) : ""
+              );
+              setOtherOpen(true);
+            }}
             className="min-h-12 px-3 text-blue-700 underline"
           >
             その他のボード（番号を入力）
@@ -185,7 +197,7 @@ export function TournamentGamePicker(props: TournamentGamePickerProps) {
                   type="number"
                   inputMode="numeric"
                   min={1}
-                  value={otherRound || (selectedRound ?? "")}
+                  value={otherRound}
                   onChange={(e) => setOtherRound(e.target.value)}
                   className="w-full min-h-12 px-3 text-lg border border-gray-300 rounded-lg"
                 />
@@ -202,6 +214,13 @@ export function TournamentGamePicker(props: TournamentGamePickerProps) {
                 />
               </label>
             </div>
+            {(otherBoard !== "" || otherRound.trim() === "") && !otherValid && (
+              <ul className="text-sm text-red-700 list-disc ml-5">
+                {otherErrors.map((e) => (
+                  <li key={e}>{e}</li>
+                ))}
+              </ul>
+            )}
             <button
               type="button"
               disabled={blocked || !otherValid}
@@ -216,13 +235,38 @@ export function TournamentGamePicker(props: TournamentGamePickerProps) {
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={props.onUseAdHoc}
-        className="min-h-12 px-3 text-sm text-gray-600 underline"
-      >
-        大会を使わずに報告（暫定の対局）
-      </button>
+      {!confirmAdHoc ? (
+        <button
+          type="button"
+          onClick={() => setConfirmAdHoc(true)}
+          className="min-h-12 px-3 text-sm text-gray-600 underline"
+        >
+          大会を使わずに報告（暫定の対局）
+        </button>
+      ) : (
+        <div
+          role="alert"
+          className="p-3 bg-yellow-50 border border-yellow-300 rounded-lg text-sm text-yellow-900 space-y-2"
+        >
+          <p className="font-semibold">{AD_HOC_WARNING}</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={props.onUseAdHoc}
+              className="flex-1 min-h-12 px-3 bg-yellow-600 text-white rounded-lg font-semibold"
+            >
+              暫定の対局で報告する
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmAdHoc(false)}
+              className="flex-1 min-h-12 px-3 bg-white border border-gray-300 rounded-lg"
+            >
+              大会の対局を選ぶ
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

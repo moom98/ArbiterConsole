@@ -8,7 +8,10 @@ import {
   type HomeSummary,
 } from "@/lib/application/home-summary";
 import { formatRulesetSummary } from "@/lib/domain/services/tournament-profile";
-import { ROUND_STATUS_LABEL } from "@/lib/domain/services/round-planning";
+import {
+  currentRound,
+  ROUND_STATUS_LABEL,
+} from "@/lib/domain/services/round-planning";
 import { decisionOf } from "@/lib/domain/services/penalty-history";
 import {
   categoryLabel,
@@ -27,31 +30,36 @@ function truncate(text: string, max: number): string {
 }
 
 export default function HomePage() {
-  const { tournaments, active, rounds, loaded, load, setActive } =
+  const { tournaments, active, rounds, loaded, error, load, setActive } =
     useTournamentStore();
   const [summary, setSummary] = useState<HomeSummary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
-    if (!active) {
-      setSummary(null);
-      return;
-    }
+    setSummary(null);
+    setSummaryError(null);
+    if (!active) return;
     let cancelled = false;
     loadHomeSummary(active.id, rounds)
       .then((s) => {
         if (!cancelled) setSummary(s);
       })
-      .catch((e) => console.error("Failed to load home summary:", e));
+      .catch((e) => {
+        console.error("Failed to load home summary:", e);
+        if (!cancelled)
+          setSummaryError(e instanceof Error ? e.message : String(e));
+      });
     return () => {
       cancelled = true;
     };
   }, [active, rounds]);
 
-  const round = summary?.currentRound ?? null;
+  // ラウンドの状態はストアのラウンドから直接求める（サマリーの読み込みを待たない）
+  const round = currentRound(rounds);
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto">
@@ -76,6 +84,21 @@ export default function HomePage() {
           <h2 id="tournament-title" className="text-sm text-gray-600 mb-1">
             現在の大会
           </h2>
+          {error && (
+            <div
+              role="alert"
+              className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
+            >
+              <p>大会情報を読み込めませんでした: {error}</p>
+              <button
+                type="button"
+                onClick={() => void load()}
+                className="mt-2 w-full min-h-12 px-3 bg-blue-600 text-white rounded-lg font-semibold"
+              >
+                再試行
+              </button>
+            </div>
+          )}
           {active ? (
             <>
               <p className="text-lg font-bold">{active.name}</p>
@@ -105,7 +128,7 @@ export default function HomePage() {
                 {round ? "ラウンド・ボード管理" : "ラウンドを作成"}
               </Link>
             </>
-          ) : loaded ? (
+          ) : loaded && !error ? (
             <>
               <p className="text-gray-700 mb-3">
                 大会が選択されていません。大会を作成すると、報告時にラウンド・ボードを選ぶだけで規則セットが適用されます。
@@ -117,9 +140,9 @@ export default function HomePage() {
                 大会を作成
               </Link>
             </>
-          ) : (
+          ) : !loaded ? (
             <p className="text-gray-500">読み込み中...</p>
-          )}
+          ) : null}
 
           {tournaments.length > 1 && (
             <label className="block mt-3 text-sm">
@@ -141,7 +164,7 @@ export default function HomePage() {
           {tournaments.length > 0 && (
             <Link
               href="/tournament"
-              className="inline-flex items-center min-h-11 mt-1 text-sm text-blue-700 underline"
+              className="inline-flex items-center min-h-12 mt-1 text-sm text-blue-700 underline"
             >
               大会一覧
             </Link>
@@ -168,6 +191,14 @@ export default function HomePage() {
             <h2 id="recent-title" className="text-lg font-semibold mb-2">
               最近のIncident
             </h2>
+            {!summary && !summaryError && (
+              <p className="text-sm text-gray-500">読み込み中...</p>
+            )}
+            {summaryError && (
+              <p role="alert" className="text-sm text-red-700">
+                Incidentを読み込めませんでした: {summaryError}
+              </p>
+            )}
             {summary && summary.recent.length === 0 && (
               <p className="text-sm text-gray-600">まだ記録はありません。</p>
             )}
@@ -200,7 +231,7 @@ export default function HomePage() {
             </ul>
             <Link
               href="/log"
-              className="mt-2 inline-flex items-center min-h-11 text-blue-700 underline"
+              className="mt-2 inline-flex items-center min-h-12 text-blue-700 underline"
             >
               履歴をすべて見る
             </Link>

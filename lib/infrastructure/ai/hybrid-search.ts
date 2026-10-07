@@ -364,13 +364,15 @@ const defaultDeps: HybridSearchDeps = {
   },
 
   async vector(query, candidates) {
-    const [queryVector, embeddings] = await Promise.all([
-      generateEmbedding(query),
-      db.embeddings.where("model").equals(EMBEDDING_MODEL_ID).toArray(),
-    ]);
+    // 埋め込みが無い場合（モデル未配信の環境等）はモデルを読み込まない（毎回の読み込み失敗を避ける）
+    const embeddings = await db.embeddings
+      .where("model")
+      .equals(EMBEDDING_MODEL_ID)
+      .toArray();
     if (embeddings.length === 0) {
       throw new Error("No embeddings available for the current model");
     }
+    const queryVector = await generateEmbedding(query);
     return scoreByVector(
       queryVector,
       candidates,

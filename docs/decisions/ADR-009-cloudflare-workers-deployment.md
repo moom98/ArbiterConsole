@@ -36,7 +36,12 @@
    - `GEMINI_API_KEY` and `LLM_ACCESS_TOKEN` are Worker **secrets**, set with `npx wrangler secret put`. They are never in `wrangler.jsonc` or the repo.
    - The AI routes are protected by the access token. The user chose this over platform auth.
    - In production the routes fail closed without the token (ADR-007).
-5. **Build and deploy.**
+5. **Build-time safety (review fixes).**
+   - `scripts/check-cf-env.mjs` runs first in `cf:build`. It stops the build if `.env`, `.env.local` or `.env.production(.local)` exists, because OpenNext embeds those values in the worker script. Without this, a developer's Gemini key or `LLM_ALLOW_UNAUTHENTICATED=1` could ship to production. Local Workers values go in `.dev.vars`; production values are set with `wrangler secret put`.
+   - `public/.assetsignore` contains `models/`. A locally fetched 118 MB model is then left out of the upload instead of breaking `wrangler deploy`.
+   - next-pwa now uses `buildExcludes: [/app-build-manifest\.json$/]`. That file is never served with the App Router, and precaching it made the service-worker install fail. This was an existing bug on Node as well. All 51 precache URLs now return 200 from the built worker.
+   - When there are no embeddings, hybrid search no longer tries to load the model, so it does not request the missing model files on every search.
+6. **Build and deploy.**
    - Command: `ALLOW_MISSING_MODEL=1 npm run cf:deploy`.
    - This runs the OpenNext build, which runs `next build` with the existing prebuild checks, then `wrangler deploy`.
    - `ALLOW_MISSING_MODEL=1` is required only while the model is not hosted.
@@ -58,3 +63,5 @@
 - **Next.js 14 is end-of-life, and adapter 1.15.x will not get new fixes.** Plan an upgrade to Next.js 15.5+/16 and the current adapter. This touches React 19 and `next-pwa` compatibility, so it needs its own milestone.
 - The in-memory rate limit and daily cap are per Worker isolate (ADR-007). Set Google Cloud quotas and a billing budget for the Gemini key.
 - `npm run build` and `next start` on Node still work, so the Node deployment path is unchanged.
+- Workers static assets do not set immutable cache headers for `/_next/static/*`. A `public/_headers` file can add them later; this is optional.
+- Do not set `TRUST_PROXY` on Workers. All callers then share one rate-limit key per isolate.

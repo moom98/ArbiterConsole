@@ -6,6 +6,9 @@ const withPWA = require("next-pwa")({
   // モデル・WASMは大きく（数十〜百MB超）precacheに含めない。初回利用時に
   // 下記の runtimeCaching (CacheFirst) でキャッシュしオフラインでも利用する。
   publicExcludes: ["!noprecache/**/*", "!models/**/*", "!ort/**/*"],
+  // App Router では app-build-manifest.json は配信されないため precache すると SW のインストールが失敗する
+  // （next-pwa 5.x の既知の問題。ADR-009）
+  buildExcludes: [/app-build-manifest\.json$/],
   // LLM（ADR-007）: 同一オリジンの POST /api/llm/* のみ。Workbox の runtimeCaching は GET のみを
   // 対象とし、さらに下の "others" ルールで /api/ を除外しているため応答はキャッシュされない。
   // /api/ をキャッシュするルールを追加しないこと

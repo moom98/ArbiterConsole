@@ -2,6 +2,7 @@
 
 **Last updated:** 2026-10-08
 **Working branch:** `feature/m4-and-review-fixes`, pushed to `origin`. PR #1 to `main` is open, and the user merges it.
+- The deployment config (ADR-009) was built on `feature/cloudflare-deploy` and then merged into `feature/m4-and-review-fixes`, so it is part of PR #1.
 
 This file is the handoff for a fresh Claude session. Do not rely on conversation history.
 `docs/IMPLEMENTATION_STATUS.md` is a stale 2024 snapshot. Use this file and `docs/progress/milestones/` instead.

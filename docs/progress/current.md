@@ -40,6 +40,11 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
     3. `ALLOW_MISSING_MODEL=1 npm run cf:deploy`.
   - Deploying is outward-facing. **Get the user's go-ahead before running `cf:deploy`.**
   - **Status:** config built and verified locally with `wrangler dev`; not deployed yet.
+  - **Build-time safety (ADR-009):**
+    - `cf:build` aborts if any `.env*` file other than `.env.example` exists.
+    - Local Workers values go in `.dev.vars`; production values are set with `wrangler secret put`.
+    - `public/.assetsignore` keeps `models/` out of the upload.
+    - Do not set `TRUST_PROXY` on Workers.
 - **Model change (requested earlier):** the user will change the classification and reasoning models in a later task. Only `GEMINI_MODEL_CLASSIFIER` and `GEMINI_MODEL_REASONING` (env) and the defaults in `lib/infrastructure/llm/server/config.ts` need to change. See `milestones/milestone-5.md` → "Changing models later".
 
 ## Important implementation decisions

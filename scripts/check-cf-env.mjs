@@ -2,16 +2,17 @@
 /**
  * Cloudflare Workers 向けビルド（cf:build / cf:preview / cf:deploy）の前に実行する。
  *
- * OpenNext は .env / .env.local / .env.production(.local) の値をワーカーのスクリプトに埋め込む。
+ * OpenNext は .env* ファイル（production / development / test の各モード）の値をワーカーのスクリプトに埋め込む。
  * 開発用の GEMINI_API_KEY や LLM_ALLOW_UNAUTHENTICATED=1 が本番に混入しないよう、
  * これらのファイルがある場合はビルドを中止する（ADR-009）。
  * Workers のローカル確認用の値は .dev.vars に、本番の値は `npx wrangler secret put` で設定する。
  */
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync } from "node:fs";
 
-const FILES = [".env", ".env.local", ".env.production", ".env.production.local"];
-const found = FILES.filter((f) => existsSync(join(process.cwd(), f)));
+// .env.example（値を含まないテンプレート）以外の .env* はすべて対象
+const found = readdirSync(process.cwd()).filter(
+  (f) => /^\.env(\..+)?$/.test(f) && f !== ".env.example"
+);
 
 if (found.length > 0) {
   console.error(

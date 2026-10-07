@@ -204,7 +204,7 @@ ALLOW_MISSING_MODEL=1 npm run cf:deploy
 ALLOW_MISSING_MODEL=1 npm run cf:preview
 ```
 
-- `.env` / `.env.local` / `.env.production*` があると `cf:build` は中止します。OpenNext がその値をワーカーに埋め込むためです。ローカル確認の値は `.dev.vars`、本番の値は `wrangler secret put` で設定してください。
+- `.env.example` 以外の `.env*` ファイルがあると `cf:build` は中止します（必ず `npm run cf:*` を使用。`opennextjs-cloudflare` を直接実行するとこの確認は行われません）。OpenNext がその値をワーカーに埋め込むためです。ローカル確認の値は `.dev.vars`、本番の値は `wrangler secret put` で設定してください。
 - `npm run fetch-models` 済みでも、`public/models/` は `.assetsignore` によりアップロードされません。
 - 本番で `LLM_ACCESS_TOKEN` が未設定の場合、AI機能は 503 で無効になります（ADR-007）。
 - Gemini キーには Google Cloud 側でクォータと予算アラートを設定してください（レート制限はインスタンスごと）。

@@ -37,7 +37,7 @@
    - The AI routes are protected by the access token. The user chose this over platform auth.
    - In production the routes fail closed without the token (ADR-007).
 5. **Build-time safety (review fixes).**
-   - `scripts/check-cf-env.mjs` runs first in `cf:build`. It stops the build if `.env`, `.env.local` or `.env.production(.local)` exists, because OpenNext embeds those values in the worker script. Without this, a developer's Gemini key or `LLM_ALLOW_UNAUTHENTICATED=1` could ship to production. Local Workers values go in `.dev.vars`; production values are set with `wrangler secret put`.
+   - `scripts/check-cf-env.mjs` runs first in `cf:build`. It stops the build if any `.env*` file other than `.env.example` exists, because OpenNext embeds the values for the production, development and test modes in the worker script. Always use the `npm run cf:*` scripts; running `opennextjs-cloudflare build` directly skips the guard. Without this, a developer's Gemini key or `LLM_ALLOW_UNAUTHENTICATED=1` could ship to production. Local Workers values go in `.dev.vars`; production values are set with `wrangler secret put`.
    - `public/.assetsignore` contains `models/`. A locally fetched 118 MB model is then left out of the upload instead of breaking `wrangler deploy`.
    - next-pwa now uses `buildExcludes: [/app-build-manifest\.json$/]`. That file is never served with the App Router, and precaching it made the service-worker install fail. This was an existing bug on Node as well. All 51 precache URLs now return 200 from the built worker.
    - When there are no embeddings, hybrid search no longer tries to load the model, so it does not request the missing model files on every search.

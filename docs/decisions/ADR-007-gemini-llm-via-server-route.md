@@ -63,17 +63,48 @@ Constraints that still apply:
   `Content-Type: application/json`, which forces a CORS preflight for cross-origin browser callers.
 - Every request is validated by hand-written checks (types, enums, string lengths, article count, total
   body size). Invalid input returns 400 or 413 with a typed error `{ ok: false, error: { code, message } }`.
-- Rate limit: an in-memory token bucket of **10 requests per minute per client IP**, shared by both
-  routes. It returns 429 with a `Retry-After` header. **Limitation:** on serverless or multi-instance
-  deployments each instance has its own bucket, and the bucket is lost on a cold start. It is a basic
-  abuse guard, not a quota. A shared store (for example Redis) is needed for a strict limit.
-- Each attempt has a timeout (reasoning 20 s, classification 8 s). The total deadline is 30 s. The
-  server retries with exponential backoff and jitter on transient errors (408, 429, 5xx, network
-  errors, per-attempt timeouts). The SDK's own retry is turned off, so retry behaviour is defined only
-  in this code.
+- **Access control (open paid proxy risk).** If `LLM_ACCESS_TOKEN` is set, every request must send
+  a matching `X-Arbiter-Access-Token` header, otherwise the route returns 401 `unauthorized`. The
+  comparison is constant time (SHA-256 + `timingSafeEqual`). This token is not the Gemini key. Never
+  put it in a `NEXT_PUBLIC_*` variable, because that would ship it in the bundle. Deployment options:
+  - **(a) Recommended:** put platform protection or authentication in front of the whole app (for
+    example Vercel Deployment Protection, Cloudflare Access, or a reverse proxy with auth).
+  - **(b)** Set `LLM_ACCESS_TOKEN` and give the token to arbiters. They enter it once (the
+    `LlmAccessTokenField`, shown when a request is unauthorized; it can also be mounted in Settings),
+    and it is kept in the device's `localStorage`. Trade-off: anyone with the device or the token can use
+    the AI routes. The cost is still bounded by the caps below, and changing `LLM_ACCESS_TOKEN` revokes
+    the token.
+  - Without (a) or (b), anyone who can reach the deployment can spend the Gemini quota.
+- **Rate limits.** Each route has its own in-memory token bucket:
+  `LLM_RATE_LIMIT_REASON_PER_MINUTE` and `LLM_RATE_LIMIT_CLASSIFY_PER_MINUTE` (default 10 each). Over the
+  limit the route returns 429 with `Retry-After`.
+  - The client key is the first `X-Forwarded-For` (or `X-Real-IP`) only when `TRUST_PROXY=1`, that is,
+    behind a proxy that overwrites the header. Otherwise the header could be spoofed, so all callers
+    share **one per-process bucket**, and the limit is on the total.
+  - **Limitation:** buckets are per instance and are lost on a cold start. This is an abuse guard, not a
+    quota.
+- **Daily cap.** `LLM_DAILY_REQUEST_LIMIT` (default 500, `0` = unlimited) caps the requests per process
+  per UTC day that reach Gemini. Over the cap the route returns 429 `quota-exceeded`. This is also
+  per instance.
+- **Hard cost limit (operations):** set it in Google Cloud / AI Studio with API quota limits on the
+  project (requests per minute / per day) and a billing budget with alerts. Use a dedicated project or
+  key for this app. The in-process caps are not a substitute.
+- **Timeouts and retries.** The total deadline is 30 s, before the client aborts at 35 s; the routes
+  export `maxDuration = 35`.
+  - Each attempt's timeout is `min(20 s reasoning / 8 s classification, time remaining)`.
+  - Up to 3 attempts, with exponential backoff and jitter, only on transient errors: 408, 429, 5xx,
+    known transport errors (fetch failed, ECONNRESET, …) and timeouts. Unknown exceptions are not
+    retried. No retry starts with less than 3 s remaining.
+  - The SDK's own retry is turned off.
+- **Thinking.** `thinkingConfig.thinkingLevel` comes from `GEMINI_THINKING_LEVEL` (default `low`; `off`
+  sends nothing, for models without thinking). The reasoning output budget is 6,000 tokens and the
+  classification budget 1,024. Thinking tokens count against this budget.
+- **Body size.** The request body is read as a stream and reading stops at 160 KB (413), whether or not
+  a `Content-Length` is present.
 - Errors are mapped to typed codes: `not-configured` (503, key missing; the response never contains the
   key or its presence details), `upstream-timeout` (504), `upstream-unavailable` (503),
-  `upstream-error` (502), `invalid-model-output` (502), `blocked` (422, safety block / no text).
+  `upstream-error` (502), `invalid-model-output` (502), `blocked` (422, safety block / no text),
+  `unauthorized` (401), `rate-limited` / `quota-exceeded` (429).
 - Logging is limited to the error code, upstream HTTP status and attempt count. Incident text, articles
   and model output are never logged.
 - Next-PWA: `/api/**` is excluded from the "others" NetworkFirst rule, and Workbox runtime caching only
@@ -100,18 +131,49 @@ Constraints that still apply:
   - the schema is invalid (enums, required fields, types);
   - a penalty has no source, or cites an article that is not among the citations;
   - a cited article ID is not among the articles sent, or is no longer stored in IndexedDB;
-  - a quote does not match the stored article text (substring after NFKC / whitespace / quote
-    normalisation; `…` fragments must appear in order);
-  - the conclusion, actions or penalty descriptions use speculative wording (「おそらく」「と思われる」
-    「可能性がある」「かもしれない」, "probably", "might", …);
-  - the incident is fair-play and the draft proposes a penalty (§23: never automate cheating rulings).
+  - a quote does not match the article text that was sent. The quote is compared after NFKC,
+    whitespace removal and quote/dash normalisation, and ellipsis variants are unified to `…` before
+    splitting. To prevent stitching quotes that invert the meaning:
+    - a contiguous quote needs at least 20 normalised characters (10 if Japanese);
+    - at most one `…` is allowed, and each fragment needs at least 15 characters (8 if Japanese);
+    - the omitted text must be at most 200 characters and must not contain negation or exception words
+      (not / never / except / unless / however / ない / ず / 禁止 / ただし / 除く / 例外 …);
+    - a quote immediately followed by a Japanese negation (「所持」→「所持してはならない」) is rejected;
+  - any free-text field (conclusion, actions, penalty descriptions, citation relevance,
+    missingInformation, escalationReason) uses speculative wording: 「おそらく」「と思われる」
+    「可能性がある」「かもしれない」「恐れがある」「と見られる」「ようだ」, "probably", "might", "may",
+    "could", "appears", …;
+  - the incident is fair-play and the draft proposes a penalty (defence in depth; fair-play never
+    reaches the LLM, see below).
 
-  Confidence is capped at `medium` (never `high`). `low` confidence forces CA escalation, and escalation
-  forces `consult-ca`.
+  Automatic adjustments:
+  - Confidence is capped at `medium` (never `high`).
+  - A **severe penalty** (`game-loss`, `both-lose`, `expulsion`) forces CA escalation.
+  - `low` confidence forces CA escalation, and escalation forces `consult-ca`.
+- **Tension with §14 ("state uncertainty explicitly").** Requirement §14 asks for explicit uncertainty,
+  while the validator forbids hedged prose. We resolve this by putting uncertainty in **structured
+  fields**: `confidence`, `escalationRecommended` / `escalationReason`, and `missingInformation`, which
+  lists missing facts. Hedging words inside sentences are rejected, so a penalty can never be justified
+  by 「たぶん」 (§14 prohibition).
+- **Deviation from ADR-002 (noted):** ADR-002 §7.3 rejects low-confidence drafts that do not escalate.
+  Here such drafts are auto-fixed to escalate instead. The draft is still shown only as AI reference
+  with CA escalation, so the outcome stays fail-safe.
+- **Fair-play (§23)** is never sent to the LLM. The engine returns a deterministic CA-escalation decision
+  with a fact-recording checklist (`lib/domain/services/fair-play.ts`). Free text that the local
+  keyword classifier flags as fair-play is not sent to the classifier route either; nobody's
+  accusations are passed to a third party.
+- **AI decisions are never shown as applied.**
+  - An incident whose decision has `generatedBy: "llm"` stays `pending` until an arbiter confirms
+    (`incidentStatusAfterDecision`).
+  - AI penalties are excluded from the penalty summary and per-player history. They appear separately
+    as 「AI参考（未確定）」.
+  - The CSV has a 生成元 column.
+  - On re-evaluation, the previous decision is marked `supersededBy`.
 - A rejected draft becomes a CA-escalation decision (`generatedBy: "llm"`, `validationPassed: false`,
   `validationErrors` listed, no penalties). Offline, a failed call or no retrieved articles fall back to
   the manual-review / CA message with the note 「オンライン時にAI参考情報を取得」.
-- Classification output is only a **suggestion** that pre-fills the category and shows hints. The
+- Classification output is only a **suggestion** that pre-fills the category and description, and
+  shows hints. The subtype is not pre-filled; the tree asks for it. The
   arbiter confirms the category, and the deterministic trees and their questions still decide every
   covered incident. When offline, or when the call or output check fails, a deterministic keyword
   classifier (`lib/domain/llm/keyword-classifier.ts`) is used instead.
@@ -134,7 +196,10 @@ action.
 ### Negative / Risks
 
 - LLM features need a deployed Node server. A purely static export would have no `/api`.
-- The in-memory rate limit is per instance (see §2).
+- The in-memory rate limit and daily cap are per instance (see §2). Without `TRUST_PROXY=1` all
+  callers share one bucket. Configure Google Cloud quotas and budgets for a hard limit.
+- Without platform authentication or `LLM_ACCESS_TOKEN`, the routes can be used by anyone who can
+  reach the deployment.
 - Quote matching is strict. Paraphrased quotes are rejected and lead to CA escalation. This is
   intentional (fail safe, §34) but may lower the share of accepted AI answers.
 - Model aliases (`*-latest`) can change behaviour over time. Pin a version through the env vars for a

@@ -1,3 +1,23 @@
+import type {
+  CompetitionType,
+  RulesVersion,
+  SupervisionRegime,
+  TournamentOverrides,
+} from "./tournament";
+
+/**
+ * 報告時点の規則セット（大会設定のスナップショット。ADR-006）。
+ * 追加質問への回答で再評価するときも、報告時の規則セットで判断する
+ * （報告後に大会設定を編集しても、既存の Incident の判断は変わらない）。
+ */
+export interface RulesetSnapshot {
+  competitionType: CompetitionType;
+  supervisionRegime?: SupervisionRegime;
+  rulesVersion: RulesVersion;
+  /** 大会規定による上書き（出典を含めて保存） */
+  tournamentOverrides?: TournamentOverrides;
+}
+
 export type IncidentCategory =
   | "illegal-move"
   | "board-piece"
@@ -174,6 +194,8 @@ export interface Incident {
   flagFallFacts?: Partial<FlagFallFacts>;
   /** ドロー（同一局面・75手）の構造化された回答 */
   drawClaimFacts?: Partial<DrawClaimFacts>;
+  /** 報告時点の規則セット（v5 以前の Incident には存在しない） */
+  rulesetSnapshot?: RulesetSnapshot;
   /** 自由記述（メモ）。判断には使用しない */
   description: string;
   arbiterObserved: boolean;

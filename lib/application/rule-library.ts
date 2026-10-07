@@ -158,3 +158,10 @@ export async function deleteRuleSource(
   );
   clearFulltextIndex();
 }
+
+/**
+ * ルール検索の全文インデックスを破棄する（大会削除などで条文が削除された後）
+ */
+export function invalidateRuleSearchIndex(): void {
+  clearFulltextIndex();
+}

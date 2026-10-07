@@ -27,6 +27,39 @@ export interface TimeControl {
   initialMinutes: number;
   incrementSeconds: number;
   additionalTimeAfterMove?: number;
+  /** 遅延（Delay）秒数。設定がない場合は省略 */
+  delaySeconds?: number;
+}
+
+/**
+ * 大会規定による上書きの出典。上書き値は必ず出典とともに保持する
+ * （出典のない上書きは受け付けない。domain.md rule 3）。
+ */
+export interface TournamentRuleReference {
+  /** 大会規定の資料名（例: "第10回○○ブリッツ大会要項"） */
+  document: string;
+  /** 条項（例: "第5条2項"）。任意 */
+  article?: string;
+  /** 規定の文言（逐語）。任意 */
+  quote?: string;
+}
+
+export interface SourcedOverride<T> {
+  value: T;
+  source: TournamentRuleReference;
+}
+
+/**
+ * 決定木が明示的に参照する大会固有の上書き。
+ * 未設定の項目は上書きなし（FIDE/JCF の扱いのまま）であり、既定値を仮定しない。
+ */
+export interface TournamentOverrides {
+  /**
+   * Blitz B.2（competition-rules）で、違法手（7.5.5）・誤ったドロー主張（9.5.3）により
+   * 相手へ加算する時間（秒）。ADR-005 で原典から確定できないとした値を大会規定で確定する。
+   * Blitz かつ competition-rules の大会でのみ有効。
+   */
+  blitzCompetitionTimePenaltySeconds?: SourcedOverride<number>;
 }
 
 export interface TournamentRegulation {
@@ -41,14 +74,30 @@ export interface Tournament {
   id: string;
   name: string;
   competitionType: CompetitionType;
-  /** 大会管理機能（後続マイルストーン）までは未設定の場合がある */
+  /** 暫定大会（ADR-004）では未設定 */
   timeControl?: TimeControl;
   /** Rapid / Blitz の場合は必須（大会規定で指定） */
   supervisionRegime?: SupervisionRegime;
   rulesVersion: RulesVersion;
   startDate: Date;
   endDate?: Date;
+  /** 会場（任意） */
+  venue?: string;
+  /** Chief Arbiter（任意） */
+  chiefArbiter?: string;
+  /** 予定ラウンド数（任意） */
+  totalRounds?: number;
+  /** 大会規定による明示的な上書き（ADR-006） */
+  overrides?: TournamentOverrides;
   regulations: TournamentRegulation[];
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** 報告フローの暫定大会（ADR-004）の ID 接頭辞 */
+export const AD_HOC_TOURNAMENT_PREFIX = "adhoc:";
+
+/** 暫定大会（大会管理で作成されていない大会）か */
+export function isAdHocTournament(t: Pick<Tournament, "id">): boolean {
+  return t.id.startsWith(AD_HOC_TOURNAMENT_PREFIX);
 }

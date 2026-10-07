@@ -5,14 +5,17 @@ import type {
   Penalty,
   PlayerColor,
   SupervisionRegime,
+  TournamentOverrides,
 } from "@/lib/domain/entities";
 import type { DomainProviders } from "@/lib/domain/providers";
 import { cite, type CitationKey } from "@/lib/domain/rules/citations";
 import { QUESTIONS, type FollowUpQuestion } from "@/lib/domain/follow-up";
 import {
-  formatMinutes,
+  appliedPenaltySeconds,
   opponentTimePenalty,
-  UNVERIFIED_AMOUNT_NOTE,
+  timePenaltyAmount,
+  timePenaltyCitations,
+  tournamentPenaltyNote,
 } from "@/lib/domain/rules/time-penalty";
 import {
   SEVENTY_FIVE_MOVES_PLIES,
@@ -29,6 +32,8 @@ export { SEVENTY_FIVE_MOVES_PLIES } from "@/lib/domain/services/position-analysi
 export interface RepetitionInput extends DrawClaimFacts {
   competitionType: CompetitionType;
   supervisionRegime?: SupervisionRegime;
+  /** 大会規定による明示的な上書き（Blitz B.2 の加算時間のみ参照。ADR-006） */
+  tournamentOverrides?: TournamentOverrides;
   /**
    * positionsText をシステムが解析した結果（DecisionEngine が ChessPositionPort で算出）。
    * 解析できなかった場合は error。
@@ -290,19 +295,18 @@ export class RepetitionTree {
     const opp = opponentOf(claimant);
     const rule = opponentTimePenalty(
       input.competitionType ?? "standard",
-      input.supervisionRegime
+      input.supervisionRegime,
+      input.tournamentOverrides
     );
-    const amount =
-      rule.kind === "fixed"
-        ? formatMinutes(rule.seconds)
-        : `${formatMinutes(rule.suggestedSeconds)}${UNVERIFIED_AMOUNT_NOTE}`;
+    const amount = timePenaltyAmount(rule);
     // 未確定の加算時間は提示のみ（timeAdjustmentSeconds は設定しない）
     const penalty: Penalty = {
       type: "time-addition-opponent",
       playerColor: opp,
       description: `${COLOR_JA[opp]}に${amount}追加`,
     };
-    if (rule.kind === "fixed") penalty.timeAdjustmentSeconds = rule.seconds;
+    const applied = appliedPenaltySeconds(rule);
+    if (applied !== undefined) penalty.timeAdjustmentSeconds = applied;
 
     const intended = input.claimMode === "about-to-appear";
     const keys: CitationKey[] = [
@@ -322,12 +326,16 @@ export class RepetitionTree {
         `${COLOR_JA[claimant]}のクレームは誤りです（同一局面が3回未満）。${COLOR_JA[opp]}に${amount}を加算し、対局を続行します。` +
         (rule.kind === "unverified"
           ? "B.2 は Competition Rules（7.5.5 / 9.5.3: 2分）を適用し、A.3 の1分規定を準用するのは B.3 のみのため文言上は2分ですが、CA・大会規定で確認してください。"
-          : ""),
+          : rule.kind === "tournament"
+            ? tournamentPenaltyNote(rule)
+            : ""),
       actions: [
         ...this.autoLine(auto),
         rule.kind === "fixed"
           ? `${COLOR_JA[opp]}の残り時間に${amount}加算する（9.5.3${input.competitionType === "standard" ? "" : " / A.3"}）`
-          : `${COLOR_JA[opp]}の残り時間に${amount}加算する（9.5.3）。CA・大会規定で加算時間を確認する`,
+          : rule.kind === "tournament"
+            ? `${COLOR_JA[opp]}の残り時間に${amount}加算する（9.5.3 / ${tournamentPenaltyNote(rule)}）`
+            : `${COLOR_JA[opp]}の残り時間に${amount}加算する（9.5.3）。CA・大会規定で加算時間を確認する`,
         ...(intended
           ? [
               "記入した手を指させる（第3条・第4条に従う。違法な手なら、その駒で別の手を指す）",
@@ -337,7 +345,7 @@ export class RepetitionTree {
       ],
       intervention: "immediate",
       penalties: [penalty],
-      sources: cite(...keys),
+      sources: timePenaltyCitations(rule, keys),
       confidence:
         rule.kind === "unverified" ? "medium" : auto ? "medium" : "high",
       escalationRecommended: rule.kind === "unverified",

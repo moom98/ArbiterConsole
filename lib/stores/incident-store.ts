@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import type {
   Decision,
+  Game,
   Incident,
   IncidentCategory,
+  RulesetSnapshot,
   Tournament,
 } from "@/lib/domain/entities";
 import {
@@ -17,6 +19,7 @@ import {
 } from "@/lib/domain/follow-up";
 import { IncidentCounter } from "@/lib/domain/services/incident-counter";
 import {
+  deriveRulesetFromTournament,
   validateReportContext,
   type ReportContext,
 } from "@/lib/domain/services/game-context";
@@ -37,7 +40,13 @@ export type SubmitResult =
   { ok: true; result: DecisionEngineResult } | { ok: false; error: string };
 
 export interface SubmitIncidentParams {
-  context: ReportContext;
+  /**
+   * 大会の対局（大会管理で作成した Game.id）。指定した場合は大会から規則セットを導出する（ADR-006）。
+   * 未指定の場合は context（暫定大会。ADR-004）を使う。
+   */
+  gameId?: string;
+  /** 暫定大会のコンテキスト（gameId 未指定時は必須） */
+  context?: ReportContext;
   category: IncidentCategory;
   /** 任意: カテゴリ選択時に確定した subtype（QUICK_REPORTS） */
   subtype?: string;
@@ -106,11 +115,26 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
     llm,
   });
 
-  async function evaluate(incident: Incident): Promise<DecisionEngineResult> {
-    const game = await db.games.get(incident.gameId);
+  /**
+   * 判断に用いる規則セット: 報告時のスナップショット（ADR-006）。
+   * スナップショットのない旧 Incident は大会から導出する（不足があれば undefined → context-required）。
+   */
+  async function rulesetFor(
+    incident: Incident,
+    game: Game | undefined
+  ): Promise<RulesetSnapshot | undefined> {
+    if (incident.rulesetSnapshot) return incident.rulesetSnapshot;
     const tournament: Tournament | undefined = game
       ? await db.tournaments.get(game.tournamentId)
       : undefined;
+    if (!tournament) return undefined;
+    const derived = deriveRulesetFromTournament(tournament);
+    return derived.ok ? derived.ruleset : undefined;
+  }
+
+  async function evaluate(incident: Incident): Promise<DecisionEngineResult> {
+    const game = await db.games.get(incident.gameId);
+    const ruleset = await rulesetFor(incident, game);
     const records = await loadGameRecords(db, incident.gameId);
     const illegalMoveHistory = IncidentCounter.illegalMoveHistory(
       records,
@@ -121,15 +145,9 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
     // 決定木を優先し、対象外の事象のみ AI 参考情報を取得する（DecisionEngine.evaluate）
     const result = await engine.evaluate({
       incident,
-      ruleset: tournament
-        ? {
-            competitionType: tournament.competitionType,
-            supervisionRegime: tournament.supervisionRegime,
-            rulesVersion: tournament.rulesVersion,
-          }
-        : undefined,
+      ruleset,
       illegalMoveHistory,
-      tournamentId: tournament?.id,
+      tournamentId: game?.tournamentId,
     });
 
     const now = providers.now();
@@ -159,6 +177,38 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
       });
     }
     return result;
+  }
+
+  /** 報告対象の対局を解決する（大会の対局 or 暫定大会の対局） */
+  async function resolveGame(
+    params: SubmitIncidentParams,
+    now: Date
+  ): Promise<{
+    game: Game;
+    ruleset: RulesetSnapshot;
+    adHocContext?: ReportContext;
+  }> {
+    if (params.gameId !== undefined) {
+      const game = await db.games.get(params.gameId);
+      if (!game) throw new Error("対局が見つかりません");
+      const tournament = await db.tournaments.get(game.tournamentId);
+      if (!tournament) throw new Error("対局の大会が見つかりません");
+      const derived = deriveRulesetFromTournament(tournament);
+      if (!derived.ok) throw new Error(derived.errors.join(" / "));
+      return { game, ruleset: derived.ruleset };
+    }
+    if (!params.context) throw new Error("対局を指定してください");
+    const contextErrors = validateReportContext(params.context);
+    if (contextErrors.length > 0) throw new Error(contextErrors.join(" / "));
+    const { game, tournament } = await ensureGameForContext(
+      db,
+      params.context,
+      now
+    );
+    const derived = deriveRulesetFromTournament(tournament);
+    if (!derived.ok) throw new Error(derived.errors.join(" / "));
+    await saveLastReportContext(db, params.context, now);
+    return { game, ruleset: derived.ruleset, adHocContext: params.context };
   }
 
   return create<IncidentStore>((set, get) => {
@@ -214,9 +264,6 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
       submitIncident: (params) =>
         run(
           async () => {
-            const contextErrors = validateReportContext(params.context);
-            if (contextErrors.length > 0)
-              throw new Error(contextErrors.join(" / "));
             if (
               params.subtype !== undefined &&
               !isKnownSubtype(params.category, params.subtype)
@@ -224,19 +271,18 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
               throw new Error(`不正な subtype です: ${params.subtype}`);
 
             const now = providers.now();
-            const { game } = await ensureGameForContext(
-              db,
-              params.context,
+            const { game, ruleset, adHocContext } = await resolveGame(
+              params,
               now
             );
-            await saveLastReportContext(db, params.context, now);
-            set({ lastContext: params.context });
+            if (adHocContext) set({ lastContext: adHocContext });
 
             const incident: Incident = {
               id: providers.generateId(),
               gameId: game.id,
               category: params.category,
               subtype: params.subtype,
+              rulesetSnapshot: ruleset,
               description: params.description,
               arbiterObserved: params.arbiterObserved,
               reportedBy: "arbiter",

@@ -4,11 +4,13 @@ import type {
   RulesVersion,
   SupervisionRegime,
   Tournament,
+  RulesetSnapshot,
 } from "@/lib/domain/entities";
+import { SUPPORTED_RULES_VERSIONS } from "@/lib/domain/entities";
 
 /**
- * 報告時に明示的に指定する最小限の対局コンテキスト。
- * 大会管理機能（Milestone 6）ができるまでの暫定。
+ * 報告時に明示的に指定する最小限の対局コンテキスト（暫定大会用。ADR-004）。
+ * 大会が登録されている場合は、大会から導出した TournamentRuleset と対局を使う（ADR-006）。
  */
 export interface ReportContext {
   competitionType: CompetitionType;
@@ -94,4 +96,65 @@ export function buildAdHocGame(ctx: ReportContext, now: Date): Game {
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/** 大会から導出した、判断に用いる規則セット（すべて大会プロファイルの明示的な値） */
+export type TournamentRuleset = RulesetSnapshot;
+
+export type TournamentRulesetResult =
+  { ok: true; ruleset: TournamentRuleset } | { ok: false; errors: string[] };
+
+/**
+ * 大会プロファイルから規則セットを導出する。不足があれば既定値で補わずエラーを返す
+ * （domain.md rule 5）。
+ */
+export function deriveRulesetFromTournament(
+  tournament: Pick<
+    Tournament,
+    "competitionType" | "supervisionRegime" | "rulesVersion" | "overrides"
+  >
+): TournamentRulesetResult {
+  const errors: string[] = [];
+  if (!tournament.competitionType)
+    errors.push("大会の競技区分が設定されていません");
+  if (
+    tournament.competitionType &&
+    tournament.competitionType !== "standard" &&
+    !tournament.supervisionRegime
+  )
+    errors.push("大会の適用規則（A.4/A.5・B.2/B.3）が設定されていません");
+  if (!tournament.rulesVersion)
+    errors.push("大会の規則バージョンが設定されていません");
+  else if (!SUPPORTED_RULES_VERSIONS.includes(tournament.rulesVersion))
+    errors.push(`未対応の規則バージョンです: ${tournament.rulesVersion}`);
+  if (errors.length > 0) return { ok: false, errors };
+  return {
+    ok: true,
+    ruleset: {
+      competitionType: tournament.competitionType,
+      supervisionRegime:
+        tournament.competitionType === "standard"
+          ? undefined
+          : tournament.supervisionRegime,
+      rulesVersion: tournament.rulesVersion,
+      // 報告時のスナップショットとして保存するため複製する
+      tournamentOverrides: tournament.overrides
+        ? structuredCloneOverrides(tournament.overrides)
+        : undefined,
+    },
+  };
+}
+
+function structuredCloneOverrides(
+  o: NonNullable<Tournament["overrides"]>
+): NonNullable<Tournament["overrides"]> {
+  const b2 = o.blitzCompetitionTimePenaltySeconds;
+  return b2
+    ? {
+        blitzCompetitionTimePenaltySeconds: {
+          value: b2.value,
+          source: { ...b2.source },
+        },
+      }
+    : {};
 }

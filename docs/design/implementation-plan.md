@@ -350,28 +350,32 @@ Write tests **alongside** implementation, not after.
 **Tasks**:
 
 #### 6.1 Tournament Profile (3 days)
-- [ ] Tournament creation form
-- [ ] Tournament Profile model
-- [ ] TournamentRepository
-- [ ] Save to IndexedDB
+- [x] Tournament creation form
+- [x] Tournament Profile model
+- [x] TournamentRepository
+- [x] Save to IndexedDB
 
 #### 6.2 Round & Game Management (3 days)
-- [ ] Round model (status: pending/active/completed)
-- [ ] Game model (board, players)
-- [ ] PlayerRepository
-- [ ] Create rounds and games for tournament
+- [x] Round model (status: pending/active/completed)
+- [x] Game model (board, players)
+- [x] PlayerRepository
+- [x] Create rounds and games for tournament
 
 #### 6.3 Tournament Regulations Upload (3 days)
-- [ ] Upload tournament-specific PDF
-- [ ] Parse into TournamentRegulation entities
-- [ ] Link to tournament
-- [ ] Include in rule search (highest priority)
+- [x] Upload tournament-specific PDF
+- [x] Parse into TournamentRegulation entities
+- [x] Link to tournament
+- [x] Include in rule search (highest priority)
 
 #### 6.4 Home Screen (3 days)
-- [ ] Display active tournament
-- [ ] Quick actions (Report, Search)
-- [ ] Recent incidents list
-- [ ] Tournament selection dropdown
+- [x] Display active tournament
+- [x] Quick actions (Report, Search)
+- [x] Recent incidents list
+- [x] Tournament selection dropdown
+
+**Status**: Implemented (see ADR-006). "Parse into TournamentRegulation entities" is done through the
+existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentId`), not the embedded
+`Tournament.regulations` array.
 
 **Deliverable**: Tournament management system
 

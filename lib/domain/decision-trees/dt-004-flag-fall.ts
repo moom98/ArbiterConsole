@@ -132,13 +132,20 @@ export class FlagFallTree {
       return this.out.needsInput(
         [
           QUESTIONS.movesNotCompleted,
+          // 駒数は「規定手数を完了していない」場合のみ必要（完了していた／不明なら不要）
           ...(material.ok
             ? []
             : [
                 ...materialQuestions(),
                 QUESTIONS.positionFen,
                 QUESTIONS.materialConfirmed,
-              ]),
+              ].map((q) => ({
+                ...q,
+                showWhen: {
+                  questionId: "movesNotCompleted" as const,
+                  values: ["true"],
+                },
+              }))),
         ],
         `${COLOR_JA[flagged]}のフラッグが落ちました。${COLOR_JA[flagged]}が規定手数を完了していたかと、盤上の駒数を確認してください。${!material.ok && material.error ? `\n${material.error}` : ""}`,
         cite("FIDE_6_4", "FIDE_6_9", "MANUAL_6_9_CHECK_POSITION")

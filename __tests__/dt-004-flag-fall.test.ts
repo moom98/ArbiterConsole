@@ -49,6 +49,24 @@ describe("DT-004 Flag fall", () => {
     });
     expect(ids(r)[0]).toBe("movesNotCompleted");
     expect(ids(r)).toContain("whiteQueens");
+    // 駒数は「規定手数を完了していない」場合のみ表示（完了していた場合は不要）
+    if (r.status !== "needs-input") throw new Error("expected questions");
+    const material = r.questions.filter((q) => q.id !== "movesNotCompleted");
+    expect(
+      material.every(
+        (q) =>
+          q.showWhen?.questionId === "movesNotCompleted" &&
+          q.showWhen.values.join() === "true"
+      )
+    ).toBe(true);
+    // 完了していた → 駒数なしで結論
+    const done = run({
+      competitionType: "standard",
+      flagFallen: "black",
+      gameEndedBeforeFlag: false,
+      movesNotCompleted: false,
+    });
+    expect(done.status).toBe("decided");
     expect(r.decision.conclusion).toContain("黒のフラッグ");
   });
 

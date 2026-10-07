@@ -99,6 +99,21 @@ export interface FollowUpQuestion {
   placeholder?: string;
   /** UI でまとめて表示するためのグループ名（例: "白の駒（キング以外）"） */
   group?: string;
+  /**
+   * 同じラウンドの別の質問への回答が values のいずれかの場合のみ表示・回答を求める。
+   * 条件の定義はドメインが持ち、UI は一致判定のみ行う。
+   */
+  showWhen?: { questionId: FollowUpQuestionId; values: string[] };
+}
+
+/** showWhen の条件を満たすか（UI 用の純粋関数） */
+export function isQuestionVisible(
+  q: FollowUpQuestion,
+  answers: Record<string, string>
+): boolean {
+  if (!q.showWhen) return true;
+  const a = answers[q.showWhen.questionId];
+  return a !== undefined && q.showWhen.values.includes(a);
 }
 
 const YES_NO: FollowUpOption[] = [

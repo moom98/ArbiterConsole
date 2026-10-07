@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { FollowUpQuestion } from "@/lib/domain/follow-up";
+import {
+  isQuestionVisible,
+  type FollowUpQuestion,
+} from "@/lib/domain/follow-up";
 
 interface FollowUpQuestionsProps {
   questions: FollowUpQuestion[];
@@ -45,9 +48,15 @@ export function FollowUpQuestions({
   const [answers, setAnswers] = useState<Record<string, string>>(() =>
     initialAnswers(questions)
   );
-  const allAnswered = questions.every(
+  const visible = questions.filter((q) => isQuestionVisible(q, answers));
+  const allAnswered = visible.every(
     (q) => q.optional || (answers[q.id] !== undefined && answers[q.id] !== "")
   );
+  // 非表示の質問の回答（既定値を含む）は送信しない
+  const visibleAnswers = () =>
+    Object.fromEntries(
+      Object.entries(answers).filter(([id]) => visible.some((q) => q.id === id))
+    );
   const set = (id: string, value: string) =>
     setAnswers((prev) => ({ ...prev, [id]: value }));
 
@@ -155,7 +164,7 @@ export function FollowUpQuestions({
 
   return (
     <div className="space-y-6">
-      {blocks(questions).map((b, i) =>
+      {blocks(visible).map((b, i) =>
         b.group ? (
           <section
             key={`${b.group}-${i}`}
@@ -172,7 +181,7 @@ export function FollowUpQuestions({
       <button
         type="button"
         disabled={!allAnswered || disabled}
-        onClick={() => onSubmit(answers)}
+        onClick={() => onSubmit(visibleAnswers())}
         className="w-full min-h-14 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold"
       >
         回答して再評価

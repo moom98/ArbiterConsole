@@ -45,4 +45,27 @@ describe("FollowUpQuestions (count / text inputs)", () => {
     }) as HTMLButtonElement;
     expect(minus.disabled).toBe(true);
   });
+
+  it("hides and does not require questions whose showWhen condition is not met", () => {
+    const onSubmit = vi.fn();
+    const conditional = {
+      ...QUESTIONS.materialConfirmed,
+      showWhen: { questionId: "movesNotCompleted" as const, values: ["true"] },
+    };
+    render(
+      <FollowUpQuestions
+        questions={[QUESTIONS.movesNotCompleted, conditional]}
+        onSubmit={onSubmit}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "確認した" })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "規定手数は完了していた" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "回答して再評価" }));
+    expect(onSubmit).toHaveBeenCalledWith({ movesNotCompleted: "false" });
+
+    fireEvent.click(screen.getByRole("button", { name: "完了していない" }));
+    expect(screen.getByRole("button", { name: "確認した" })).toBeTruthy();
+  });
 });

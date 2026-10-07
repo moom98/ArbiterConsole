@@ -127,4 +127,95 @@ describe("Incident store with tournament games (ADR-006)", () => {
     });
     expect(missing).toEqual({ ok: false, error: "対局を指定してください" });
   });
+
+  it("snapshots the ruleset at submit time; later tournament edits do not change pending incidents", async () => {
+    const { t, g } = await blitzB2(true);
+    const submitted = await store.getState().submitIncident({
+      gameId: g.id,
+      category: "illegal-move",
+      description: "",
+      arbiterObserved: true,
+    });
+    expect(submitted.ok).toBe(true);
+    const stored = await db.incidents.get(store.getState().currentIncident!.id);
+    expect(stored?.rulesetSnapshot).toEqual({
+      competitionType: "blitz",
+      supervisionRegime: "competition-rules",
+      rulesVersion: "FIDE-2023",
+      tournamentOverrides: {
+        blitzCompetitionTimePenaltySeconds: {
+          value: 60,
+          source: { document: "要項", article: "第7条", quote: undefined },
+        },
+      },
+    });
+
+    // 追加質問の回答前に大会設定を変更（Standard へ）
+    await service.saveTournamentProfile(
+      profileInput({ competitionType: "standard" }),
+      t.id
+    );
+    const answered = await store.getState().answerFollowUp({
+      playerColor: "white",
+      subtype: "illegal-move",
+      gameEnded: "false",
+      clockPressed: "true",
+    });
+    if (!answered.ok) throw new Error(answered.error);
+    const d = answered.result.decision;
+    expect(d.treeId).toBe("DT-002-illegal-move-fast-competition");
+    expect(d.penalties[0].timeAdjustmentSeconds).toBe(60);
+
+    // 新しい報告は変更後の規則セット（Standard: 2分）
+    const next = await reportIllegalMove(g.id);
+    expect(next.treeId).toBe("DT-001-illegal-move-standard");
+  });
+
+  it("snapshots ad-hoc reports too", async () => {
+    const res = await store.getState().submitIncident({
+      context: {
+        competitionType: "rapid",
+        supervisionRegime: "basic-rules",
+        rulesVersion: "FIDE-2023",
+        round: 1,
+        boardNumber: 2,
+      },
+      category: "illegal-move",
+      description: "",
+      arbiterObserved: true,
+    });
+    expect(res.ok).toBe(true);
+    const [incident] = await db.incidents.toArray();
+    expect(incident.rulesetSnapshot).toEqual({
+      competitionType: "rapid",
+      supervisionRegime: "basic-rules",
+      rulesVersion: "FIDE-2023",
+      tournamentOverrides: undefined,
+    });
+  });
+
+  it("legacy incidents without a snapshot derive the ruleset from the tournament", async () => {
+    const { g } = await blitzB2(true);
+    await store.getState().submitIncident({
+      gameId: g.id,
+      category: "illegal-move",
+      description: "",
+      arbiterObserved: true,
+    });
+    const id = store.getState().currentIncident!.id;
+    await db.incidents.update(id, { rulesetSnapshot: undefined });
+    store.setState({
+      currentIncident: (await db.incidents.get(id))!,
+    });
+    const answered = await store.getState().answerFollowUp({
+      playerColor: "white",
+      subtype: "illegal-move",
+      gameEnded: "false",
+      clockPressed: "true",
+    });
+    if (!answered.ok) throw new Error(answered.error);
+    expect(answered.result.decision.penalties[0].timeAdjustmentSeconds).toBe(
+      60
+    );
+  });
 });

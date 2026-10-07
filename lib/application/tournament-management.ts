@@ -77,6 +77,11 @@ export class TournamentService {
     await this.repos.tournaments.delete(id);
   }
 
+  /** 大会の対局に記録された Incident 数 */
+  countIncidents(tournamentId: string): Promise<number> {
+    return this.repos.countIncidents(tournamentId);
+  }
+
   listRounds(tournamentId: string): Promise<Round[]> {
     return this.repos.rounds.findByTournament(tournamentId);
   }

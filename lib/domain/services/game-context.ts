@@ -4,7 +4,7 @@ import type {
   RulesVersion,
   SupervisionRegime,
   Tournament,
-  TournamentOverrides,
+  RulesetSnapshot,
 } from "@/lib/domain/entities";
 import { SUPPORTED_RULES_VERSIONS } from "@/lib/domain/entities";
 
@@ -99,12 +99,7 @@ export function buildAdHocGame(ctx: ReportContext, now: Date): Game {
 }
 
 /** 大会から導出した、判断に用いる規則セット（すべて大会プロファイルの明示的な値） */
-export interface TournamentRuleset {
-  competitionType: CompetitionType;
-  supervisionRegime?: SupervisionRegime;
-  rulesVersion: RulesVersion;
-  tournamentOverrides?: TournamentOverrides;
-}
+export type TournamentRuleset = RulesetSnapshot;
 
 export type TournamentRulesetResult =
   { ok: true; ruleset: TournamentRuleset } | { ok: false; errors: string[] };
@@ -142,7 +137,24 @@ export function deriveRulesetFromTournament(
           ? undefined
           : tournament.supervisionRegime,
       rulesVersion: tournament.rulesVersion,
-      tournamentOverrides: tournament.overrides,
+      // 報告時のスナップショットとして保存するため複製する
+      tournamentOverrides: tournament.overrides
+        ? structuredCloneOverrides(tournament.overrides)
+        : undefined,
     },
   };
+}
+
+function structuredCloneOverrides(
+  o: NonNullable<Tournament["overrides"]>
+): NonNullable<Tournament["overrides"]> {
+  const b2 = o.blitzCompetitionTimePenaltySeconds;
+  return b2
+    ? {
+        blitzCompetitionTimePenaltySeconds: {
+          value: b2.value,
+          source: { ...b2.source },
+        },
+      }
+    : {};
 }

@@ -48,6 +48,7 @@ export default function TournamentDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [rounds, setRounds] = useState<Round[]>([]);
   const [players, setPlayers] = useState<PlayerProfile[]>([]);
+  const [incidentCount, setIncidentCount] = useState(0);
   const [editing, setEditing] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
 
@@ -64,12 +65,14 @@ export default function TournamentDetailPage() {
     setTournament(t);
     setNotFound(t === null);
     if (!t) return;
-    const [r, p] = await Promise.all([
+    const [r, p, n] = await Promise.all([
       service.listRounds(t.id),
       service.listPlayers(t.id),
+      service.countIncidents(t.id),
     ]);
     setRounds(r);
     setPlayers(p);
+    setIncidentCount(n);
   }, [id, service]);
 
   useEffect(() => {
@@ -337,6 +340,15 @@ export default function TournamentDetailPage() {
         </div>
         {editing ? (
           <div className="mt-3">
+            {incidentCount > 0 && (
+              <p
+                role="note"
+                className="mb-3 p-3 bg-yellow-50 border border-yellow-300 rounded text-sm text-yellow-900"
+              >
+                この大会には{incidentCount}
+                件のIncidentが記録されています。変更（競技区分・適用規則・規則バージョン・大会規定の上書き）は今後の報告にのみ適用され、記録済み・回答待ちのIncidentは報告時の規則セットで判断されます。
+              </p>
+            )}
             <TournamentProfileForm
               initial={toProfileInput(tournament)}
               submitLabel="保存"

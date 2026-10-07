@@ -203,7 +203,11 @@ export class DecisionEngine {
         return this.manualReview(incident, rulesVersion, {
           extraAction: OFFLINE_AI_NOTE,
           escalationReason: `AI参考情報を取得できませんでした（${outcome.message}）。CAへ確認してください。`,
-          llm: { status: "unavailable", message: outcome.message },
+          llm: {
+            status: "unavailable",
+            message: outcome.message,
+            errorCode: outcome.code,
+          },
         });
     }
   }

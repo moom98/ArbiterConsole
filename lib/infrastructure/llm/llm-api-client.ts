@@ -1,4 +1,6 @@
+import { getLlmAccessToken } from "./access-token";
 import {
+  LLM_ACCESS_TOKEN_HEADER,
   LLM_API_PATHS,
   type LlmApiKind,
   type LlmApiResponse,
@@ -14,6 +16,8 @@ export interface LlmApiClientDeps {
   fetch?: typeof fetch;
   /** 既定: navigator.onLine（navigator がない環境ではオンライン扱い） */
   isOnline?: () => boolean;
+  /** 既定: 端末に保存したアクセストークン（サーバーで LLM_ACCESS_TOKEN 設定時のみ必要） */
+  accessToken?: () => string | undefined;
   /** クライアント側のタイムアウト（サーバーの全体締め切り 30 秒 + 余裕） */
   timeoutMs?: number;
 }
@@ -48,6 +52,7 @@ export async function callLlmApi(
     };
   }
   const doFetch = deps.fetch ?? fetch;
+  const token = (deps.accessToken ?? getLlmAccessToken)();
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(),
@@ -56,7 +61,10 @@ export async function callLlmApi(
   try {
     const res = await doFetch(LLM_API_PATHS[kind], {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { [LLM_ACCESS_TOKEN_HEADER]: token } : {}),
+      },
       body: JSON.stringify(body),
       cache: "no-store",
       credentials: "same-origin",

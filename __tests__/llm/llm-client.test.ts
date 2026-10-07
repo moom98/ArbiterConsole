@@ -51,6 +51,25 @@ describe("callLlmApi", () => {
     expect(JSON.stringify(init)).not.toMatch(/key/i);
   });
 
+  it("sends the stored access token header only when one is set", async () => {
+    const fetch = vi.fn(async () =>
+      jsonResponse({ ok: true, result: {}, model: "m" })
+    );
+    await callLlmApi(
+      "reason",
+      {},
+      {
+        fetch: fetch as unknown as typeof globalThis.fetch,
+        isOnline: () => true,
+        accessToken: () => "tok-1",
+      }
+    );
+    const init = (fetch.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(
+      (init.headers as Record<string, string>)["x-arbiter-access-token"]
+    ).toBe("tok-1");
+  });
+
   it("passes typed server errors through and handles malformed / network failures", async () => {
     const err = {
       ok: false,

@@ -9,6 +9,12 @@ export const LLM_API_PATHS = {
 
 export type LlmApiKind = keyof typeof LLM_API_PATHS;
 
+/**
+ * サーバーで LLM_ACCESS_TOKEN が設定されている場合に必要なヘッダー（ADR-007）。
+ * Gemini の API キーではなく、このアプリの /api/llm/* 専用のアクセストークン。
+ */
+export const LLM_ACCESS_TOKEN_HEADER = "x-arbiter-access-token";
+
 /** 入力サイズの上限（サーバーで検証し、クライアントはこれに収まるように送る） */
 export const LLM_LIMITS = {
   maxBodyBytes: 160_000,
@@ -32,6 +38,10 @@ export type LlmApiErrorCode =
   | "payload-too-large"
   /** このサーバーのレート制限に達した */
   | "rate-limited"
+  /** このサーバーの1日あたりの上限に達した */
+  | "quota-exceeded"
+  /** アクセストークンが必要・不一致 */
+  | "unauthorized"
   /** サーバーに API キーが設定されていない */
   | "not-configured"
   /** 上流（Gemini）のタイムアウト */

@@ -26,6 +26,7 @@ const baseReq = {
   userContent: "user",
   responseJsonSchema: { type: "object" },
   maxOutputTokens: 100,
+  thinkingLevel: "low" as const,
   timeoutMs: 1000,
   signal: new AbortController().signal,
 };
@@ -56,6 +57,15 @@ describe("geminiGenerateJson (SDK adapter, mocked)", () => {
       httpOptions: { timeout: 1000, retryOptions: { attempts: 1 } },
     });
     expect(arg.config.abortSignal).toBe(baseReq.signal);
+    expect(arg.config.thinkingConfig).toEqual({ thinkingLevel: "LOW" });
+  });
+
+  it("omits thinkingConfig when the level is off", async () => {
+    generateContent.mockResolvedValue({ text: "{}" });
+    await geminiGenerateJson({ ...baseReq, thinkingLevel: "off" });
+    expect(
+      generateContent.mock.calls[0][0].config.thinkingConfig
+    ).toBeUndefined();
   });
 
   it("reports safety blocks and truncation", async () => {

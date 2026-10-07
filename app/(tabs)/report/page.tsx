@@ -5,6 +5,7 @@ import { useIncidentStore } from "@/lib/stores/incident-store";
 import { DecisionDisplay } from "@/components/features/DecisionDisplay";
 import { FollowUpQuestions } from "@/components/features/FollowUpQuestions";
 import { IncidentTextClassifier } from "@/components/features/IncidentTextClassifier";
+import { LlmAccessTokenField } from "@/components/features/LlmAccessTokenField";
 import type { IncidentClassification } from "@/lib/domain/llm/types";
 import type {
   CompetitionType,
@@ -517,11 +518,18 @@ export default function ReportPage() {
               )}
             </div>
           ) : (
-            <DecisionDisplay
-              decision={currentDecision}
-              onRetry={() => void retryEvaluation()}
-              retrying={isProcessing}
-            />
+            <>
+              <DecisionDisplay
+                decision={currentDecision}
+                onRetry={() => void retryEvaluation()}
+                retrying={isProcessing}
+              />
+              {currentDecision.llm?.errorCode === "unauthorized" && (
+                <div className="mt-4">
+                  <LlmAccessTokenField onSaved={() => void retryEvaluation()} />
+                </div>
+              )}
+            </>
           )}
           <button
             onClick={handleReset}

@@ -96,6 +96,8 @@ export interface LlmDecisionMeta {
   candidateArticleIds?: string[];
   /** 失敗時の理由（利用者向けの短い説明） */
   message?: string;
+  /** 失敗時のエラーコード（例: "unauthorized" はアクセストークンの入力が必要） */
+  errorCode?: string;
 }
 
 export interface Decision {

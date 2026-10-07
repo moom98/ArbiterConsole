@@ -1,5 +1,15 @@
-import { FinishReason, GoogleGenAI } from "@google/genai";
+import { FinishReason, GoogleGenAI, ThinkingLevel } from "@google/genai";
+import type { LlmThinkingLevel } from "./config";
 import type { GenerateJsonFn } from "./generate";
+
+const THINKING_LEVELS: Record<
+  Exclude<LlmThinkingLevel, "off">,
+  ThinkingLevel
+> = {
+  minimal: ThinkingLevel.MINIMAL,
+  low: ThinkingLevel.LOW,
+  medium: ThinkingLevel.MEDIUM,
+};
 
 /**
  * Google Gen AI SDK（@google/genai）による GenerateJsonFn の実装。サーバー専用（ADR-007）。
@@ -37,6 +47,14 @@ export const geminiGenerateJson: GenerateJsonFn = async (req) => {
       responseJsonSchema: req.responseJsonSchema,
       temperature: 0,
       maxOutputTokens: req.maxOutputTokens,
+      // 思考トークンは maxOutputTokens に含まれるため、量を抑えて JSON の途中切れを防ぐ
+      ...(req.thinkingLevel !== "off"
+        ? {
+            thinkingConfig: {
+              thinkingLevel: THINKING_LEVELS[req.thinkingLevel],
+            },
+          }
+        : {}),
       abortSignal: req.signal,
       // 再試行はアプリ側（withRetry）で制御する
       httpOptions: { timeout: req.timeoutMs, retryOptions: { attempts: 1 } },

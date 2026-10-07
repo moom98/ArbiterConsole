@@ -1,5 +1,8 @@
+import type { LlmThinkingLevel } from "./config";
+
 /**
  * LLM 呼び出しの抽象（SDK 非依存）と、タイムアウト・再試行（指数バックオフ）。
+ * プロバイダーはこのインターフェース（GenerateJsonFn）の実装として差し替える（provider.ts）。
  * テストでは GenerateJsonFn を差し替える。
  */
 
@@ -10,6 +13,8 @@ export interface GenerateJsonRequest {
   userContent: string;
   responseJsonSchema: unknown;
   maxOutputTokens: number;
+  /** 思考（thinking）の量（"off" は設定しない） */
+  thinkingLevel: LlmThinkingLevel;
   /** 1回の試行のタイムアウト（ミリ秒） */
   timeoutMs: number;
   signal: AbortSignal;
@@ -31,7 +36,7 @@ export type GenerateJsonFn = (
 /** 上流呼び出しの失敗の分類 */
 export class UpstreamError extends Error {
   constructor(
-    readonly kind: "timeout" | "status" | "network",
+    readonly kind: "timeout" | "status" | "network" | "unknown",
     readonly status?: number
   ) {
     super(kind === "status" ? `upstream status ${status}` : `upstream ${kind}`);
@@ -39,6 +44,7 @@ export class UpstreamError extends Error {
   }
 
   get transient(): boolean {
+    if (this.kind === "unknown") return false;
     if (this.kind !== "status") return true;
     const s = this.status ?? 0;
     return s === 408 || s === 429 || s >= 500;
@@ -50,10 +56,43 @@ export function toUpstreamError(error: unknown): UpstreamError {
   if (error instanceof UpstreamError) return error;
   const status = (error as { status?: unknown } | null)?.status;
   if (typeof status === "number") return new UpstreamError("status", status);
-  const name = (error as { name?: unknown } | null)?.name;
-  if (name === "AbortError" || name === "TimeoutError")
+  const e = error as {
+    name?: unknown;
+    message?: unknown;
+    code?: unknown;
+    cause?: unknown;
+  } | null;
+  if (e?.name === "AbortError" || e?.name === "TimeoutError")
     return new UpstreamError("timeout");
-  return new UpstreamError("network");
+  if (isTransportError(e) || isTransportError(e?.cause as typeof e))
+    return new UpstreamError("network");
+  // 想定外の例外（プログラムの誤り等）は再試行しない
+  return new UpstreamError("unknown");
+}
+
+/** 再試行してよい通信エラー（fetch の失敗・接続断・DNS 等）か */
+const TRANSPORT_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EPIPE",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "UND_ERR_SOCKET",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+]);
+
+function isTransportError(
+  e: { name?: unknown; message?: unknown; code?: unknown } | null | undefined
+): boolean {
+  if (!e) return false;
+  if (typeof e.code === "string" && TRANSPORT_CODES.has(e.code)) return true;
+  return (
+    e.name === "TypeError" &&
+    typeof e.message === "string" &&
+    /fetch failed|network|socket/i.test(e.message)
+  );
 }
 
 export interface RetryOptions {
@@ -63,6 +102,8 @@ export interface RetryOptions {
   maxDelayMs: number;
   /** 全体の締め切り（ミリ秒、開始から） */
   totalDeadlineMs: number;
+  /** 残り時間がこれ未満なら再試行しない */
+  minRemainingForRetryMs: number;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
   random: () => number;
@@ -72,7 +113,9 @@ export const DEFAULT_RETRY: Omit<RetryOptions, "now" | "sleep" | "random"> = {
   attempts: 3,
   baseDelayMs: 500,
   maxDelayMs: 4_000,
+  // クライアントのタイムアウト（35 秒）より前に必ず応答する
   totalDeadlineMs: 30_000,
+  minRemainingForRetryMs: 3_000,
 };
 
 /**
@@ -98,16 +141,21 @@ export async function withTimeout<T>(
   }
 }
 
-/** 一時的なエラー（408/429/5xx・通信失敗・タイムアウト）のみ指数バックオフで再試行する */
+/**
+ * 一時的なエラー（408/429/5xx・通信失敗・タイムアウト）のみ指数バックオフで再試行する。
+ * fn には締め切りまでの残り時間を渡す（1回の試行のタイムアウトはこれを超えないこと）。
+ * 残り時間が minRemainingForRetryMs 未満になる場合は再試行しない。
+ */
 export async function withRetry<T>(
-  fn: (attempt: number) => Promise<T>,
+  fn: (attempt: number, remainingMs: number) => Promise<T>,
   options: RetryOptions
 ): Promise<{ value: T; attempts: number }> {
   const start = options.now();
+  const remaining = () => options.totalDeadlineMs - (options.now() - start);
   let lastError: UpstreamError | undefined;
   for (let attempt = 1; attempt <= options.attempts; attempt++) {
     try {
-      return { value: await fn(attempt), attempts: attempt };
+      return { value: await fn(attempt, remaining()), attempts: attempt };
     } catch (error) {
       lastError = toUpstreamError(error);
       if (!lastError.transient || attempt === options.attempts) break;
@@ -117,9 +165,9 @@ export async function withRetry<T>(
       );
       // full jitter の半分（[exp/2, exp)）
       const delay = Math.round(exp / 2 + (options.random() * exp) / 2);
-      if (options.now() - start + delay >= options.totalDeadlineMs) break;
+      if (remaining() - delay < options.minRemainingForRetryMs) break;
       await options.sleep(delay);
     }
   }
-  throw lastError ?? new UpstreamError("network");
+  throw lastError ?? new UpstreamError("unknown");
 }

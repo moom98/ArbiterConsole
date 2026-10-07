@@ -8,7 +8,11 @@ import type {
   GenerateJsonFn,
   GenerateJsonRequest,
 } from "@/lib/infrastructure/llm/server/generate";
-import { TokenBucketRateLimiter } from "@/lib/infrastructure/llm/server/rate-limiter";
+import {
+  clientKey,
+  DailyRequestCounter,
+  TokenBucketRateLimiter,
+} from "@/lib/infrastructure/llm/server/rate-limiter";
 import { readLlmConfig } from "@/lib/infrastructure/llm/server/config";
 import { LLM_LIMITS } from "@/lib/infrastructure/llm/contract";
 import { ARTICLES, validDraft } from "./fixtures";
@@ -30,13 +34,19 @@ function reasonBody(overrides: Record<string, unknown> = {}) {
 
 function request(
   body: unknown,
-  init: { contentType?: string; ip?: string; raw?: string } = {}
+  init: {
+    contentType?: string;
+    ip?: string;
+    raw?: string;
+    headers?: Record<string, string>;
+  } = {}
 ) {
   return new Request("http://localhost/api/llm/reason", {
     method: "POST",
     headers: {
       "content-type": init.contentType ?? "application/json",
       "x-forwarded-for": init.ip ?? "203.0.113.1",
+      ...init.headers,
     },
     body: init.raw ?? JSON.stringify(body),
   });
@@ -58,11 +68,13 @@ function makeDeps(
       baseDelayMs: 10,
       maxDelayMs: 40,
       totalDeadlineMs: 10_000,
+      minRemainingForRetryMs: 0,
       now: () => 0,
       sleep: async () => {},
       random: () => 0.5,
     },
     timeoutMs: { reason: 50, classify: 50 },
+    dailyCounter: new DailyRequestCounter(),
     log: () => {},
     ...overrides,
   };
@@ -225,7 +237,11 @@ describe("LLM route handler – reason", () => {
     });
     const handler = createLlmRouteHandler(
       "reason",
-      makeDeps(okGenerate, { rateLimiter: limiter })
+      makeDeps(okGenerate, {
+        rateLimiter: limiter,
+        config: () =>
+          readLlmConfig({ GEMINI_API_KEY: SECRET, TRUST_PROXY: "1" }),
+      })
     );
     for (let i = 0; i < 10; i++) {
       expect((await handler(request(reasonBody()))).status).toBe(200);
@@ -399,16 +415,230 @@ describe("LLM route handler – classify", () => {
 });
 
 describe("readLlmConfig", () => {
-  it("falls back to defaults for missing or malformed model ids", () => {
+  it("falls back to defaults for missing or malformed values", () => {
     expect(
       readLlmConfig({
         GEMINI_API_KEY: "  ",
         GEMINI_MODEL_CLASSIFIER: "bad model id!",
+        LLM_DAILY_REQUEST_LIMIT: "-3",
+        GEMINI_THINKING_LEVEL: "huge",
       })
     ).toEqual({
       apiKey: undefined,
       reasoningModel: "gemini-flash-latest",
       classifierModel: "gemini-flash-lite-latest",
+      accessToken: undefined,
+      trustProxy: false,
+      rateLimitPerMinute: { reason: 10, classify: 10 },
+      dailyRequestLimit: 500,
+      thinkingLevel: "low",
+    });
+  });
+
+  it("reads overrides", () => {
+    const c = readLlmConfig({
+      LLM_ACCESS_TOKEN: "tok",
+      TRUST_PROXY: "1",
+      LLM_RATE_LIMIT_REASON_PER_MINUTE: "3",
+      LLM_RATE_LIMIT_CLASSIFY_PER_MINUTE: "20",
+      LLM_DAILY_REQUEST_LIMIT: "0",
+      GEMINI_THINKING_LEVEL: "off",
+    });
+    expect(c).toMatchObject({
+      accessToken: "tok",
+      trustProxy: true,
+      rateLimitPerMinute: { reason: 3, classify: 20 },
+      dailyRequestLimit: 0,
+      thinkingLevel: "off",
+    });
+  });
+});
+
+describe("access control and cost caps (S-H1)", () => {
+  const withToken = () =>
+    readLlmConfig({ GEMINI_API_KEY: SECRET, LLM_ACCESS_TOKEN: "s3cret-token" });
+
+  it("requires the access token header when LLM_ACCESS_TOKEN is set", async () => {
+    const generate = vi.fn<GenerateJsonFn>(async () => ({ text: "{}" }));
+    const handler = createLlmRouteHandler(
+      "reason",
+      makeDeps(generate, { config: withToken })
+    );
+    const missing = await handler(request(reasonBody()));
+    expect(missing.status).toBe(401);
+    expect((await errorOf(missing)).code).toBe("unauthorized");
+    const wrong = await handler(
+      request(reasonBody(), {
+        headers: { "x-arbiter-access-token": "s3cret-tokeN" },
+      })
+    );
+    expect(wrong.status).toBe(401);
+    expect(generate).not.toHaveBeenCalled();
+
+    const ok = await handler(
+      request(reasonBody(), {
+        headers: { "x-arbiter-access-token": "s3cret-token" },
+      })
+    );
+    expect(ok.status).toBe(200);
+  });
+
+  it("enforces the per-process daily cap", async () => {
+    const handler = createLlmRouteHandler(
+      "reason",
+      makeDeps(okGenerate, {
+        config: () =>
+          readLlmConfig({
+            GEMINI_API_KEY: SECRET,
+            LLM_DAILY_REQUEST_LIMIT: "2",
+          }),
+        dailyCounter: new DailyRequestCounter(() => Date.UTC(2026, 0, 1)),
+      })
+    );
+    expect((await handler(request(reasonBody()))).status).toBe(200);
+    expect((await handler(request(reasonBody()))).status).toBe(200);
+    const capped = await handler(request(reasonBody()));
+    expect(capped.status).toBe(429);
+    expect((await errorOf(capped)).code).toBe("quota-exceeded");
+  });
+
+  it("resets the daily counter on a new UTC day", () => {
+    let now = Date.UTC(2026, 0, 1, 23);
+    const c = new DailyRequestCounter(() => now);
+    expect(c.take(1)).toBe(true);
+    expect(c.take(1)).toBe(false);
+    now = Date.UTC(2026, 0, 2, 0, 1);
+    expect(c.take(1)).toBe(true);
+    expect(new DailyRequestCounter().take(0)).toBe(true);
+  });
+
+  it("only trusts X-Forwarded-For when TRUST_PROXY=1", () => {
+    const h = new Headers({ "x-forwarded-for": "198.51.100.9, 10.0.0.1" });
+    expect(clientKey(h, false)).toBe("process");
+    expect(clientKey(h, true)).toBe("ip:198.51.100.9");
+    expect(clientKey(new Headers(), true)).toBe("process");
+  });
+
+  it("uses separate env-configured buckets per route by default", async () => {
+    const config = () =>
+      readLlmConfig({
+        GEMINI_API_KEY: SECRET,
+        LLM_RATE_LIMIT_REASON_PER_MINUTE: "1",
+        LLM_RATE_LIMIT_CLASSIFY_PER_MINUTE: "2",
+      });
+    const deps = makeDeps(okGenerate, { config });
+    delete deps.rateLimiter;
+    const reason = createLlmRouteHandler("reason", deps);
+    const classify = createLlmRouteHandler("classify", deps);
+    expect((await reason(request(reasonBody()))).status).toBe(200);
+    expect((await reason(request(reasonBody()))).status).toBe(429);
+    // 分類は別のバケット
+    expect((await classify(request({ text: "スマホ" }))).status).toBe(200);
+    expect((await classify(request({ text: "スマホ" }))).status).toBe(200);
+    expect((await classify(request({ text: "スマホ" }))).status).toBe(429);
+  });
+});
+
+describe("request body streaming limit (S-M2)", () => {
+  it("aborts reading once the body exceeds the limit even without Content-Length", async () => {
+    let pulled = 0;
+    const chunk = new Uint8Array(32_000).fill(0x61);
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++;
+        controller.enqueue(chunk);
+        if (pulled > 100) controller.close();
+      },
+    });
+    const req = new Request("http://localhost/api/llm/reason", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: stream,
+      // @ts-expect-error Node の fetch 実装ではストリーム本文に duplex が必要
+      duplex: "half",
+    });
+    const handler = createLlmRouteHandler("reason", makeDeps(okGenerate));
+    const res = await handler(req);
+    expect(res.status).toBe(413);
+    expect(pulled).toBeLessThan(10);
+  });
+});
+
+describe("total deadline (S-H2)", () => {
+  it("limits the retry attempt to the remaining time", async () => {
+    let now = 0;
+    const timeouts: number[] = [];
+    let calls = 0;
+    const generate = vi.fn<GenerateJsonFn>(async (req) => {
+      timeouts.push(req.timeoutMs);
+      calls++;
+      if (calls === 1) {
+        now += 25_000; // 遅い1回目
+        throw Object.assign(new Error("x"), { status: 503 });
+      }
+      return { text: JSON.stringify(validDraft()) };
+    });
+    const deps = makeDeps(generate, {
+      timeoutMs: { reason: 20_000, classify: 8_000 },
+    });
+    const handler = createLlmRouteHandler("reason", {
+      ...deps,
+      retry: {
+        ...deps.retry!,
+        totalDeadlineMs: 30_000,
+        minRemainingForRetryMs: 3_000,
+        now: () => now,
+      },
+    });
+    const res = await handler(request(reasonBody()));
+    expect(res.status).toBe(200);
+    expect(timeouts[0]).toBe(20_000);
+    // 残り 5 秒 − バックオフ ≒ 5 秒以内に収める
+    expect(timeouts[1]).toBeLessThanOrEqual(5_000);
+  });
+
+  it("does not retry when less than the minimum remains", async () => {
+    let now = 0;
+    const generate = vi.fn<GenerateJsonFn>(async () => {
+      now += 28_000;
+      throw Object.assign(new Error("x"), { status: 503 });
+    });
+    const deps = makeDeps(generate);
+    const handler = createLlmRouteHandler("reason", {
+      ...deps,
+      retry: {
+        ...deps.retry!,
+        totalDeadlineMs: 30_000,
+        minRemainingForRetryMs: 3_000,
+        now: () => now,
+      },
+    });
+    const res = await handler(request(reasonBody()));
+    expect(res.status).toBe(503);
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry unknown (non-transport) errors (S-L3)", async () => {
+    const generate = vi.fn<GenerateJsonFn>(async () => {
+      throw new RangeError("bug");
+    });
+    const res = await createLlmRouteHandler(
+      "reason",
+      makeDeps(generate)
+    )(request(reasonBody()));
+    expect(res.status).toBe(502);
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes the thinking level and a larger output budget for reasoning", async () => {
+    const generate = vi.fn<GenerateJsonFn>(async () => ({ text: "{}" }));
+    await createLlmRouteHandler(
+      "reason",
+      makeDeps(generate)
+    )(request(reasonBody()));
+    expect(generate.mock.calls[0][0]).toMatchObject({
+      thinkingLevel: "low",
+      maxOutputTokens: 6_000,
     });
   });
 });

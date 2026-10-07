@@ -85,24 +85,44 @@ export class TokenBucketRateLimiter {
   }
 }
 
-/** 計画どおり 10 req/min（分類・推論の両ルートで共有） */
-export const LLM_RATE_LIMIT_PER_MINUTE = 10;
+/**
+ * プロセス全体の1日あたりの上限（UTC 日付で集計）。費用の暴走を防ぐ最後の歯止め。
+ * インメモリのためインスタンスごと・再起動でリセットされる。厳密な上限は
+ * Google Cloud 側のクォータ・予算アラートで設定すること（ADR-007）。
+ */
+export class DailyRequestCounter {
+  private day = "";
+  private count = 0;
 
-export const sharedLlmRateLimiter = new TokenBucketRateLimiter({
-  capacity: LLM_RATE_LIMIT_PER_MINUTE,
-  refillIntervalMs: 60_000,
-});
+  constructor(private readonly now: () => number = Date.now) {}
+
+  /** 1件を消費する。limit 0 は無制限 */
+  take(limit: number): boolean {
+    if (limit <= 0) return true;
+    const today = new Date(this.now()).toISOString().slice(0, 10);
+    if (today !== this.day) {
+      this.day = today;
+      this.count = 0;
+    }
+    if (this.count >= limit) return false;
+    this.count++;
+    return true;
+  }
+}
 
 /**
- * クライアントキー（IP）。信頼できるリバースプロキシ（Vercel 等）が付与する
- * X-Forwarded-For の先頭を使う。プロキシを経由しない構成ではヘッダーを偽装できるため、
- * レート制限は乱用抑止にとどまる。
+ * クライアントキー。
+ * - trustProxy（TRUST_PROXY=1）: 信頼できるリバースプロキシ（Vercel 等）が付与する
+ *   X-Forwarded-For の先頭（なければ X-Real-IP）を使う
+ * - それ以外: ヘッダーは偽装できるため使わず、プロセス全体で1つのバケットを共有する
+ *   （全利用者の合計に対する制限になる。ADR-007）
  */
-export function clientKey(headers: Headers): string {
+export function clientKey(headers: Headers, trustProxy: boolean): string {
+  if (!trustProxy) return "process";
   const forwarded = headers.get("x-forwarded-for");
   const first = forwarded?.split(",")[0]?.trim();
-  if (first) return first.slice(0, 100);
+  if (first) return `ip:${first.slice(0, 100)}`;
   const real = headers.get("x-real-ip")?.trim();
-  if (real) return real.slice(0, 100);
-  return "unknown";
+  if (real) return `ip:${real.slice(0, 100)}`;
+  return "process";
 }

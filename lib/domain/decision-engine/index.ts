@@ -36,7 +36,7 @@ export interface DecisionEngineDeps {
   /** 同一局面の自動判定に使う局面解析（未指定なら自動判定は利用不可） */
   positions?: ChessPositionPort;
   /**
-   * 決定木の対象外の事象について AI 参考情報を取得するポート（ADR-006）。
+   * 決定木の対象外の事象について AI 参考情報を取得するポート（ADR-007）。
    * evaluate() でのみ使用する。未指定なら従来どおり手動確認（CAへ確認）とする。
    */
   llm?: LlmAssistPort;
@@ -94,7 +94,7 @@ export interface DecisionEngineResult {
  *
  * - processIncident（同期）: 決定木のみ。対象外は手動確認（CAへ確認）。
  * - evaluate（非同期）: 決定木を優先し、対象外の事象に限り LlmAssistPort から
- *   AI 参考情報を取得して、ドメインの決定的な検証器で検証する（ADR-002 / ADR-006）。
+ *   AI 参考情報を取得して、ドメインの決定的な検証器で検証する（ADR-002 / ADR-007）。
  * エンジン自身は LLM・HTTP を直接呼び出さない（ポート経由）。
  */
 export class DecisionEngine {

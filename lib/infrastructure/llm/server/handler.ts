@@ -32,7 +32,7 @@ import {
 } from "./request-validation";
 
 /**
- * /api/llm/{reason,classify} の処理本体（Route Handler から呼ぶ）。ADR-006。
+ * /api/llm/{reason,classify} の処理本体（Route Handler から呼ぶ）。ADR-007。
  *
  * - Content-Type: application/json 必須（クロスオリジンのブラウザからはプリフライトが必要になる）
  * - レート制限（インメモリ、IP 単位）→ API キー確認 → 本文サイズ・入力検証 → Gemini 呼び出し

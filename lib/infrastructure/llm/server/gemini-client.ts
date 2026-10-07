@@ -2,7 +2,7 @@ import { FinishReason, GoogleGenAI } from "@google/genai";
 import type { GenerateJsonFn } from "./generate";
 
 /**
- * Google Gen AI SDK（@google/genai）による GenerateJsonFn の実装。サーバー専用（ADR-006）。
+ * Google Gen AI SDK（@google/genai）による GenerateJsonFn の実装。サーバー専用（ADR-007）。
  * このファイルは Route Handler からのみ import すること（クライアントバンドルに含めない）。
  */
 

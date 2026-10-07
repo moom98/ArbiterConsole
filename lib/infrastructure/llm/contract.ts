@@ -1,5 +1,5 @@
 /**
- * /api/llm/* の通信契約（サーバー・クライアント共通。SDK には依存しない）。ADR-006。
+ * /api/llm/* の通信契約（サーバー・クライアント共通。SDK には依存しない）。ADR-007。
  */
 
 export const LLM_API_PATHS = {

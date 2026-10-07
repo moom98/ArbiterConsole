@@ -78,7 +78,7 @@ export type DecisionKind =
   | "manual-review";
 
 /**
- * LLM（AI参考情報）の取得・検証状態（ADR-006）。
+ * LLM（AI参考情報）の取得・検証状態（ADR-007）。
  * - passed:      LLM の出力が検証を通過した（AI参考として表示）
  * - rejected:    LLM の出力が検証に失敗した（CAへ確認）
  * - offline:     オフラインのため LLM を呼び出さなかった
@@ -116,7 +116,7 @@ export interface Decision {
   /** 不足している情報のラベル一覧（kind が follow-up-required / context-required の場合） */
   missingFields?: string[];
   generatedBy: "decision-tree" | "llm";
-  /** 決定木の対象外で AI 参考情報を試みた場合の状態（ADR-006） */
+  /** 決定木の対象外で AI 参考情報を試みた場合の状態（ADR-007） */
   llm?: LlmDecisionMeta;
   validatedAt?: Date;
   validationPassed: boolean;

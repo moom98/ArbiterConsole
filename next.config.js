@@ -6,7 +6,7 @@ const withPWA = require("next-pwa")({
   // モデル・WASMは大きく（数十〜百MB超）precacheに含めない。初回利用時に
   // 下記の runtimeCaching (CacheFirst) でキャッシュしオフラインでも利用する。
   publicExcludes: ["!noprecache/**/*", "!models/**/*", "!ort/**/*"],
-  // LLM（ADR-006）: 同一オリジンの POST /api/llm/* のみ。Workbox の runtimeCaching は GET のみを
+  // LLM（ADR-007）: 同一オリジンの POST /api/llm/* のみ。Workbox の runtimeCaching は GET のみを
   // 対象とし、さらに下の "others" ルールで /api/ を除外しているため応答はキャッシュされない。
   // /api/ をキャッシュするルールを追加しないこと
   runtimeCaching: [
@@ -157,7 +157,7 @@ const withPWA = require("next-pwa")({
 const nextConfig = {
   reactStrictMode: true,
   experimental: {
-    // Gemini SDK はサーバー（Route Handler）専用。webpack でバンドルせず Node から読み込む（ADR-006）
+    // Gemini SDK はサーバー（Route Handler）専用。webpack でバンドルせず Node から読み込む（ADR-007）
     serverComponentsExternalPackages: ["@google/genai"],
   },
   webpack: (config, { isServer }) => {

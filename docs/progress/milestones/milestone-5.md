@@ -1,7 +1,7 @@
 # Milestone 5: LLM Integration (Gemini via server route)
 
 **Status:** Implemented on branch `feature/m4-and-review-fixes` + worktree commits (394986e … HEAD). No independent review yet.
-**Decision record:** [ADR-006](../../decisions/ADR-006-gemini-llm-via-server-route.md). The provider is Google Gemini, called only from the server.
+**Decision record:** [ADR-007](../../decisions/ADR-007-gemini-llm-via-server-route.md). The provider is Google Gemini, called only from the server.
 
 ## Completed work
 
@@ -41,7 +41,7 @@
   - `IncidentTextClassifier` (category step): a suggestion only, which pre-fills category, subtype and description.
   - Report page: loading text while the AI request runs, and the retry wiring.
 - **Entities:** optional `Decision.llm` (`LlmDecisionMeta`) and `RuleCitation.ruleId`. No DB schema change.
-- **Docs:** ADR-006, an index entry, notes in ADR-001/002 and design docs, README env section, `.env.example`.
+- **Docs:** ADR-007, an index entry, notes in ADR-001/002 and design docs, README env section, `.env.example`.
 
 ## Env vars
 
@@ -50,6 +50,13 @@
 - `GEMINI_MODEL_CLASSIFIER` (default `gemini-flash-lite-latest`)
 
 Both default models are aliases listed in the SDK's model type and README.
+
+### Changing models later (planned follow-up task)
+
+- **Only change:** env vars `GEMINI_MODEL_CLASSIFIER` (classification / 判定) and `GEMINI_MODEL_REASONING` (reasoning / 推論), then restart the server.
+- **Defaults:** they live only in `lib/infrastructure/llm/server/config.ts` (`DEFAULT_CLASSIFIER_MODEL`, `DEFAULT_REASONING_MODEL`). When changing them, also update `.env.example` and the README table.
+- **Provider:** it is bound only in `lib/infrastructure/llm/server/provider.ts` (`llmProvider`, a `GenerateJsonFn`). To swap providers, add a new adapter and rebind `llmProvider`. Nothing else needs to change.
+- **Tests:** `__tests__/llm/route-handler.test.ts` asserts the default model IDs. Update those expectations if the defaults change.
 
 ## Tests / verification
 

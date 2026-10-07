@@ -85,7 +85,7 @@
 
 ### AI & ML
 
-- **LLM**: Google Gemini API（`@google/genai`、サーバーの Route Handler 経由のみ。[ADR-006](./docs/decisions/ADR-006-gemini-llm-via-server-route.md)）
+- **LLM**: Google Gemini API（`@google/genai`、サーバーの Route Handler 経由のみ。[ADR-007](./docs/decisions/ADR-007-gemini-llm-via-server-route.md)）
 - **Embeddings**: Xenova/paraphrase-multilingual-MiniLM-L12-v2 (384-dim, 多言語, 約120MB, 自己ホスト — [ADR-003](./docs/decisions/ADR-003-offline-rule-search.md))
 - **Runtime**: WebAssembly (browser-based)
 
@@ -128,7 +128,7 @@ npm run fetch-models
 
 ### LLM（AI参考情報）の設定
 
-決定木の対象外の事象（例: スマートウォッチ・携帯電話などの選手の行動）では、Google Gemini による「AI参考」情報を表示します。Gemini はサーバー（`app/api/llm/*` の Route Handler）からのみ呼び出し、API キーをブラウザに送ることはありません（[ADR-006](./docs/decisions/ADR-006-gemini-llm-via-server-route.md)）。
+決定木の対象外の事象（例: スマートウォッチ・携帯電話などの選手の行動）では、Google Gemini による「AI参考」情報を表示します。Gemini はサーバー（`app/api/llm/*` の Route Handler）からのみ呼び出し、API キーをブラウザに送ることはありません（[ADR-007](./docs/decisions/ADR-007-gemini-llm-via-server-route.md)）。
 
 `.env.example` を `.env.local` にコピーし、サーバーの環境変数を設定してください（`.env.local` はコミットしない）。
 
@@ -142,6 +142,12 @@ npm run fetch-models
 - レート制限はサーバープロセス内のメモリで 10 req/分/IP（分類・推論の合計）です。サーバーレス・複数インスタンスではインスタンスごとの制限になります。
 - `*-latest` は別名のため挙動が変わることがあります。大会中の再現性が必要な場合はバージョン固定のモデル ID を指定してください。
 - AI の出力は端末内の決定的な検証器（引用条文の存在・原文との一致・根拠のないペナルティ・推測表現など）を通過した場合のみ「AI参考」として表示され、それ以外は「CAへ確認」になります。決定木の対象となる事象では AI は判断に使われません。
+
+#### モデル・プロバイダーの変更方法
+
+- **モデルの変更（判定=分類 / 推論）:** サーバーの環境変数 `GEMINI_MODEL_CLASSIFIER`（分類）と `GEMINI_MODEL_REASONING`（推論）を変更し、サーバーを再起動するだけです。コード変更は不要です。既定値は `lib/infrastructure/llm/server/config.ts` の `DEFAULT_CLASSIFIER_MODEL` / `DEFAULT_REASONING_MODEL` の1か所だけで定義しています（他のファイルにモデル ID を書かないこと）。
+- **既定値の変更:** `config.ts` の2つの定数のみを変更し、`.env.example` と本 README の表を合わせて更新します。
+- **プロバイダーの変更:** `GenerateJsonFn`（`lib/infrastructure/llm/server/generate.ts`）を実装したアダプターを追加します。次に `lib/infrastructure/llm/server/provider.ts` の `llmProvider` を差し替え、必要なら `config.ts` の環境変数名を変更します。ドメイン（検証器・DecisionEngine）、クライアント、UI は変更不要です。
 
 ### Development
 

@@ -1,4 +1,4 @@
-# ADR-006: Google Gemini via a Server Route Handler for LLM Features
+# ADR-007: Google Gemini via a Server Route Handler for LLM Features
 
 **Status:** Accepted
 
@@ -50,6 +50,12 @@ Constraints that still apply:
 - Structured output is used for both calls (`responseMimeType: application/json` and
   `responseJsonSchema`). The JSON schema only shapes the response. It does not prove the response is
   correct (see §4).
+
+#### Changing models or the provider (single point of configuration)
+
+- **Model IDs are defined in exactly one place:** `lib/infrastructure/llm/server/config.ts`. It reads `GEMINI_MODEL_CLASSIFIER` and `GEMINI_MODEL_REASONING` and falls back to `DEFAULT_CLASSIFIER_MODEL` and `DEFAULT_REASONING_MODEL`. No other file may contain a model ID. To change a model at deploy time, set the env var and restart; no code change is needed. To change a default, edit only those two constants and update `.env.example` and the README.
+- **The provider is behind the `GenerateJsonFn` interface** (`lib/infrastructure/llm/server/generate.ts`). `lib/infrastructure/llm/server/provider.ts` is the only binding point (`llmProvider = geminiGenerateJson`). Both route handlers use it.
+- **To switch providers:** add an adapter that implements `GenerateJsonFn`, rebind `llmProvider`, and rename the env vars in `config.ts` if needed. The domain, client and UI do not change.
 
 ### 2. Server Route Handlers (`app/api/llm/classify`, `app/api/llm/reason`)
 

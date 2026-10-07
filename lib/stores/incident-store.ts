@@ -69,7 +69,7 @@ export interface IncidentStore {
 export interface IncidentStoreDeps {
   db: ArbiterDatabase;
   providers: DomainProviders;
-  /** 決定木の対象外の事象の AI 参考情報（未指定なら手動確認のみ）。ADR-006 */
+  /** 決定木の対象外の事象の AI 参考情報（未指定なら手動確認のみ）。ADR-007 */
   llm?: LlmAssistPort;
 }
 

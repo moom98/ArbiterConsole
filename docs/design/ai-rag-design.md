@@ -567,7 +567,7 @@ class RulePriorityResolver {
 
 ## 7. LLM Integration
 
-> **Note (ADR-006):** The LLM provider is now **Google Gemini**, called only through the server Route Handlers `app/api/llm/*`. The API key is never sent to the browser. Claude/Anthropic references below are historical. See [ADR-006](../decisions/ADR-006-gemini-llm-via-server-route.md).
+> **Note (ADR-007):** The LLM provider is now **Google Gemini**, called only through the server Route Handlers `app/api/llm/*`. The API key is never sent to the browser. Claude/Anthropic references below are historical. See [ADR-007](../decisions/ADR-007-gemini-llm-via-server-route.md).
 >
 > **As implemented (Milestone 5):**
 > - Models: `GEMINI_MODEL_REASONING` (default `gemini-flash-latest`) and `GEMINI_MODEL_CLASSIFIER` (default `gemini-flash-lite-latest`), with structured output via `responseJsonSchema`. Citation `articleId` is restricted to the IDs of the articles that were sent.

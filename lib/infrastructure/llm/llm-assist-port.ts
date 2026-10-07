@@ -10,7 +10,7 @@ import {
 } from "./llm-api-client";
 
 /**
- * LlmAssistPort の実装（ADR-006）。
+ * LlmAssistPort の実装（ADR-007）。
  * 1. 端末内の規則（IndexedDB）をハイブリッド検索で取得する（オフラインでも動く既存の検索）
  * 2. 候補条文と構造化コンテキストのみを /api/llm/reason に送る
  * 3. 応答後に、候補条文が IndexedDB にまだ存在するかを再確認する

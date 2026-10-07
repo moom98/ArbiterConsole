@@ -9,7 +9,7 @@ import type {
 } from "@/lib/domain/entities";
 
 /**
- * LLM 連携の契約（ADR-006）。
+ * LLM 連携の契約（ADR-007）。
  * ドメインはこの型のみを知り、SDK・HTTP・IndexedDB には依存しない。
  */
 

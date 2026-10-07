@@ -109,7 +109,7 @@ We will use the following technology stack:
 
 ### AI/LLM Integration
 
-> **Note (ADR-006):** The LLM provider is now **Google Gemini**, called only through the server Route Handlers `app/api/llm/*`. The API key is never sent to the browser. Claude/Anthropic references below are historical. See [ADR-006](./ADR-006-gemini-llm-via-server-route.md).
+> **Note (ADR-007):** The LLM provider is now **Google Gemini**, called only through the server Route Handlers `app/api/llm/*`. The API key is never sent to the browser. Claude/Anthropic references below are historical. See [ADR-007](./ADR-007-gemini-llm-via-server-route.md).
 
 
 **Anthropic Claude API (Sonnet 4.5)**

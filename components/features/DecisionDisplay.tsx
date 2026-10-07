@@ -16,7 +16,7 @@ interface DecisionDisplayProps {
   retrying?: boolean;
 }
 
-/** AI 参考情報を取得できなかった場合の表示（ADR-006） */
+/** AI 参考情報を取得できなかった場合の表示（ADR-007） */
 const LLM_UNAVAILABLE_LABELS: Partial<Record<LlmAssistStatus, string>> = {
   offline: "オフラインのためAI参考情報を取得していません（オンライン必須）",
   unavailable: "AI参考情報を取得できませんでした",

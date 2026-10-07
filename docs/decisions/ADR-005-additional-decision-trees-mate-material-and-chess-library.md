@@ -28,10 +28,12 @@ seminar PDF. Citations are verbatim and listed in `lib/domain/rules/citations.ts
    A.5.4), and who detected it (arbiter / opponent claim / other, where "other" means consult the CA).
    DT-001 (Standard) is unchanged.
 2. **Time penalties (7.5.5 and 9.5.3).** Standard: 2 minutes. Rapid (any regime): 1 minute (A.3).
-   Blitz B.3: 1 minute (B.3 applies A.3). **Blitz B.2: not verifiable.** B.2 only says
-   "Competition Rules shall apply" and does not reference A.3. In this case the decision includes a
-   time-addition penalty with no amount, medium confidence, and escalation to the CA. The tree does
-   not guess between 1 and 2 minutes.
+   Blitz B.3: 1 minute (B.3 applies A.3). **Blitz B.2:** B.2 brings in the Competition Rules
+   (7.5.5 / 9.5.3: two minutes). Only B.3 applies A.3's one-minute rule, so the literal reading for
+   B.2 is **2 minutes**. Because this reading is not stated explicitly, the decision shows
+   "2分（文言上の解釈・要確認）" as the suggested amount with medium confidence, so the arbiter can
+   act quickly. It does not auto-apply the amount (no `timeAdjustmentSeconds`) and it escalates for
+   confirmation with the CA or the event regulations.
 3. **Counting.** `IncidentCounter` counts penalised decisions from DT-001, DT-002 and DT-003. A.5.2
    applies 7.5.5 ("as it is in standard chess", Arbiters' Manual). An A.5 illegal move that stood
    (no penalty) is not counted, which is consistent with ADR-004.
@@ -52,14 +54,18 @@ seminar PDF. Citations are verbatim and listed in `lib/domain/rules/citations.ts
    increment, not blitz); otherwise consult the CA. The arbiter-call vs claim wording differs per
    regime (6.8 vs A.5.3/A.5.5), but the outcome is the same under the 2023 Laws, so no extra question
    is asked.
-6. **Chess library.** `chess.js` (BSD-2, 1.4.0) handles FEN validation, SAN replay, and legal
+6. **Chess library.** `chess.js` (BSD-2, pinned to exactly 1.4.0) handles FEN validation, SAN replay, and legal
    en passant detection. It is used only in `lib/infrastructure/chess/chess-js-position-port.ts`,
    which implements the domain port `ChessPositionPort` (`lib/domain/services/position-analysis.ts`).
    `DecisionEngine` receives the port through injection. Trees only receive the computed analysis,
    so they stay pure and testable without the library. Position keys are: placement + side to move +
    castling rights (kept only when the king and rook are on their original squares) + en passant
    square (only if a legal en passant capture exists).
-7. **Automatic repetition checks are advisory.** Results from a move list or FEN list carry medium
+7. **Automatic repetition checks are advisory.** For a 9.2.1 claim, the automatic check needs the
+   written move. If it is left blank, the app asks for it and never judges the current position
+   instead. The history must end with the claimant to move. The 75-move check uses the **maximum**
+   halfmove clock over the whole replay, not only the last position. "Checkmate takes precedence"
+   is taken from the position where 150 plies were first reached. Results from a move list or FEN list carry medium
    confidence and a reminder to verify in the presence of both players (Manual 9.2). The 75-move
    check is only computed from a move list. A FEN-supplied halfmove clock is not trusted, so it leads
    to a consult-CA decision.
@@ -73,5 +79,14 @@ seminar PDF. Citations are verbatim and listed in `lib/domain/rules/citations.ts
   tournament regulations. A tournament-level override can be added when tournament management
   exists (Milestone 6).
 - Draw-claim incidents record the claimant as `Incident.playerColor`, so an incorrect-claim time
-  addition appears in that player's penalty history. Fivefold/75-move incidents have no player and
-  appear in the "unknown" bucket.
+  addition appears in that player's penalty history.
+- Result outcomes are not offences and are shown in a separate "対局結果" section of the penalty
+  history: draws (from any tree) and all flag-fall (DT-004) outcomes. They never appear in an
+  offender's list or in the legacy "違反者不明" bucket. `Penalty.playerColor` is optional and is
+  left out for draws.
+- Frequent trees (flag fall, threefold, fivefold, 75-move) can be reported from quick tiles that
+  carry the subtype. Common flows then need 2–3 answer rounds. Incidents outside the trees
+  (e.g. "other") require a short situation note.
+- In A.5 / B.3, if the opponent has already moved after an uncorrected promotion, the decision is
+  "wait for the next move" (A.5.4). An illegal move that stood carries a note on the A.5.4
+  both-kings-in-check procedure.

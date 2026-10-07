@@ -1,10 +1,7 @@
 import type { LlmAssistPort } from "@/lib/domain/llm/ports";
 import type { LlmArticle, LlmReasoningRequest } from "@/lib/domain/llm/types";
 import { db } from "@/lib/infrastructure/db";
-import {
-  hybridSearch,
-  type RuleSearchResult,
-} from "@/lib/infrastructure/ai/hybrid-search";
+import type { RuleSearchResult } from "@/lib/infrastructure/ai/hybrid-search";
 import { LLM_LIMITS } from "./contract";
 import {
   browserIsOnline,
@@ -36,6 +33,9 @@ async function defaultSearch(
   query: string,
   tournamentId: string | undefined
 ): Promise<RuleSearchResult[]> {
+  // 検索モジュール（lunr 等）は AI 参考情報が必要になった時点で読み込む
+  const { hybridSearch } =
+    await import("@/lib/infrastructure/ai/hybrid-search");
   const res = await hybridSearch(query, {
     tournamentId,
     limit: MAX_CANDIDATES,

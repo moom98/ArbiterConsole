@@ -30,12 +30,14 @@
 ### 実装済み機能
 
 #### 📚 Rule Search
+
 - FIDE Laws of Chess、JCF規則のPDFインポート
 - AI embeddings生成（Transformers.js、オフライン対応）
 - Hybrid search（Vector検索 + Full-text検索）
 - ルール優先度システム（大会規則 > JCF > FIDE）
 
 #### ⚖️ Decision Support
+
 - DT-001: Illegal Move (Standard) の完全実装
   - 1回目: 相手に2分追加
   - 2回目以降: Game Loss
@@ -45,12 +47,14 @@
 - 根拠規則の自動引用
 
 #### 📊 Incident Management
+
 - インシデント履歴の表示・管理
 - カテゴリフィルタリング（10カテゴリ）
 - ペナルティ統計ダッシュボード
 - CSV export機能
 
 #### 📱 Mobile-First Design
+
 - PWA対応（オフライン動作可能）
 - Bottom tab navigation
 - レスポンシブデザイン
@@ -59,7 +63,6 @@
 ### 開発予定機能
 
 - 🔄 追加Decision Trees (Rapid A4/A5, Flag Fall, Threefold Repetition)
-- 🔄 LLM統合（Claude API）
 - 🔄 Tournament管理
 - 🔄 音声入力
 - 🔄 多言語対応
@@ -67,6 +70,7 @@
 ## Tech Stack
 
 ### Frontend
+
 - **Framework**: Next.js 14.2.x (App Router)
 - **UI Library**: React 18.3.1
 - **Styling**: Tailwind CSS 3.4.1
@@ -74,16 +78,19 @@
 - **State Management**: Zustand 5.x
 
 ### Data & Storage
+
 - **Database**: Dexie.js (IndexedDB wrapper)
 - **Vector Search**: Transformers.js (paraphrase-multilingual-MiniLM-L12-v2)
 - **Full-text Search**: Lunr.js（日本語は文字bi-gram）
 
 ### AI & ML
-- **LLM**: Claude API (planned)
+
+- **LLM**: Google Gemini API（`@google/genai`、サーバーの Route Handler 経由のみ。[ADR-006](./docs/decisions/ADR-006-gemini-llm-via-server-route.md)）
 - **Embeddings**: Xenova/paraphrase-multilingual-MiniLM-L12-v2 (384-dim, 多言語, 約120MB, 自己ホスト — [ADR-003](./docs/decisions/ADR-003-offline-rule-search.md))
 - **Runtime**: WebAssembly (browser-based)
 
 ### Tools
+
 - **Linting**: ESLint 8.x + Prettier
 - **Testing**: Vitest
 - **PWA**: next-pwa
@@ -118,6 +125,23 @@ npm run fetch-models
 いずれも生成物のためリポジトリには含めません（.gitignore 対象）。モデル未配置の場合、ルール検索はキーワード検索のみで動作します。
 
 `npm run build` はモデル未配置だとエラーで停止します（意味検索なしでのデプロイ防止）。開発・CIでモデル無しのままビルドする場合は明示的に `ALLOW_MISSING_MODEL=1` を指定してください。
+
+### LLM（AI参考情報）の設定
+
+決定木の対象外の事象（例: スマートウォッチ・携帯電話などの選手の行動）では、Google Gemini による「AI参考」情報を表示します。Gemini はサーバー（`app/api/llm/*` の Route Handler）からのみ呼び出し、API キーをブラウザに送ることはありません（[ADR-006](./docs/decisions/ADR-006-gemini-llm-via-server-route.md)）。
+
+`.env.example` を `.env.local` にコピーし、サーバーの環境変数を設定してください（`.env.local` はコミットしない）。
+
+| 変数                      | 既定値                     | 説明                                                           |
+| ------------------------- | -------------------------- | -------------------------------------------------------------- |
+| `GEMINI_API_KEY`          | （なし・必須）             | Gemini API キー（サーバー専用。`NEXT_PUBLIC_` を付けないこと） |
+| `GEMINI_MODEL_REASONING`  | `gemini-flash-latest`      | 決定木の対象外の事象の推論（構造化出力）                       |
+| `GEMINI_MODEL_CLASSIFIER` | `gemini-flash-lite-latest` | 自由記述のインシデント分類（低コスト）                         |
+
+- キー未設定の場合、`/api/llm/*` は 503（`not-configured`）を返し、アプリは手動確認（CAへ確認）とキーワード分類で動作します。
+- レート制限はサーバープロセス内のメモリで 10 req/分/IP（分類・推論の合計）です。サーバーレス・複数インスタンスではインスタンスごとの制限になります。
+- `*-latest` は別名のため挙動が変わることがあります。大会中の再現性が必要な場合はバージョン固定のモデル ID を指定してください。
+- AI の出力は端末内の決定的な検証器（引用条文の存在・原文との一致・根拠のないペナルティ・推測表現など）を通過した場合のみ「AI参考」として表示され、それ以外は「CAへ確認」になります。決定木の対象となる事象では AI は判断に使われません。
 
 ### Development
 
@@ -193,7 +217,7 @@ npm test
                       ↓
 ┌─────────────────────────────────────────────────┐
 │         Infrastructure Layer                    │
-│  (IndexedDB + Transformers.js + Claude API)    │
+│  (IndexedDB + Transformers.js + /api/llm→Gemini)│
 └─────────────────────────────────────────────────┘
 ```
 
@@ -202,18 +226,23 @@ npm test
 ## Core Principles
 
 ### 🚫 No Unfounded Rulings
+
 AIは根拠のない裁定を生成しません。すべての裁定には明確な規則の引用が含まれます。
 
 ### 🎯 Decision Support, Not Automation
+
 このシステムは審判の判断を**支援**するものであり、**自動化**するものではありません。
 
 ### 🛡️ Offline-First
+
 Decision Treesはオフラインで動作します。インターネット接続は検索やLLM機能でのみ必要です。
 
 ### 📖 Source Citation Required
+
 すべての裁定は、FIDE Laws of Chess、JCF規則、または大会特別規定に基づきます。
 
 ### ⚠️ Fair Play: No Auto-Detection
+
 フェアプレー違反の自動検出は行いません。AIは事実の記録と規則の提示のみを行います。
 
 ## Documentation
@@ -291,4 +320,4 @@ Issues: https://github.com/moom98/ArbiterConsole/issues
 - **FIDE** - Laws of Chess
 - **JCF** (Japan Chess Federation) - Japanese chess regulations
 - **Digital Agency Design System** - UI components
-- **Anthropic** - Claude AI for LLM capabilities (planned)
+- **Google** - Gemini API for AI-assisted reference information

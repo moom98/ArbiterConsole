@@ -17,6 +17,7 @@ ADRs document important architectural and design decisions made during the proje
 | [ADR-005](./ADR-005-additional-decision-trees-mate-material-and-chess-library.md) | Additional Decision Trees, Mate-Material Check and Chess Library | Accepted |
 | [ADR-006](./ADR-006-tournament-management-and-sourced-overrides.md) | Tournament Management, Tournament Game IDs and Sourced Tournament Overrides | Accepted |
 | [ADR-007](./ADR-007-gemini-llm-via-server-route.md) | Google Gemini via a Server Route Handler for LLM Features | Accepted |
+| [ADR-008](./ADR-008-round-checklist.md) | Round Checklist: Storage, Phases, Sources and Guarded Round Transitions | Accepted |
 
 ## Naming Convention
 

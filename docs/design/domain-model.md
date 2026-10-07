@@ -261,9 +261,18 @@ interface ChecklistItem {
 
 > **Implementation (Milestone 6):** `lib/domain/entities/round.ts`. `RoundStatus` is
 > `pending | active | completed` (no `pre-setup`/`ready`); transitions only pending → active →
-> completed (`transitionRound`). Checklists are not embedded; Milestone 7 should attach them to
+> completed (`transitionRound`). Checklists are not embedded; Milestone 7 attaches them to
 > `Round.id`. IDs are deterministic: `{tournamentId}:r{n}`. Games are queried by
 > `[tournamentId+round]`, not embedded in the Round.
+
+> **Implementation (Milestone 7, ADR-008):** `lib/domain/entities/checklist.ts`. Items have a
+> §26 phase `pre | start | during | post`; the screen shows the stage for the round status
+> (`pending` → pre, `active` → start + during, `completed` → post). Completion is stored per round
+> in `RoundChecklist` (`id = roundId`, items `{itemId, done, doneAt?, note?}`), not embedded in
+> `Round`. Default items are code (`DEFAULT_CHECKLIST_ITEMS`, stable ids, verbatim citations only);
+> per-tournament customisation is `TournamentChecklistTemplate` (ordered builtin-id / custom
+> entries). Start/end of a round goes through `RoundChecklistService.changeRoundStatus` with
+> warnings (incomplete pre-round items / pending incidents) that require explicit confirmation.
 
 ### 3.4 Game
 

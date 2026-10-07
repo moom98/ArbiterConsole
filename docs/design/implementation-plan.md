@@ -403,20 +403,20 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 **Tasks**:
 
 #### 7.1 Checklist Model (1 day)
-- [ ] ChecklistItem model
-- [ ] Pre-round and post-round templates
-- [ ] Store completion status
+- [x] ChecklistItem model
+- [x] Pre-round and post-round templates
+- [x] Store completion status
 
 #### 7.2 Checklist UI (3 days)
-- [ ] Round Checklist screen
-- [ ] Phase-aware display (pre/post/during)
-- [ ] Large checkboxes (48px target)
-- [ ] Notes field per item
+- [x] Round Checklist screen
+- [x] Phase-aware display (pre/post/during)
+- [x] Large checkboxes (48px target)
+- [x] Notes field per item
 
 #### 7.3 Round Status (2 days)
-- [ ] Round status transitions (pending → active → completed)
-- [ ] Trigger checklist phase changes
-- [ ] Button to start/end round
+- [x] Round status transitions (pending → active → completed)
+- [x] Trigger checklist phase changes
+- [x] Button to start/end round
 
 **Deliverable**: Working round checklist
 
@@ -428,6 +428,12 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 
 **Test Coverage**:
 - E2E test: Complete pre-round checklist → start round
+  (Milestone 7 covers this flow with component tests in `__tests__/checklist/`; Playwright E2E is Milestone 9.)
+
+> **Implementation (Milestone 7, ADR-008):** four §26 phases (開始前 / 開始直後 / 対局中 / 終了時) shown
+> as three stages following the round status; per-tournament add/remove/reorder; start/end round
+> with in-page warnings (incomplete pre-round items / pending incidents) and explicit confirmation.
+> Dexie `version(7)`.
 
 ---
 
@@ -536,8 +542,10 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 **Tasks**:
 
 #### 10.1 Deployment (2 days)
-- [ ] Set up Vercel/Netlify project
-- [ ] Configure environment variables (Claude API key)
+- [ ] Set up a hosting project with a Node runtime (Vercel recommended; the `/api/llm/*` routes need a server — ADR-007)
+- [ ] Build command: `npm run fetch-models && npm run build` (prebuild fails without the embedding model)
+- [ ] Configure environment variables: `GEMINI_API_KEY`, and `LLM_ACCESS_TOKEN` (or `LLM_ALLOW_UNAUTHENTICATED=1` behind platform auth); see `.env.example`
+- [ ] Set Google Cloud quotas and a billing budget for the Gemini key
 - [ ] Deploy to production
 - [ ] Test production deployment
 

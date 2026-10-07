@@ -411,6 +411,147 @@ export const CITATIONS = {
     90,
     "(A.5.2) アービターが第7.5.1条、第7.5.2条、第7.5.3条または第7.5.4条(イリーガルムーブ)を観察した場合、相手が次の手を指していない場合は、第7.5.5条(1分加算、2度目で敗北)に従って対応。アービターが介入しない場合、相手が次の手を指していない限り、相手はこれを主張する権利がある。相手が指摘せず、かつ、アービターが介入しない場合はイリーガルムーブが合法手として成立、対局は続行。相手が次の手を指した後は、アービターの介入なくイリーガルムーブを修正することはできない。"
   ),
+
+  // ==== Round Checklist（Milestone 7）: アービターの職務・時計・電子機器 ====
+  // チェックリスト項目の根拠として表示する（裁定には使用しない）。
+  FIDE_6_5: fide(
+    "6.5",
+    23,
+    "Before the start of the game the arbiter shall decide where the chessclock is placed."
+  ),
+  FIDE_6_6: fide(
+    "6.6",
+    23,
+    "At the time determined for the start of the game White’s clock is started."
+  ),
+  FIDE_6_7_1: fide(
+    "6.7.1",
+    23,
+    "The regulations of an event shall specify a default time in advance. If the default time is not specified, then it is zero. Any player who arrives at the chessboard after the default time shall lose the game unless the arbiter decides otherwise."
+  ),
+  FIDE_11_3_2: fide(
+    "11.3.2",
+    35,
+    "During a game, a player is forbidden to have any electronic device not specifically approved by the arbiter in the playing venue."
+  ),
+  MANUAL_6_6_CHECK_CLOCKS_STARTED: manual(
+    "Article 6.6",
+    23,
+    "In general, in tournaments with many players the arbiter announces the start of the round and states that White’s clock is started. The arbiter then goes round the room checking that White’s clock has been started on all boards."
+  ),
+  // Summary of the General Duties of an Arbiter（A: 対局開始前 / B: 対局中 / C: ラウンド終了後）
+  MANUAL_DUTIES_A_B: manual(
+    "General Duties A.b (before the start of the game)",
+    3,
+    "The whole playing venue (playing hall, toilets, smoking area, analysis room, bar) and the technical conditions (light, ventilation, air‐conditioning, enough space for the players, etc.) must be checked carefully before the arrival of players or spectators."
+  ),
+  MANUAL_DUTIES_A_C: manual(
+    "General Duties A.c (before the start of the game)",
+    3,
+    "Checks of the equipment (chessboards, pieces, score sheets, pens) carried out."
+  ),
+  MANUAL_DUTIES_A_D: manual(
+    "General Duties A.d (before the start of the game)",
+    3,
+    "Tables, chairs, ropes for the playing area, name plates for the players and flags of federations, if needed, or table numbers arranged."
+  ),
+  MANUAL_DUTIES_A_E: manual(
+    "General Duties A.e (before the start of the game)",
+    3,
+    "The correct setting of the time control, condition of batteries and the correct placement of the clocks are checked."
+  ),
+  MANUAL_DUTIES_A_F: manual(
+    "General Duties A.f (before the start of the game)",
+    3,
+    "For team competitions it is very important that, before the start of the games, team compositions follow the basic list of players and conditions on board order are confirmed."
+  ),
+  MANUAL_DUTIES_B_A: manual(
+    "General Duties B.a (during the games)",
+    3,
+    "Note the unplayed games (if players didn’t arrive on time for their games and have to be forfeited) and inform the Chief Arbiter."
+  ),
+  MANUAL_DUTIES_B_B: manual(
+    "General Duties B.b (during the games)",
+    3,
+    "Regularly check the electronic clocks by using the time control sheets (every thirty minutes, or as directed by the Chief Arbiter), the score sheets and the number of moves written."
+  ),
+  MANUAL_DUTIES_B_C: manual(
+    "General Duties B.c (during the games)",
+    3,
+    "Discrete control of the players, note if leaving the playing area for an unusual number of times, for their contact with other players, spectators and other persons,"
+  ),
+  MANUAL_DUTIES_B_D: manual(
+    "General Duties B.d (during the games)",
+    3,
+    "Observe all the games, especially when there is time trouble, with the help of an assistant, if needed."
+  ),
+  MANUAL_DUTIES_B_F: manual(
+    "General Duties B.f (during the games)",
+    3,
+    "At the end of the game check the recorded result by both players and check if the score sheets have been signed by both players."
+  ),
+  MANUAL_DUTIES_B_G: manual(
+    "General Duties B.g (during the games)",
+    3,
+    "Update the results sheet by recording the result of every finished game."
+  ),
+  MANUAL_DUTIES_C_A: manual(
+    "General Duties C.a (after the end of the round)",
+    4,
+    "Thorough check of the results of all the games, by counterchecking of the score sheets and the results sheet or the game protocols (in team events) and forward it to the Chief Arbiter."
+  ),
+  MANUAL_DUTIES_C_B: manual(
+    "General Duties C.b (after the end of the round)",
+    4,
+    "Arrangement of all chess boards and the other equipment (pieces, score sheets, pens, clocks), to be ready for the next round."
+  ),
+  // JCF NAセミナー「アービターの職務」（スライド p.11–12。行頭の記号「• 」は除く）
+  JCF_NA_P11_B_VENUE: jcf(
+    11,
+    "b: 対局会場全体の環境(対局エリア、検討室、喫煙エリア、照明、換気など)はプレーヤー・観戦者到着前に十全なチェック"
+  ),
+  JCF_NA_P11_C_EQUIPMENT: jcf(
+    11,
+    "c: チェス盤/駒、棋譜用紙、時計などのチェック"
+  ),
+  JCF_NA_P11_D_TABLES: jcf(
+    11,
+    "d: テーブル、椅子、プレーヤーの名札、テーブル番号などの配置チェック"
+  ),
+  JCF_NA_P11_E_CLOCKS: jcf(
+    11,
+    "e: 正しいタイムコントロール設定、バッテリー状態、時計の正しい配置チェック"
+  ),
+  JCF_NA_P11_F_FBO: jcf(
+    11,
+    "f: (チーム戦の場合)チームの構成がFBO(Fixed Board Order)に従い、ボードの順序に間違いがないかチェック"
+  ),
+  JCF_NA_P11_G_UNPLAYED: jcf(
+    11,
+    "g: プレーされない対局(遅刻でDefaultなど)の記録及び報告"
+  ),
+  JCF_NA_P11_H_CLOCK_CHECK: jcf(
+    11,
+    "h: チェスクロックと手数の進捗の定期的な確認（追加棋譜用紙手配や、時間が落ちそうになっているボードに張り付くなどの判断のため）"
+  ),
+  JCF_NA_P12_I_LEAVING: jcf(
+    12,
+    "i: プレーヤーが対局エリアを高頻度で離れる場合や他のプレーヤー/観戦者との接触がある場合に注意を払う(不正リスクの観点)"
+  ),
+  JCF_NA_P12_J_TIME_TROUBLE: jcf(
+    12,
+    "j: 時間切迫の場合にすべてのゲームの観察(必要に応じて人員を投入してでも)"
+  ),
+  JCF_NA_P12_L_SIGNATURES: jcf(
+    12,
+    "l: 対局終了時に両者のサインがなされているか確認"
+  ),
+  JCF_NA_P12_M_RESULTS: jcf(12, "m: 終了したゲームの結果確認/更新"),
+  JCF_NA_P12_N_CROSSCHECK: jcf(12, "n: 棋譜用紙と結果の徹底的な確認→CAへ報告"),
+  JCF_NA_P12_O_EQUIPMENT: jcf(
+    12,
+    "o: ラウンド前に機材(チェス盤/駒、時計、棋譜用紙など)の配置。"
+  ),
 } as const satisfies Record<string, RuleCitation>;
 
 export type CitationKey = keyof typeof CITATIONS;

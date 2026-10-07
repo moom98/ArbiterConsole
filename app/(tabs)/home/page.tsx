@@ -121,9 +121,17 @@ export default function HomePage() {
                   CA確認を推奨したIncident: {summary.escalatedCount}件
                 </p>
               )}
+              {round && (
+                <Link
+                  href={`/tournament/${encodeURIComponent(active.id)}/rounds/${round.roundNumber}`}
+                  className="mt-3 flex items-center justify-center min-h-14 px-3 bg-blue-50 border border-blue-300 text-blue-800 rounded-lg font-bold"
+                >
+                  ラウンドチェックリスト
+                </Link>
+              )}
               <Link
                 href={`/tournament/${encodeURIComponent(active.id)}`}
-                className="mt-3 flex items-center justify-center min-h-12 px-3 border border-gray-300 rounded-lg"
+                className="mt-2 flex items-center justify-center min-h-12 px-3 border border-gray-300 rounded-lg"
               >
                 {round ? "ラウンド・ボード管理" : "ラウンドを作成"}
               </Link>

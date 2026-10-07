@@ -323,3 +323,155 @@ describe("Rule citation catalog", () => {
     }
   });
 });
+
+/**
+ * Milestone 7（Round Checklist）で追加した引用。pdfjs-dist の抽出テキストと照合済み
+ * （FIDE は改行を半角スペース、JCF は改行を詰めて結合。行頭の箇条書き記号は除く）。
+ */
+const EXPECTED_M7: Record<string, { page: number; text: string }> = {
+  FIDE_6_5: {
+    page: 23,
+    text: "Before the start of the game the arbiter shall decide where the chessclock is placed.",
+  },
+  FIDE_6_6: {
+    page: 23,
+    text: "At the time determined for the start of the game White’s clock is started.",
+  },
+  FIDE_6_7_1: {
+    page: 23,
+    text: "The regulations of an event shall specify a default time in advance. If the default time is not specified, then it is zero. Any player who arrives at the chessboard after the default time shall lose the game unless the arbiter decides otherwise.",
+  },
+  FIDE_11_3_2: {
+    page: 35,
+    text: "During a game, a player is forbidden to have any electronic device not specifically approved by the arbiter in the playing venue.",
+  },
+  MANUAL_6_6_CHECK_CLOCKS_STARTED: {
+    page: 23,
+    text: "In general, in tournaments with many players the arbiter announces the start of the round and states that White’s clock is started. The arbiter then goes round the room checking that White’s clock has been started on all boards.",
+  },
+  MANUAL_DUTIES_A_B: {
+    page: 3,
+    text: "The whole playing venue (playing hall, toilets, smoking area, analysis room, bar) and the technical conditions (light, ventilation, air‐conditioning, enough space for the players, etc.) must be checked carefully before the arrival of players or spectators.",
+  },
+  MANUAL_DUTIES_A_C: {
+    page: 3,
+    text: "Checks of the equipment (chessboards, pieces, score sheets, pens) carried out.",
+  },
+  MANUAL_DUTIES_A_D: {
+    page: 3,
+    text: "Tables, chairs, ropes for the playing area, name plates for the players and flags of federations, if needed, or table numbers arranged.",
+  },
+  MANUAL_DUTIES_A_E: {
+    page: 3,
+    text: "The correct setting of the time control, condition of batteries and the correct placement of the clocks are checked.",
+  },
+  MANUAL_DUTIES_A_F: {
+    page: 3,
+    text: "For team competitions it is very important that, before the start of the games, team compositions follow the basic list of players and conditions on board order are confirmed.",
+  },
+  MANUAL_DUTIES_B_A: {
+    page: 3,
+    text: "Note the unplayed games (if players didn’t arrive on time for their games and have to be forfeited) and inform the Chief Arbiter.",
+  },
+  MANUAL_DUTIES_B_B: {
+    page: 3,
+    text: "Regularly check the electronic clocks by using the time control sheets (every thirty minutes, or as directed by the Chief Arbiter), the score sheets and the number of moves written.",
+  },
+  MANUAL_DUTIES_B_C: {
+    page: 3,
+    text: "Discrete control of the players, note if leaving the playing area for an unusual number of times, for their contact with other players, spectators and other persons,",
+  },
+  MANUAL_DUTIES_B_D: {
+    page: 3,
+    text: "Observe all the games, especially when there is time trouble, with the help of an assistant, if needed.",
+  },
+  MANUAL_DUTIES_B_F: {
+    page: 3,
+    text: "At the end of the game check the recorded result by both players and check if the score sheets have been signed by both players.",
+  },
+  MANUAL_DUTIES_B_G: {
+    page: 3,
+    text: "Update the results sheet by recording the result of every finished game.",
+  },
+  MANUAL_DUTIES_C_A: {
+    page: 4,
+    text: "Thorough check of the results of all the games, by counterchecking of the score sheets and the results sheet or the game protocols (in team events) and forward it to the Chief Arbiter.",
+  },
+  MANUAL_DUTIES_C_B: {
+    page: 4,
+    text: "Arrangement of all chess boards and the other equipment (pieces, score sheets, pens, clocks), to be ready for the next round.",
+  },
+  JCF_NA_P11_B_VENUE: {
+    page: 11,
+    text: "b: 対局会場全体の環境(対局エリア、検討室、喫煙エリア、照明、換気など)はプレーヤー・観戦者到着前に十全なチェック",
+  },
+  JCF_NA_P11_C_EQUIPMENT: {
+    page: 11,
+    text: "c: チェス盤/駒、棋譜用紙、時計などのチェック",
+  },
+  JCF_NA_P11_D_TABLES: {
+    page: 11,
+    text: "d: テーブル、椅子、プレーヤーの名札、テーブル番号などの配置チェック",
+  },
+  JCF_NA_P11_E_CLOCKS: {
+    page: 11,
+    text: "e: 正しいタイムコントロール設定、バッテリー状態、時計の正しい配置チェック",
+  },
+  JCF_NA_P11_F_FBO: {
+    page: 11,
+    text: "f: (チーム戦の場合)チームの構成がFBO(Fixed Board Order)に従い、ボードの順序に間違いがないかチェック",
+  },
+  JCF_NA_P11_G_UNPLAYED: {
+    page: 11,
+    text: "g: プレーされない対局(遅刻でDefaultなど)の記録及び報告",
+  },
+  JCF_NA_P11_H_CLOCK_CHECK: {
+    page: 11,
+    text: "h: チェスクロックと手数の進捗の定期的な確認（追加棋譜用紙手配や、時間が落ちそうになっているボードに張り付くなどの判断のため）",
+  },
+  JCF_NA_P12_I_LEAVING: {
+    page: 12,
+    text: "i: プレーヤーが対局エリアを高頻度で離れる場合や他のプレーヤー/観戦者との接触がある場合に注意を払う(不正リスクの観点)",
+  },
+  JCF_NA_P12_J_TIME_TROUBLE: {
+    page: 12,
+    text: "j: 時間切迫の場合にすべてのゲームの観察(必要に応じて人員を投入してでも)",
+  },
+  JCF_NA_P12_L_SIGNATURES: {
+    page: 12,
+    text: "l: 対局終了時に両者のサインがなされているか確認",
+  },
+  JCF_NA_P12_M_RESULTS: {
+    page: 12,
+    text: "m: 終了したゲームの結果確認/更新",
+  },
+  JCF_NA_P12_N_CROSSCHECK: {
+    page: 12,
+    text: "n: 棋譜用紙と結果の徹底的な確認→CAへ報告",
+  },
+  JCF_NA_P12_O_EQUIPMENT: {
+    page: 12,
+    text: "o: ラウンド前に機材(チェス盤/駒、時計、棋譜用紙など)の配置。",
+  },
+};
+
+describe("Round checklist citations (Milestone 7)", () => {
+  it.each(Object.entries(EXPECTED_M7))("%s is verbatim", (key, exp) => {
+    const c = CITATIONS[key as keyof typeof CITATIONS];
+    expect(c, `citation ${key} missing`).toBeDefined();
+    expect(c.text).toBe(exp.text);
+    expect(c.page).toBe(exp.page);
+  });
+
+  it("FIDE 6.5 / 6.6 / 6.7.1 / 11.3.2 are Laws 2023 articles", () => {
+    for (const k of [
+      "FIDE_6_5",
+      "FIDE_6_6",
+      "FIDE_6_7_1",
+      "FIDE_11_3_2",
+    ] as const) {
+      expect(CITATIONS[k].source).toBe("FIDE");
+      expect(CITATIONS[k].edition).toBe("FIDE Laws of Chess 2023");
+    }
+  });
+});

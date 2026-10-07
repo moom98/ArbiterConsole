@@ -60,9 +60,11 @@ describe("Report page — game context from the active tournament", () => {
     // 大会の規則セット（明示）と今のラウンドが表示される
     expect(await screen.findByText("秋季ブリッツ")).toBeTruthy();
     expect(screen.getByText(/Blitz · B.2 · 3分\+2秒 · FIDE-2023/)).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: /R2/ }).getAttribute("aria-pressed")
-    ).toBe("true");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /R2/ }).getAttribute("aria-pressed")
+      ).toBe("true")
+    );
 
     // 1タップ: ボード4
     fireEvent.click(await screen.findByRole("button", { name: /ボード4/ }));
@@ -83,10 +85,26 @@ describe("Report page — game context from the active tournament", () => {
     ).toEqual([]);
   });
 
+  it("a tournament without rounds selects no round and shows no boards", async () => {
+    const { service } = useTournamentStore.getState();
+    await service.saveTournamentProfile(
+      profileInput({ name: "ラウンド未作成" })
+    );
+    render(<ReportPage />);
+    expect(await screen.findByText("ラウンド未作成")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /ボード\d/ })).toBeNull();
+  });
+
   it("changing the round is the second tap", async () => {
     const t = await seedTournament();
     render(<ReportPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /R1/ }));
+    // 今のラウンド（R2）が選ばれた後に R1 へ切り替える
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /R2/ }).getAttribute("aria-pressed")
+      ).toBe("true")
+    );
+    fireEvent.click(screen.getByRole("button", { name: /R1/ }));
     fireEvent.click(await screen.findByRole("button", { name: /ボード3/ }));
     expect(await screen.findByText(/R1 · Board 3/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "75手ルール" }));

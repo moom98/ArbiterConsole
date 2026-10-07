@@ -114,15 +114,22 @@ export default function ReportPage() {
   // 大会が変わったら（またはラウンド未選択なら）「今のラウンド」を選択する
   const activeTournamentId = activeTournament?.id;
   const [roundsFor, setRoundsFor] = useState<string | undefined>(undefined);
+  // ストアの rounds は大会の切り替え直後に前の大会のものが残っていることがあるため、
+  // 選択中の大会のラウンドが揃ってから選ぶ（ユーザーの選択は上書きしない）
+  const roundsLoaded =
+    rounds.length > 0 &&
+    rounds.every((r) => r.tournamentId === activeTournamentId);
   useEffect(() => {
     if (activeTournamentId !== roundsFor) {
       setRoundsFor(activeTournamentId);
       setSelectedGame(null);
-      setRoundNumber(currentRound(rounds)?.roundNumber ?? null);
-    } else if (roundNumber === null && rounds.length > 0) {
+      setRoundNumber(
+        roundsLoaded ? (currentRound(rounds)?.roundNumber ?? null) : null
+      );
+    } else if (roundNumber === null && roundsLoaded) {
       setRoundNumber(currentRound(rounds)?.roundNumber ?? null);
     }
-  }, [activeTournamentId, roundsFor, rounds, roundNumber]);
+  }, [activeTournamentId, roundsFor, rounds, roundsLoaded, roundNumber]);
 
   // 選択したラウンドのボードを読み込む
   useEffect(() => {

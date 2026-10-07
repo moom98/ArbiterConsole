@@ -15,15 +15,19 @@
 
 ## Project Status
 
-**現在の状態**: Milestone 3完了（基本機能実装済み）
+**現在の状態**: Milestone 7 完了。初回デプロイの準備中
 
 - ✅ Milestone 0: Project Foundation
 - ✅ Milestone 1: Rule Search MVP
 - ✅ Milestone 2: Illegal Move Decision Tree
 - ✅ Milestone 3: Incident Log
-- 🔄 Milestone 4-10: 開発予定
+- ✅ Milestone 4: 追加 Decision Trees（Rapid/Blitz 違法手、フラッグフォール、同一局面）
+- ✅ Milestone 5: AI参考情報（Gemini、サーバー経由。ADR-007）
+- ✅ Milestone 6: 大会管理（大会・ラウンド・対局・大会規定、ホーム画面）
+- ✅ Milestone 7: ラウンドチェックリスト（ADR-008）
+- 🔄 Milestone 8–10: 未着手（音声入力・多言語対応は当面見送り）
 
-詳細な実装状況は [IMPLEMENTATION_STATUS.md](./docs/IMPLEMENTATION_STATUS.md) を参照してください。
+詳細な実装状況は [docs/progress/current.md](./docs/progress/current.md) を参照してください。
 
 ## Features
 
@@ -62,10 +66,10 @@
 
 ### 開発予定機能
 
-- 🔄 追加Decision Trees (Rapid A4/A5, Flag Fall, Threefold Repetition)
-- 🔄 Tournament管理
-- 🔄 音声入力
-- 🔄 多言語対応
+- ✅ 追加Decision Trees（Milestone 4 で実装済み）
+- ✅ Tournament管理（Milestone 6 で実装済み。拡張は当面見送り）
+- ⏸ 音声入力（当面見送り。2026-10-07 の判断）
+- ⏸ 多言語対応（当面見送り。2026-10-07 の判断）
 
 ## Tech Stack
 

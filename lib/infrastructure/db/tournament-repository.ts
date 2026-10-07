@@ -57,6 +57,8 @@ export class DexieTournamentRepository implements TournamentRepository {
         db.rules,
         db.embeddings,
         db.appState,
+        db.roundChecklists,
+        db.checklistTemplates,
       ],
       async () => {
         const gameIds = (await db.games
@@ -80,6 +82,10 @@ export class DexieTournamentRepository implements TournamentRepository {
           await db.rules.bulkDelete(ruleIds);
         }
         await db.ruleSources.where("tournamentId").equals(id).delete();
+
+        // Round Checklist（Milestone 7）
+        await db.roundChecklists.where("tournamentId").equals(id).delete();
+        await db.checklistTemplates.delete(id);
 
         await db.games.bulkDelete(gameIds);
         await db.rounds.where("tournamentId").equals(id).delete();

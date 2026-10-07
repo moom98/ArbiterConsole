@@ -9,6 +9,8 @@ import type {
   Rule,
   RuleSource,
   Embedding,
+  RoundChecklist,
+  TournamentChecklistTemplate,
 } from "@/lib/domain/entities";
 
 /** 端末ローカルのアプリ状態（例: 最後に使用した報告コンテキスト） */
@@ -29,6 +31,8 @@ export class ArbiterDatabase extends Dexie {
   appState!: EntityTable<AppStateEntry, "key">;
   rounds!: EntityTable<Round, "id">;
   players!: EntityTable<PlayerProfile, "id">;
+  roundChecklists!: EntityTable<RoundChecklist, "id">;
+  checklistTemplates!: EntityTable<TournamentChecklistTemplate, "tournamentId">;
 
   constructor(name = "ArbiterConsole") {
     super(name);
@@ -63,6 +67,14 @@ export class ArbiterDatabase extends Dexie {
         "id, tournamentId, round, boardNumber, startTime, roundId, [tournamentId+round]",
       rounds: "id, tournamentId, [tournamentId+roundNumber], status",
       players: "id, tournamentId, name",
+    });
+
+    // v7: Round Checklist（Milestone 7）。ラウンドごとの完了状態（id = roundId）と、
+    // 大会ごとのチェックリスト構成を追加する。既存テーブルは変更しない（変換不要）。
+    // v6 は LLM 連携（Milestone 5）用に予約（別ブランチ）。
+    this.version(7).stores({
+      roundChecklists: "id, tournamentId",
+      checklistTemplates: "tournamentId",
     });
   }
 }

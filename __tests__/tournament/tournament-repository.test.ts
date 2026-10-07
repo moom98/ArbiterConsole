@@ -280,7 +280,7 @@ describe("Schema v5 migration", () => {
 
     const db = new ArbiterDatabase(name);
     await db.open();
-    expect(db.verno).toBe(5);
+    expect(db.verno).toBe(7);
     expect(await db.tournaments.get(adHocId)).toBeDefined();
     expect((await db.games.get(gameId))?.boardNumber).toBe(12);
     expect(await db.incidents.where("gameId").equals(gameId).count()).toBe(1);

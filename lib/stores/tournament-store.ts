@@ -4,6 +4,8 @@ import { defaultProviders, type DomainProviders } from "@/lib/domain/providers";
 import { TournamentService } from "@/lib/application/tournament-management";
 import { db as defaultDb, type ArbiterDatabase } from "@/lib/infrastructure/db";
 import { createTournamentRepositories } from "@/lib/infrastructure/db/tournament-repository";
+import { RoundChecklistService } from "@/lib/application/round-checklist";
+import { DexieChecklistRepository } from "@/lib/infrastructure/db/checklist-repository";
 
 /**
  * 選択中の大会（ホーム・報告・検索・設定で共有）。永続化は TournamentService 経由。
@@ -16,6 +18,8 @@ export interface TournamentStore {
   rounds: Round[];
   error: string | null;
   service: TournamentService;
+  /** Round Checklist（Milestone 7） */
+  checklist: RoundChecklistService;
   /** 大会一覧・選択中の大会・ラウンドを読み込み直す */
   load: () => Promise<void>;
   setActive: (id: string | null) => Promise<void>;
@@ -27,8 +31,15 @@ export interface TournamentStoreDeps {
 }
 
 export function createTournamentStore(deps: TournamentStoreDeps) {
-  const service = new TournamentService(
-    createTournamentRepositories(deps.db, deps.providers.now),
+  const repos = createTournamentRepositories(deps.db, deps.providers.now);
+  const service = new TournamentService(repos, deps.providers);
+  const checklist = new RoundChecklistService(
+    {
+      checklists: new DexieChecklistRepository(deps.db),
+      tournaments: repos.tournaments,
+      rounds: repos.rounds,
+    },
+    service,
     deps.providers
   );
 
@@ -39,6 +50,7 @@ export function createTournamentStore(deps: TournamentStoreDeps) {
     rounds: [],
     error: null,
     service,
+    checklist,
 
     load: async () => {
       try {

@@ -2,7 +2,9 @@ import type {
   Game,
   PlayerProfile,
   Round,
+  RoundChecklist,
   Tournament,
+  TournamentChecklistTemplate,
 } from "@/lib/domain/entities";
 
 /**
@@ -65,6 +67,27 @@ export interface TournamentRepositories {
   active: ActiveTournamentStore;
   /** 大会の対局に記録された Incident 数（削除可否の判定用） */
   countIncidents(tournamentId: string): Promise<number>;
+}
+
+/** Round Checklist（Milestone 7）の永続化 */
+export interface ChecklistRepository {
+  /** 大会のチェックリスト構成。未カスタマイズなら null（既定テンプレートを使う） */
+  findTemplate(
+    tournamentId: string
+  ): Promise<TournamentChecklistTemplate | null>;
+  saveTemplate(template: TournamentChecklistTemplate): Promise<void>;
+  deleteTemplate(tournamentId: string): Promise<void>;
+  /** ラウンドの完了状態。未記録なら null */
+  findRoundChecklist(roundId: string): Promise<RoundChecklist | null>;
+  saveRoundChecklist(checklist: RoundChecklist): Promise<void>;
+  /**
+   * ラウンドの対局で保留中（status = "pending"）の Incident 数。
+   * 追加質問待ちと、AI判断で確認待ちのもの（Milestone 5）を含む。
+   */
+  countPendingIncidents(
+    tournamentId: string,
+    roundNumber: number
+  ): Promise<number>;
 }
 
 /** Incident が記録されている大会は削除できない（履歴保全） */

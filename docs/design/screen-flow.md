@@ -305,6 +305,16 @@ Arbiter Console
     │   ☐ 未解決Incident確認
 ```
 
+> **Implementation (Milestone 7, ADR-008):** `/tournament/[id]/rounds/[n]`, reached from the home
+> current-round card ("ラウンドチェックリスト") and from each round in `/tournament/[id]`. Stage tabs
+> 開始前 / 対局中 / 終了時 (the current one follows the round status; 対局中 shows 開始直後 + 対局中
+> sections), progress "done / total" with a bar, rows ≥56px with a 28px checkbox, a メモ button per
+> item (saved on blur), 根拠 on demand (verbatim citations), pending-incident count while active.
+> [ラウンド開始] is always enabled: with incomplete pre-round items it shows an in-page warning and
+> "確認して開始する". [ラウンド終了] with pending incidents in the round shows a warning, a link to
+> the log and "確認して終了する". "項目を編集（この大会）" adds / removes / reorders items for the
+> tournament.
+
 **Key UX Points**:
 - **Phase-aware**: Checklist changes based on round status
 - **Progress indicator**: X/Y items completed
@@ -446,8 +456,8 @@ Arbiter Console
 > **Implementation (Milestone 6):** `/home` shows a full-width "トラブルを報告" button first, then the
 > active tournament card (ruleset, "Round N / total · status · boards", CA-escalation count, link to
 > round management), a tournament switcher (when >1), quick actions 報告 / 検索 / ログ, recent
-> incidents of the active tournament (max 5) and the decision-support notice. The round checklist
-> button arrives with Milestone 7. Tournament screens: `/tournament` (list/select),
+> incidents of the active tournament (max 5) and the decision-support notice. Milestone 7 adds the
+> "ラウンドチェックリスト" button to the current round card. Tournament screens: `/tournament` (list/select),
 > `/tournament/new`, `/tournament/[id]` (bulk "Round N, boards a–b", start/end round, per-board
 > white/black, players, profile edit, delete). Settings links to them and enables the tournament
 > regulations upload for the active tournament.

@@ -130,6 +130,8 @@ describe("LLM incident flow (store + engine + port + IndexedDB)", () => {
       store.getState().currentIncident!.id
     );
     expect(incident?.decisionId).toBe(decision.id);
+    // AI 参考情報は裁定ではないため、アービターが確認するまで保留のまま
+    expect(incident?.status).toBe("pending");
   });
 
   it("an article deleted from IndexedDB during the request → rejected, CA escalation", async () => {
@@ -151,7 +153,7 @@ describe("LLM incident flow (store + engine + port + IndexedDB)", () => {
     const incident = await db.incidents.get(
       store.getState().currentIncident!.id
     );
-    expect(incident?.status).toBe("escalated");
+    expect(incident?.status).toBe("pending"); // AI 参考情報は自動で確定しない
     expect(incident?.escalatedToCA).toBe(true);
   });
 
@@ -191,6 +193,8 @@ describe("LLM incident flow (store + engine + port + IndexedDB)", () => {
       store.getState().currentIncident!.id
     );
     expect(incident?.decisionId).toBe(d.id);
+    // 置き換えた前回の判断は supersededBy で記録する（集計には使われない）
+    expect((await db.decisions.get(offline.id))?.supersededBy).toBe(d.id);
   });
 
   it("without an LLM port the store keeps the manual-review behaviour", async () => {

@@ -52,6 +52,7 @@ export const INCIDENT_CSV_HEADERS = [
   "アービター直接観察",
   "報告者",
   "判断種別",
+  "生成元",
   "推奨（判断支援）",
   "推奨ペナルティ",
   "時間調整（秒）",
@@ -83,6 +84,11 @@ function incidentRow(entry: IncidentLogEntry): string[] {
     incident.arbiterObserved ? "はい" : "いいえ",
     REPORTED_BY_LABELS[incident.reportedBy] ?? incident.reportedBy,
     decision?.kind ? DECISION_KIND_LABELS[decision.kind] : "",
+    decision
+      ? decision.generatedBy === "llm"
+        ? "AI参考（未確定）"
+        : "Decision Tree"
+      : "",
     decision?.conclusion ?? "",
     penalties
       .map((p) => `${penaltyLabel(p.type)}: ${p.description}`)

@@ -21,6 +21,7 @@ import {
   type ReportContext,
 } from "@/lib/domain/services/game-context";
 import { defaultProviders, type DomainProviders } from "@/lib/domain/providers";
+import { incidentStatusAfterDecision } from "@/lib/domain/services/incident-status";
 import { db as defaultDb, type ArbiterDatabase } from "@/lib/infrastructure/db";
 import { chessJsPositionPort } from "@/lib/infrastructure/chess/chess-js-position-port";
 import type { LlmAssistPort } from "@/lib/domain/llm/ports";
@@ -138,11 +139,14 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
     } else {
       await db.transaction("rw", db.incidents, db.decisions, async () => {
         await db.decisions.add(result.decision);
+        // 再評価（例: AI 参考情報の再取得）で置き換えた前回の判断を記録する
+        if (incident.decisionId && incident.decisionId !== result.decision.id)
+          await db.decisions.update(incident.decisionId, {
+            supersededBy: result.decision.id,
+          });
         await db.incidents.put({
           ...incident,
-          status: result.decision.escalationRecommended
-            ? "escalated"
-            : "resolved",
+          status: incidentStatusAfterDecision(result.decision),
           decisionId: result.decision.id,
           escalatedToCA: result.decision.escalationRecommended,
           escalationReason: result.decision.escalationReason,

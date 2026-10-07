@@ -118,6 +118,8 @@ export interface Decision {
   generatedBy: "decision-tree" | "llm";
   /** 決定木の対象外で AI 参考情報を試みた場合の状態（ADR-007） */
   llm?: LlmDecisionMeta;
+  /** 再評価で置き換えられた場合、置き換えた Decision の ID（監査用に残す） */
+  supersededBy?: string;
   validatedAt?: Date;
   validationPassed: boolean;
   validationErrors?: string[];

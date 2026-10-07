@@ -89,14 +89,42 @@ describe("summarizePenalties", () => {
     ]);
     expect(s).toEqual({
       incidents: 5,
-      penalties: 5,
+      // ドローは対局結果のため推奨ペナルティに含めない
+      penalties: 4,
       warnings: 1,
       timeAdjustments: 1,
       gameLosses: 1,
       draws: 1,
+      results: 1,
       expulsions: 1,
       escalations: 1,
     });
+  });
+
+  it("excludes result outcomes (draws, flag-fall results) from penalties and losses", () => {
+    const s = summarizePenalties([
+      entry({
+        color: "white",
+        category: "clock-time",
+        treeId: "DT-004-flag-fall",
+        penalties: [
+          {
+            type: "game-loss",
+            playerColor: "white",
+            description: "時間切れ負け",
+          },
+        ],
+      }),
+      entry({
+        category: "draw",
+        treeId: "DT-005-repetition",
+        penalties: [{ type: "draw", description: "ドロー（五回同一局面）" }],
+      }),
+    ]);
+    expect(s.penalties).toBe(0);
+    expect(s.gameLosses).toBe(0);
+    expect(s.results).toBe(2);
+    expect(s.draws).toBe(1);
   });
 
   it("reflects only the records passed (i.e. the active filter)", () => {

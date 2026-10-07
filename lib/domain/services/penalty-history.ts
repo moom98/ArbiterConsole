@@ -76,12 +76,15 @@ export function sortByReportedAtDesc<T extends IncidentRecord>(
 
 export interface PenaltySummary {
   incidents: number;
-  /** 推奨されたペナルティ・結果の総数 */
+  /** 推奨された（違反に対する）ペナルティの総数。対局結果は含めない */
   penalties: number;
   warnings: number;
   timeAdjustments: number;
   gameLosses: number;
+  /** ドローの対局結果（対局結果の内数） */
   draws: number;
+  /** 対局結果（ドロー・フラッグフォールの結果など。isResultOutcome） */
+  results: number;
   expulsions: number;
   /** CA への確認が推奨された / CA へ相談した Incident 数 */
   escalations: number;
@@ -101,6 +104,7 @@ export function summarizePenalties(
     timeAdjustments: 0,
     gameLosses: 0,
     draws: 0,
+    results: 0,
     expulsions: 0,
     escalations: 0,
   };
@@ -115,6 +119,12 @@ export function summarizePenalties(
     }
     if (!decision) continue;
     for (const penalty of decision.penalties) {
+      // 対局結果（ドロー・時間切れの結果）はペナルティ・負けの件数に含めない
+      if (isResultOutcome(penalty, decision)) {
+        summary.results++;
+        if (penalty.type === "draw") summary.draws++;
+        continue;
+      }
       summary.penalties++;
       switch (penalty.type) {
         case "warning":
@@ -127,9 +137,6 @@ export function summarizePenalties(
         case "game-loss":
         case "both-lose":
           summary.gameLosses++;
-          break;
-        case "draw":
-          summary.draws++;
           break;
         case "expulsion":
           summary.expulsions++;

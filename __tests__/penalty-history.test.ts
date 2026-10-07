@@ -89,14 +89,42 @@ describe("summarizePenalties", () => {
     ]);
     expect(s).toEqual({
       incidents: 5,
-      penalties: 5,
+      // ドローは対局結果のため推奨ペナルティに含めない
+      penalties: 4,
       warnings: 1,
       timeAdjustments: 1,
       gameLosses: 1,
       draws: 1,
+      results: 1,
       expulsions: 1,
       escalations: 1,
     });
+  });
+
+  it("excludes result outcomes (draws, flag-fall results) from penalties and losses", () => {
+    const s = summarizePenalties([
+      entry({
+        color: "white",
+        category: "clock-time",
+        treeId: "DT-004-flag-fall",
+        penalties: [
+          {
+            type: "game-loss",
+            playerColor: "white",
+            description: "時間切れ負け",
+          },
+        ],
+      }),
+      entry({
+        category: "draw",
+        treeId: "DT-005-repetition",
+        penalties: [{ type: "draw", description: "ドロー（五回同一局面）" }],
+      }),
+    ]);
+    expect(s.penalties).toBe(0);
+    expect(s.gameLosses).toBe(0);
+    expect(s.results).toBe(2);
+    expect(s.draws).toBe(1);
   });
 
   it("reflects only the records passed (i.e. the active filter)", () => {
@@ -121,6 +149,45 @@ describe("summarizePenalties", () => {
 });
 
 describe("penaltyHistoryForGame", () => {
+  it("keeps draws and flag-fall results out of offender and legacy buckets", () => {
+    const records = [
+      // 五回同一局面（対象プレーヤーなし）
+      entry({
+        game: G12,
+        category: "draw",
+        treeId: "DT-005-repetition",
+        penalties: [{ type: "draw", description: "ドロー（五回同一局面）" }],
+      }),
+      // フラッグフォールの負け（違反ではなく対局結果）
+      entry({
+        game: G12,
+        color: "white",
+        category: "clock-time",
+        treeId: "DT-004-flag-fall",
+        penalties: [
+          {
+            type: "game-loss",
+            playerColor: "white",
+            description: "時間切れ負け",
+          },
+        ],
+      }),
+      // 誤った同一局面クレーム（請求者の履歴に入る）
+      entry({
+        game: G12,
+        color: "black",
+        category: "draw",
+        treeId: "DT-005-repetition",
+        penalties: [TIME_ADD_FOR("white")],
+      }),
+    ];
+    const h = penaltyHistoryForGame(records, G12.id);
+    expect(h.unknownOffender).toHaveLength(0);
+    expect(h.white.penalties).toHaveLength(0);
+    expect(h.black.penalties).toHaveLength(1);
+    expect(h.results.map((r) => r.penalty.type)).toEqual(["draw", "game-loss"]);
+  });
+
   it("attributes penalties to the offender and counts illegal moves via IncidentCounter", () => {
     const records = [
       entry({ game: G12, color: "white", penalties: [TIME_ADD_FOR("black")] }),

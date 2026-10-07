@@ -157,7 +157,7 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
     expect(fresh.getState().lastContext).toEqual(STANDARD_CTX);
   });
 
-  it("rapid reports return not-supported without applying the standard tree", async () => {
+  it("rapid A.5 reports go to DT-003 (1 minute), not the standard tree", async () => {
     const res = await store.getState().submitIncident({
       context: {
         ...STANDARD_CTX,
@@ -169,9 +169,18 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
       arbiterObserved: true,
     });
     if (!res.ok) throw new Error(res.error);
-    expect(res.result.decision.kind).toBe("not-supported");
+    expect(res.result.decision.treeId).toBe("DT-003-illegal-move-fast-basic");
+    const answered = await store.getState().answerFollowUp({
+      ...WHITE_COMPLETED,
+      opponentMadeNextMove: "false",
+      detectedBy: "arbiter",
+    });
+    if (!answered.ok) throw new Error(answered.error);
+    expect(answered.result.decision.penalties[0].timeAdjustmentSeconds).toBe(
+      60
+    );
     const stored = await db.incidents.get(store.getState().currentIncident!.id);
-    expect(stored?.status).toBe("escalated");
+    expect(stored?.status).toBe("resolved");
   });
 
   it("invalid context fails without a decision and without creating an incident", async () => {
@@ -198,5 +207,172 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
     });
     await p;
     expect(store.getState().currentDecision).toBeNull();
+  });
+
+  describe("Milestone 4 trees through the store", () => {
+    const RAPID_A5: ReportContext = {
+      ...STANDARD_CTX,
+      competitionType: "rapid",
+      supervisionRegime: "basic-rules",
+    };
+    const A5_ANSWERS = {
+      ...WHITE_COMPLETED,
+      opponentMadeNextMove: "false",
+      detectedBy: "arbiter",
+    };
+
+    async function submit(
+      category: "clock-time" | "draw" | "illegal-move",
+      ctx: ReportContext
+    ) {
+      const res = await store.getState().submitIncident({
+        context: ctx,
+        category,
+        description: "",
+        arbiterObserved: true,
+      });
+      if (!res.ok) throw new Error(res.error);
+      return res.result;
+    }
+    async function answer(a: Record<string, string>) {
+      const res = await store
+        .getState()
+        .answerFollowUp(a as Partial<Record<IncidentQuestionId, string>>);
+      if (!res.ok) throw new Error(res.error);
+      return res.result;
+    }
+
+    it("Rapid A.5: a move that stood is not counted; the 2nd penalised one asks about mate", async () => {
+      await submit("illegal-move", RAPID_A5);
+      const first = await answer(A5_ANSWERS);
+      expect(first.decision.penalties[0].timeAdjustmentSeconds).toBe(60);
+
+      await submit("illegal-move", RAPID_A5);
+      const stood = await answer({
+        ...A5_ANSWERS,
+        opponentMadeNextMove: "true",
+      });
+      expect(stood.decision.penalties).toHaveLength(0);
+
+      await submit("illegal-move", RAPID_A5);
+      const second = await answer(A5_ANSWERS);
+      expect(second.followUpQuestions.map((q) => q.id)).toEqual([
+        "opponentCanCheckmate",
+      ]);
+      const final = await answer({ opponentCanCheckmate: "true" });
+      expect(final.decision.penalties[0].type).toBe("game-loss");
+      expect(final.decision.treeId).toBe("DT-003-illegal-move-fast-basic");
+    });
+
+    it("flag fall: subtype → facts → material → decision persisted", async () => {
+      const first = await submit("clock-time", STANDARD_CTX);
+      expect(first.followUpQuestions.map((q) => q.id)).toEqual([
+        "clockTimeSubtype",
+      ]);
+      await answer({ clockTimeSubtype: "flag-fall" });
+      await answer({
+        flagFallen: "white",
+        gameEndedBeforeFlag: "false",
+        movesNotCompleted: "true",
+      });
+      // UI は全ステッパーを既定値 "0" で送信する
+      const zeros = Object.fromEntries(
+        ["white", "black"].flatMap((c) =>
+          [
+            "Queens",
+            "Rooks",
+            "LightBishops",
+            "DarkBishops",
+            "Knights",
+            "Pawns",
+          ].map((p) => [`${c}${p}`, "0"])
+        )
+      );
+      const final = await answer({
+        ...zeros,
+        blackKnights: "1",
+        materialConfirmed: "true",
+      });
+      expect(final.requiresFollowUp).toBe(false);
+      expect(final.decision.treeId).toBe("DT-004-flag-fall");
+      expect(final.decision.penalties[0].type).toBe("draw");
+      const stored = await db.incidents.get(
+        store.getState().currentIncident!.id
+      );
+      expect(stored?.status).toBe("resolved");
+      expect(stored?.subtype).toBe("flag-fall");
+    });
+
+    it("M3: quick flag-fall report reaches a decision in 2 answer rounds", async () => {
+      const res = await store.getState().submitIncident({
+        context: STANDARD_CTX,
+        category: "clock-time",
+        subtype: "flag-fall",
+        description: "",
+        arbiterObserved: true,
+      });
+      if (!res.ok) throw new Error(res.error);
+      expect(res.result.followUpQuestions.map((q) => q.id)).toEqual([
+        "flagFallen",
+        "gameEndedBeforeFlag",
+      ]);
+      await answer({ flagFallen: "white", gameEndedBeforeFlag: "false" });
+      const zeros = Object.fromEntries(
+        ["white", "black"].flatMap((c) =>
+          [
+            "Queens",
+            "Rooks",
+            "LightBishops",
+            "DarkBishops",
+            "Knights",
+            "Pawns",
+          ].map((p) => [`${c}${p}`, "0"])
+        )
+      );
+      const final = await answer({
+        movesNotCompleted: "true",
+        ...zeros,
+        blackRooks: "1",
+        materialConfirmed: "true",
+      });
+      expect(final.requiresFollowUp).toBe(false);
+      expect(final.decision.penalties[0].type).toBe("game-loss");
+    });
+
+    it("rejects an unknown quick-report subtype without creating an incident", async () => {
+      const res = await store.getState().submitIncident({
+        context: STANDARD_CTX,
+        category: "draw",
+        subtype: "bogus",
+        description: "",
+        arbiterObserved: true,
+      });
+      expect(res.ok).toBe(false);
+      expect(await db.incidents.count()).toBe(0);
+    });
+
+    it("threefold claim with a move list is checked automatically", async () => {
+      await submit("draw", STANDARD_CTX);
+      await answer({ drawSubtype: "threefold-repetition-claim" });
+      await answer({
+        claimant: "black",
+        claimantHasMove: "true",
+        claimMode: "just-appeared",
+        touchedPiece: "false",
+      });
+      const final = await answer({
+        repetitionCheck: "auto",
+        positionsText: "1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6 4. Ng1",
+      });
+      // 黒番で 4.Ng1 の後の局面は2回目のみ → 誤ったクレーム（白に2分）
+      expect(final.decision.treeId).toBe("DT-005-repetition");
+      expect(final.decision.penalties[0]).toEqual(
+        expect.objectContaining({
+          type: "time-addition-opponent",
+          playerColor: "white",
+          timeAdjustmentSeconds: 120,
+        })
+      );
+    });
   });
 });

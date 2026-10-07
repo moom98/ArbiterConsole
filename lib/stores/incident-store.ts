@@ -11,6 +11,7 @@ import {
 } from "@/lib/domain/decision-engine";
 import {
   applyIncidentAnswers,
+  isKnownSubtype,
   type FollowUpQuestion,
   type IncidentQuestionId,
 } from "@/lib/domain/follow-up";
@@ -21,6 +22,7 @@ import {
 } from "@/lib/domain/services/game-context";
 import { defaultProviders, type DomainProviders } from "@/lib/domain/providers";
 import { db as defaultDb, type ArbiterDatabase } from "@/lib/infrastructure/db";
+import { chessJsPositionPort } from "@/lib/infrastructure/chess/chess-js-position-port";
 import {
   ensureGameForContext,
   loadGameRecords,
@@ -34,6 +36,8 @@ export type SubmitResult =
 export interface SubmitIncidentParams {
   context: ReportContext;
   category: IncidentCategory;
+  /** 任意: カテゴリ選択時に確定した subtype（QUICK_REPORTS） */
+  subtype?: string;
   description: string;
   arbiterObserved: boolean;
 }
@@ -71,7 +75,9 @@ function errorMessage(error: unknown): string {
  */
 export function createIncidentStore(deps: IncidentStoreDeps) {
   const { db, providers } = deps;
-  const engine = new DecisionEngine(providers);
+  const engine = new DecisionEngine(providers, {
+    positions: chessJsPositionPort,
+  });
 
   async function evaluate(incident: Incident): Promise<DecisionEngineResult> {
     const game = await db.games.get(incident.gameId);
@@ -177,6 +183,11 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
             const contextErrors = validateReportContext(params.context);
             if (contextErrors.length > 0)
               throw new Error(contextErrors.join(" / "));
+            if (
+              params.subtype !== undefined &&
+              !isKnownSubtype(params.category, params.subtype)
+            )
+              throw new Error(`不正な subtype です: ${params.subtype}`);
 
             const now = providers.now();
             const { game } = await ensureGameForContext(
@@ -191,6 +202,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
               id: providers.generateId(),
               gameId: game.id,
               category: params.category,
+              subtype: params.subtype,
               description: params.description,
               arbiterObserved: params.arbiterObserved,
               reportedBy: "arbiter",

@@ -4,11 +4,16 @@ import type { PlayerColor } from "./incident";
  * - immediate: アービターが今すぐ介入する
  * - wait-for-claim: プレーヤーのクレームを待つ
  * - consult-ca: CAへ確認する / 判断不能
+ * - wait-next-move: 次の手の完了を待ってから判断する（例: A.5.4 の不正な局面）
  * - no-intervention: 違法手等としての介入・訂正は行わない
  *   （例: 時計が押されておらず違法手が未成立 / 対局終了後で結果が確定している）
  */
 export type InterventionType =
-  "immediate" | "wait-for-claim" | "consult-ca" | "no-intervention";
+  | "immediate"
+  | "wait-for-claim"
+  | "wait-next-move"
+  | "consult-ca"
+  | "no-intervention";
 export type ConfidenceLevel = "high" | "medium" | "low";
 export type PenaltyType =
   | "warning"
@@ -37,14 +42,25 @@ export interface RuleCitation {
 
 export interface Penalty {
   type: PenaltyType;
-  /** ペナルティ（またはその効果）の対象となるプレーヤー */
-  playerColor: PlayerColor;
+  /**
+   * ペナルティ（またはその効果）の対象となるプレーヤー。
+   * 対局結果（type: "draw" など特定のプレーヤーに作用しない結果）では省略する。
+   */
+  playerColor?: PlayerColor;
   timeAdjustmentSeconds?: number;
   description: string;
 }
 
 /** どの Decision Tree が判断を生成したか（履歴カウント等で使用） */
-export type DecisionTreeId = "DT-001-illegal-move-standard";
+export type DecisionTreeId =
+  | "DT-001-illegal-move-standard"
+  /** Rapid / Blitz の違法手（Competition Rules: A.4 / B.2） */
+  | "DT-002-illegal-move-fast-competition"
+  /** Rapid / Blitz の違法手（それ以外: A.5 / B.3） */
+  | "DT-003-illegal-move-fast-basic"
+  | "DT-004-flag-fall"
+  /** 同一局面（9.2 / 9.6.1）および 75手ルール（9.6.2） */
+  | "DT-005-repetition";
 
 /** 判断の種類 */
 export type DecisionKind =

@@ -15,9 +15,25 @@ import {
   buildDecision,
   type DecisionFields,
 } from "@/lib/domain/decision-trees/build-decision";
+import { IllegalMoveFastCompetitionTree } from "@/lib/domain/decision-trees/dt-002-illegal-move-fast-competition";
+import { IllegalMoveFastBasicTree } from "@/lib/domain/decision-trees/dt-003-illegal-move-fast-basic";
+import { FlagFallTree } from "@/lib/domain/decision-trees/dt-004-flag-fall";
+import {
+  RepetitionTree,
+  type RepetitionInput,
+} from "@/lib/domain/decision-trees/dt-005-repetition";
+import type { DecisionTreeResult } from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
 import { QUESTIONS, type FollowUpQuestion } from "@/lib/domain/follow-up";
-import { cite } from "@/lib/domain/rules/citations";
 import { defaultProviders, type DomainProviders } from "@/lib/domain/providers";
+import {
+  analyzeRepetition,
+  type ChessPositionPort,
+} from "@/lib/domain/services/position-analysis";
+
+export interface DecisionEngineDeps {
+  /** 同一局面の自動判定に使う局面解析（未指定なら自動判定は利用不可） */
+  positions?: ChessPositionPort;
+}
 
 /**
  * 判断に用いる規則セット。すべて明示的に与えること（既定値を仮定しない）。
@@ -47,19 +63,16 @@ export interface DecisionEngineResult {
   followUpQuestions: FollowUpQuestion[];
 }
 
-const COMPETITION_JA: Record<CompetitionType, string> = {
-  standard: "Standard",
-  rapid: "Rapid",
-  blitz: "Blitz",
-};
-
 /**
  * Decision Engine - Orchestrator
  * Incident を規則セットと種別に応じて Decision Tree へルーティングする。
  * LLM は呼び出さない（ADR-002）。
  */
 export class DecisionEngine {
-  constructor(private readonly providers: DomainProviders = defaultProviders) {}
+  constructor(
+    private readonly providers: DomainProviders = defaultProviders,
+    private readonly deps: DecisionEngineDeps = {}
+  ) {}
 
   processIncident(context: DecisionEngineContext): DecisionEngineResult {
     const { incident } = context;
@@ -96,17 +109,77 @@ export class DecisionEngine {
     }
 
     // 2. カテゴリ別ルーティング
+    const rulesVersion = ruleset.rulesVersion;
+    const competitionType = ruleset.competitionType as CompetitionType;
+    const regime = ruleset.supervisionRegime;
+
     if (incident.category === "illegal-move") {
-      if (ruleset.competitionType === "standard") {
-        return this.processIllegalMoveStandard(context, ruleset.rulesVersion);
+      if (competitionType === "standard") {
+        return this.processIllegalMoveStandard(context, rulesVersion);
       }
-      return this.illegalMoveFastNotSupported(
-        incident,
-        ruleset.competitionType as Exclude<CompetitionType, "standard">,
-        ruleset.supervisionRegime as SupervisionRegime,
-        ruleset.rulesVersion
+      return this.processIllegalMoveFast(
+        context,
+        competitionType,
+        regime as SupervisionRegime,
+        rulesVersion
       );
     }
+
+    if (incident.category === "clock-time") {
+      if (incident.subtype === undefined)
+        return this.ask(incident, [QUESTIONS.clockTimeSubtype], rulesVersion);
+      if (incident.subtype === "flag-fall") {
+        const tree = new FlagFallTree(this.providers, rulesVersion);
+        return this.finish(
+          incident,
+          tree.evaluate({
+            ...incident.flagFallFacts,
+            competitionType,
+            supervisionRegime: regime,
+          }),
+          rulesVersion
+        );
+      }
+    }
+
+    if (incident.category === "draw") {
+      if (incident.subtype === undefined)
+        return this.ask(incident, [QUESTIONS.drawSubtype], rulesVersion);
+      if (
+        incident.subtype === "threefold-repetition-claim" ||
+        incident.subtype === "fivefold-repetition" ||
+        incident.subtype === "75-move-rule"
+      ) {
+        const facts = incident.drawClaimFacts ?? {};
+        const input: Partial<RepetitionInput> = {
+          ...facts,
+          subtype: incident.subtype,
+          competitionType,
+          supervisionRegime: regime,
+        };
+        if (facts.conditionCheck === "auto" && facts.positionsText) {
+          if (this.deps.positions) {
+            const analysed = analyzeRepetition(
+              this.deps.positions,
+              facts.positionsText,
+              incident.subtype === "threefold-repetition-claim" &&
+                facts.claimMode === "about-to-appear"
+                ? facts.intendedMove
+                : undefined
+            );
+            input.analysis = analysed.ok
+              ? { ok: true, result: analysed }
+              : { ok: false, error: analysed.error };
+          }
+        }
+        const tree = new RepetitionTree(this.providers, rulesVersion);
+        return this.finish(incident, tree.evaluate(input), rulesVersion);
+      }
+    }
+
+    // 決定木の対象外（例: "other" を選んだ場合）。状況の記録がなければメモを求める
+    if (!incident.description.trim())
+      return this.ask(incident, [QUESTIONS.situationNote], rulesVersion);
 
     return this.terminal(incident, {
       kind: "manual-review",
@@ -149,39 +222,78 @@ export class DecisionEngine {
     return { decision, requiresFollowUp: false, followUpQuestions: [] };
   }
 
-  private illegalMoveFastNotSupported(
-    incident: Incident,
+  private processIllegalMoveFast(
+    context: DecisionEngineContext,
     competitionType: Exclude<CompetitionType, "standard">,
     regime: SupervisionRegime,
     rulesVersion: string
   ): DecisionEngineResult {
-    let sources: RuleCitation[];
-    if (competitionType === "rapid") {
-      sources =
-        regime === "competition-rules"
-          ? cite("FIDE_A_4", "FIDE_A_3", "FIDE_A_6")
-          : cite("FIDE_A_5_2", "FIDE_A_3", "FIDE_A_6");
-    } else {
-      sources =
-        regime === "competition-rules"
-          ? cite("FIDE_B_2", "FIDE_B_4")
-          : cite("FIDE_B_3", "FIDE_A_5_2", "FIDE_A_3", "FIDE_B_4");
+    const { incident, illegalMoveHistory } = context;
+    const color = incident.playerColor;
+    const prior =
+      color && illegalMoveHistory ? illegalMoveHistory[color] : undefined;
+    const input = {
+      ...incident.illegalMoveFacts,
+      playerColor: color,
+      playerIncidentCount: Array.isArray(prior) ? prior.length : undefined,
+      priorIllegalMoves: prior,
+    };
+    const result =
+      regime === "competition-rules"
+        ? new IllegalMoveFastCompetitionTree(
+            this.providers,
+            competitionType,
+            rulesVersion
+          ).evaluate(input)
+        : new IllegalMoveFastBasicTree(
+            this.providers,
+            competitionType,
+            rulesVersion
+          ).evaluate(input);
+    return this.finish(incident, result, rulesVersion);
+  }
+
+  private finish(
+    incident: Incident,
+    result: DecisionTreeResult,
+    rulesVersion: string
+  ): DecisionEngineResult {
+    const decision = {
+      ...result.decision,
+      incidentId: incident.id,
+      rulesVersion,
+    };
+    if (result.status === "needs-input") {
+      return {
+        decision,
+        requiresFollowUp: true,
+        followUpQuestions: result.questions,
+      };
     }
-    return this.terminal(
-      incident,
-      {
-        kind: "not-supported",
-        conclusion: `${COMPETITION_JA[competitionType]}の違法手の判断支援は未対応です。Standard の判断は適用できません。CAへ確認してください。`,
-        actions: [
-          "時計を止める（必要な場合）",
-          "下記の条文を確認する",
-          "CAへ確認する",
-        ],
-        escalationReason: `${COMPETITION_JA[competitionType]}用のDecision Treeは未実装です`,
-        sources,
-      },
-      rulesVersion
-    );
+    return { decision, requiresFollowUp: false, followUpQuestions: [] };
+  }
+
+  /** subtype の選択など、Tree に入る前の質問 */
+  private ask(
+    incident: Incident,
+    questions: FollowUpQuestion[],
+    rulesVersion: string
+  ): DecisionEngineResult {
+    const labels = questions.map((q) => q.label);
+    const decision = this.build(incident, {
+      kind: "follow-up-required",
+      conclusion:
+        "判断に必要な情報が不足しています。以下の質問に回答してください。",
+      actions: labels,
+      intervention: "consult-ca",
+      penalties: [],
+      sources: [],
+      confidence: "low",
+      escalationRecommended: false,
+      missingFields: labels,
+      rulesVersion,
+    });
+    return { decision, requiresFollowUp: true, followUpQuestions: questions };
   }
 
   private contextRequired(
@@ -240,3 +352,7 @@ export class DecisionEngine {
 }
 
 export * from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
+export { DT_002_ID } from "@/lib/domain/decision-trees/dt-002-illegal-move-fast-competition";
+export { DT_003_ID } from "@/lib/domain/decision-trees/dt-003-illegal-move-fast-basic";
+export { DT_004_ID } from "@/lib/domain/decision-trees/dt-004-flag-fall";
+export { DT_005_ID } from "@/lib/domain/decision-trees/dt-005-repetition";

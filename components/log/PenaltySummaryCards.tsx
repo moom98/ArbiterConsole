@@ -17,7 +17,8 @@ export function PenaltySummaryCards({
     { label: "警告", value: summary.warnings },
     { label: "時間調整", value: summary.timeAdjustments },
     { label: "負け", value: summary.gameLosses },
-    { label: "ドロー", value: summary.draws },
+    { label: "対局結果", value: summary.results },
+    { label: "うちドロー", value: summary.draws },
     { label: "除外・退場", value: summary.expulsions },
     { label: "CA確認", value: summary.escalations },
   ];

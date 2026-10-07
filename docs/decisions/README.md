@@ -14,6 +14,7 @@ ADRs document important architectural and design decisions made during the proje
 | [ADR-002](./ADR-002-decision-tree-llm-boundary.md) | Decision Tree and LLM Responsibility Boundary | Accepted |
 | [ADR-003](./ADR-003-offline-rule-search.md) | Offline Rule Search: Japanese Tokenization, Multilingual Embeddings, Self-hosted Assets | Accepted |
 | [ADR-004](./ADR-004-explicit-ruleset-and-illegal-move-counting.md) | Explicit Ruleset Context and Illegal-Move Counting | Accepted |
+| [ADR-005](./ADR-005-additional-decision-trees-mate-material-and-chess-library.md) | Additional Decision Trees, Mate-Material Check and Chess Library | Accepted |
 
 ## Naming Convention
 

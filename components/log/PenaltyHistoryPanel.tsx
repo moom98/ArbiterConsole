@@ -21,9 +21,11 @@ function PenaltyList({ items }: { items: PenaltyHistoryItem[] }) {
       {items.map((p, i) => (
         <li key={`${p.incidentId}-${i}`}>
           <span className="text-gray-500 mr-2">{formatTime(p.reportedAt)}</span>
-          {penaltyLabel(p.penalty.type)}（対象:{" "}
-          {COLOR_LABELS[p.penalty.playerColor]}
-          ）: {p.penalty.description}
+          {penaltyLabel(p.penalty.type)}
+          {p.penalty.playerColor
+            ? `（対象: ${COLOR_LABELS[p.penalty.playerColor]}）`
+            : ""}
+          : {p.penalty.description}
         </li>
       ))}
     </ul>
@@ -61,6 +63,12 @@ export function PenaltyHistoryPanel({
           );
         })}
       </div>
+      {history.results.length > 0 && (
+        <div className="mt-3 border border-gray-200 rounded p-2">
+          <p className="font-semibold text-sm mb-1">対局結果</p>
+          <PenaltyList items={history.results} />
+        </div>
+      )}
       {history.unknownOffender.length > 0 && (
         <div className="mt-3 border border-dashed border-gray-300 rounded p-2">
           <p className="font-semibold text-sm mb-1">違反者不明（旧データ）</p>

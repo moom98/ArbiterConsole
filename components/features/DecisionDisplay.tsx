@@ -31,6 +31,10 @@ const INTERVENTION_LABELS: Record<
     label: "PlayerのClaimを待つ",
     className: "bg-yellow-100 text-yellow-800",
   },
+  "wait-next-move": {
+    label: "次の手の完了を待つ",
+    className: "bg-yellow-100 text-yellow-800",
+  },
   "consult-ca": { label: "CAへ確認", className: "bg-gray-100 text-gray-800" },
   "no-intervention": {
     label: "違法手としての介入なし",

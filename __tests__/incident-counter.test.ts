@@ -168,4 +168,38 @@ describe("IncidentCounter", () => {
     r.decision!.incidentId = "other";
     expect(IncidentCounter.countIllegalMoves([r], "g1", "white")).toBe(0);
   });
+
+  it("counts Rapid/Blitz illegal-move penalties (DT-002 / DT-003) like standard", () => {
+    const records = [
+      record({
+        treeId: "DT-002-illegal-move-fast-competition",
+        penalties: [plus2],
+      }),
+      record({ treeId: "DT-003-illegal-move-fast-basic", penalties: [plus2] }),
+    ];
+    expect(IncidentCounter.countIllegalMoves(records, "g1", "white")).toBe(2);
+  });
+
+  it("does not count flag-fall losses or repetition decisions", () => {
+    const records = [
+      record({
+        category: "clock-time",
+        treeId: "DT-004-flag-fall",
+        penalties: [loss],
+      }),
+      record({
+        category: "draw",
+        treeId: "DT-005-repetition",
+        penalties: [plus2],
+      }),
+    ];
+    expect(IncidentCounter.countIllegalMoves(records, "g1", "white")).toBe(0);
+  });
+
+  it("an A.5 illegal move that stood (no penalty) is not counted", () => {
+    const records = [
+      record({ treeId: "DT-003-illegal-move-fast-basic", penalties: [] }),
+    ];
+    expect(IncidentCounter.countIllegalMoves(records, "g1", "white")).toBe(0);
+  });
 });

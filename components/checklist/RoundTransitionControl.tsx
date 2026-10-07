@@ -44,6 +44,8 @@ export function RoundTransitionControl({
     null
   );
   const [busy, setBusy] = useState(false);
+  // 確認した後に警告が増えて再確認になった
+  const [reasked, setReasked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const next = nextRoundStatus(round.status);
   if (next === null || next === "pending") return null;
@@ -58,6 +60,7 @@ export function RoundTransitionControl({
         acknowledged: confirmed ? (pending?.warnings ?? []) : undefined,
       });
       if (result.status === "confirmation-required") {
+        setReasked(confirmed);
         setPending(result.assessment);
       } else {
         setPending(null);
@@ -95,6 +98,11 @@ export function RoundTransitionControl({
           aria-label={`Round ${round.roundNumber} ${ACTION_LABEL[next]}の確認`}
           className="mt-2 p-3 bg-yellow-50 border border-yellow-300 rounded-lg text-sm text-yellow-900 space-y-2"
         >
+          {reasked && (
+            <p className="font-bold text-red-700">
+              確認後に警告が増えました。内容を確認してください。
+            </p>
+          )}
           <ul className="list-disc ml-5 font-semibold">
             {pending.warnings.map((w) => (
               <li key={w.kind}>{describeTransitionWarning(w)}</li>

@@ -252,6 +252,7 @@ export class RoundChecklistService {
    * ラウンドを開始・終了する。警告がある場合は、confirmed: true（アービターが警告を確認した）
    * でなければ変更せずに確認を求める。確認後の判断はアービターに委ねる。
    * acknowledged（アービターに表示した警告）を渡した場合、その後に増えた警告があれば再確認を求める。
+   * UI からは confirmed と acknowledged を必ず併せて渡す（acknowledged なしの confirmed は再確認を省略する）。
    */
   async changeRoundStatus(
     roundId: string,

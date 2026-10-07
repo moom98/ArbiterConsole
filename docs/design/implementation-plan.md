@@ -542,8 +542,10 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 **Tasks**:
 
 #### 10.1 Deployment (2 days)
-- [ ] Set up Vercel/Netlify project
-- [ ] Configure environment variables (Claude API key)
+- [ ] Set up a hosting project with a Node runtime (Vercel recommended; the `/api/llm/*` routes need a server — ADR-007)
+- [ ] Build command: `npm run fetch-models && npm run build` (prebuild fails without the embedding model)
+- [ ] Configure environment variables: `GEMINI_API_KEY`, and `LLM_ACCESS_TOKEN` (or `LLM_ALLOW_UNAUTHENTICATED=1` behind platform auth); see `.env.example`
+- [ ] Set Google Cloud quotas and a billing budget for the Gemini key
 - [ ] Deploy to production
 - [ ] Test production deployment
 

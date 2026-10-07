@@ -16,6 +16,7 @@ import {
   setItemNote,
   stageForRoundStatus,
   STAGE_PHASES,
+  warningsAcknowledged,
 } from "@/lib/domain/services/round-checklist";
 import { CITATIONS } from "@/lib/domain/rules/citations";
 import type { ChecklistTemplateEntry } from "@/lib/domain/entities";
@@ -317,5 +318,27 @@ describe("round transition warnings", () => {
           pendingIncidentCount: 0,
         })
       ).toThrow();
+  });
+});
+
+describe("warningsAcknowledged", () => {
+  const pre = (items: string[]) =>
+    ({ kind: "incomplete-pre-round", items }) as const;
+  const pending = (count: number) =>
+    ({ kind: "pending-incidents", count }) as const;
+
+  it("accepts the same or fewer warnings", () => {
+    expect(warningsAcknowledged([pre(["A"])], [pre(["A", "B"])])).toBe(true);
+    expect(warningsAcknowledged([pending(1)], [pending(2)])).toBe(true);
+    expect(warningsAcknowledged([], [pending(1)])).toBe(true);
+  });
+
+  it("re-asks for a new kind, a new incomplete item or more pending incidents", () => {
+    expect(warningsAcknowledged([pending(1)], [])).toBe(false);
+    expect(warningsAcknowledged([pending(1)], [pre(["A"])])).toBe(false);
+    expect(warningsAcknowledged([pre(["A", "C"])], [pre(["A", "B"])])).toBe(
+      false
+    );
+    expect(warningsAcknowledged([pending(3)], [pending(2)])).toBe(false);
   });
 });

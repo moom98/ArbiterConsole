@@ -85,6 +85,16 @@ describe("Report page — game context from the active tournament", () => {
     ).toEqual([]);
   });
 
+  it("a tournament without rounds selects no round and shows no boards", async () => {
+    const { service } = useTournamentStore.getState();
+    await service.saveTournamentProfile(
+      profileInput({ name: "ラウンド未作成" })
+    );
+    render(<ReportPage />);
+    expect(await screen.findByText("ラウンド未作成")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /ボード\d/ })).toBeNull();
+  });
+
   it("changing the round is the second tap", async () => {
     const t = await seedTournament();
     render(<ReportPage />);

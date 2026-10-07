@@ -71,6 +71,7 @@ export default function ReportPage() {
   // 大会の対局（ADR-006）。大会がない場合・暫定を選んだ場合は draft（ADR-004）を使う
   const {
     active: activeTournament,
+    loaded: tournamentsLoaded,
     rounds,
     service: tournamentService,
     load: loadTournaments,
@@ -330,7 +331,11 @@ export default function ReportPage() {
       )}
 
       {/* Game context: 暫定（大会なし。ADR-004） */}
-      {step === "context" && !tournamentMode && (
+      {step === "context" && !tournamentsLoaded && (
+        <p className="text-gray-500">読み込み中...</p>
+      )}
+
+      {step === "context" && tournamentsLoaded && !tournamentMode && (
         <div className="space-y-5">
           {activeTournament && (
             <button

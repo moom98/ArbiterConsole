@@ -38,6 +38,8 @@ export interface RuleCitation {
   page?: number;
   /** page が指す資料（例: 条文は Laws 2023 だがページは Arbiters' Manual 2025） */
   pageDocument?: string;
+  /** 登録規則（IndexedDB の Rule.id）から引用した場合の ID（AI参考情報の引用） */
+  ruleId?: string;
 }
 
 export interface Penalty {
@@ -75,6 +77,27 @@ export type DecisionKind =
   /** 手動確認が必要 */
   | "manual-review";
 
+/**
+ * LLM（AI参考情報）の取得・検証状態（ADR-006）。
+ * - passed:      LLM の出力が検証を通過した（AI参考として表示）
+ * - rejected:    LLM の出力が検証に失敗した（CAへ確認）
+ * - offline:     オフラインのため LLM を呼び出さなかった
+ * - unavailable: LLM の呼び出しに失敗した（サーバー未設定・タイムアウト等）
+ * - no-articles: 関連する登録規則が見つからなかった（LLM を呼び出さない）
+ */
+export type LlmAssistStatus =
+  "passed" | "rejected" | "offline" | "unavailable" | "no-articles";
+
+export interface LlmDecisionMeta {
+  status: LlmAssistStatus;
+  /** 使用したモデル ID（サーバーが返したもの） */
+  model?: string;
+  /** LLM に提示した候補条文（Rule.id） */
+  candidateArticleIds?: string[];
+  /** 失敗時の理由（利用者向けの短い説明） */
+  message?: string;
+}
+
 export interface Decision {
   id: string;
   incidentId: string;
@@ -93,6 +116,8 @@ export interface Decision {
   /** 不足している情報のラベル一覧（kind が follow-up-required / context-required の場合） */
   missingFields?: string[];
   generatedBy: "decision-tree" | "llm";
+  /** 決定木の対象外で AI 参考情報を試みた場合の状態（ADR-006） */
+  llm?: LlmDecisionMeta;
   validatedAt?: Date;
   validationPassed: boolean;
   validationErrors?: string[];

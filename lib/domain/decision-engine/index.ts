@@ -29,11 +29,34 @@ import {
   analyzeRepetition,
   type ChessPositionPort,
 } from "@/lib/domain/services/position-analysis";
+import type { LlmAssistOutcome, LlmAssistPort } from "@/lib/domain/llm/ports";
+import { buildLlmDecision } from "@/lib/domain/llm/llm-decision";
 
 export interface DecisionEngineDeps {
   /** 同一局面の自動判定に使う局面解析（未指定なら自動判定は利用不可） */
   positions?: ChessPositionPort;
+  /**
+   * 決定木の対象外の事象について AI 参考情報を取得するポート（ADR-006）。
+   * evaluate() でのみ使用する。未指定なら従来どおり手動確認（CAへ確認）とする。
+   */
+  llm?: LlmAssistPort;
 }
+
+/** 決定木の対象外（LLM 参考情報の対象）であることを示す内部結果 */
+interface UncoveredIncident {
+  uncovered: true;
+  rulesVersion: string;
+  ruleset: Required<Pick<RulesetContext, "competitionType" | "rulesVersion">> &
+    Pick<RulesetContext, "supervisionRegime">;
+}
+
+function isUncovered(
+  r: DecisionEngineResult | UncoveredIncident
+): r is UncoveredIncident {
+  return (r as UncoveredIncident).uncovered === true;
+}
+
+const OFFLINE_AI_NOTE = "オンライン時にAI参考情報を取得できます。";
 
 /**
  * 判断に用いる規則セット。すべて明示的に与えること（既定値を仮定しない）。
@@ -54,6 +77,8 @@ export interface DecisionEngineContext {
    * 件数が回数になる。評価中の Incident 自身は含めないこと。
    */
   illegalMoveHistory?: Record<PlayerColor, PriorIllegalMove[]>;
+  /** 大会 ID（AI 参考情報の規則検索で大会固有規定を対象にするため） */
+  tournamentId?: string;
 }
 
 export interface DecisionEngineResult {
@@ -66,7 +91,11 @@ export interface DecisionEngineResult {
 /**
  * Decision Engine - Orchestrator
  * Incident を規則セットと種別に応じて Decision Tree へルーティングする。
- * LLM は呼び出さない（ADR-002）。
+ *
+ * - processIncident（同期）: 決定木のみ。対象外は手動確認（CAへ確認）。
+ * - evaluate（非同期）: 決定木を優先し、対象外の事象に限り LlmAssistPort から
+ *   AI 参考情報を取得して、ドメインの決定的な検証器で検証する（ADR-002 / ADR-006）。
+ * エンジン自身は LLM・HTTP を直接呼び出さない（ポート経由）。
  */
 export class DecisionEngine {
   constructor(
@@ -75,6 +104,137 @@ export class DecisionEngine {
   ) {}
 
   processIncident(context: DecisionEngineContext): DecisionEngineResult {
+    const routed = this.route(context);
+    if (!isUncovered(routed)) return routed;
+    return this.manualReview(context.incident, routed.rulesVersion);
+  }
+
+  /**
+   * 決定木で判断できる事象は決定木の結果を返す（LLM は呼ばない）。
+   * 決定木の対象外の事象のみ、LLM ポートが注入されていれば AI 参考情報を取得する。
+   */
+  async evaluate(
+    context: DecisionEngineContext
+  ): Promise<DecisionEngineResult> {
+    const routed = this.route(context);
+    if (!isUncovered(routed)) return routed;
+    const { incident } = context;
+    if (!this.deps.llm) {
+      return this.manualReview(incident, routed.rulesVersion);
+    }
+
+    let outcome: LlmAssistOutcome;
+    try {
+      outcome = await this.deps.llm.assist({
+        incident: {
+          category: incident.category,
+          subtype: incident.subtype,
+          playerColor: incident.playerColor,
+          description: incident.description,
+          arbiterObserved: incident.arbiterObserved,
+        },
+        context: {
+          competitionType: routed.ruleset.competitionType,
+          supervisionRegime: routed.ruleset.supervisionRegime,
+          rulesVersion: routed.rulesVersion,
+          tournamentId: context.tournamentId,
+        },
+      });
+    } catch (error) {
+      outcome = {
+        status: "error",
+        code: "port-error",
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+    return this.fromLlmOutcome(incident, routed.rulesVersion, outcome);
+  }
+
+  private fromLlmOutcome(
+    incident: Incident,
+    rulesVersion: string,
+    outcome: LlmAssistOutcome
+  ): DecisionEngineResult {
+    switch (outcome.status) {
+      case "ok": {
+        const decision = buildLlmDecision(this.providers, {
+          incidentId: incident.id,
+          category: incident.category,
+          rulesVersion,
+          raw: outcome.raw,
+          model: outcome.model,
+          articles: outcome.articles,
+          storedArticleIds: outcome.storedArticleIds,
+        });
+        return { decision, requiresFollowUp: false, followUpQuestions: [] };
+      }
+      case "offline":
+        return this.manualReview(incident, rulesVersion, {
+          extraAction: OFFLINE_AI_NOTE,
+          escalationReason:
+            "オフラインのためAI参考情報を取得できません（オンライン必須）。CAへ確認してください。",
+          llm: {
+            status: "offline",
+            message: "オンライン必須",
+          },
+        });
+      case "no-articles":
+        return this.terminal(
+          incident,
+          {
+            kind: "manual-review",
+            conclusion: "該当する規則が見つかりませんでした。",
+            actions: [
+              "CAへ確認してください。",
+              "ルール検索で関連規則を確認してください（大会規定が登録されているか確認）。",
+            ],
+            escalationReason:
+              "登録済みの規則から関連する条文が見つからないため、AI参考情報を生成できません。",
+            llm: { status: "no-articles" },
+          },
+          rulesVersion
+        );
+      case "error":
+        return this.manualReview(incident, rulesVersion, {
+          extraAction: OFFLINE_AI_NOTE,
+          escalationReason: `AI参考情報を取得できませんでした（${outcome.message}）。CAへ確認してください。`,
+          llm: { status: "unavailable", message: outcome.message },
+        });
+    }
+  }
+
+  /** 決定木の対象外: 手動確認（CAへ確認） */
+  private manualReview(
+    incident: Incident,
+    rulesVersion: string,
+    options: {
+      extraAction?: string;
+      escalationReason?: string;
+      llm?: Decision["llm"];
+    } = {}
+  ): DecisionEngineResult {
+    return this.terminal(
+      incident,
+      {
+        kind: "manual-review",
+        conclusion: "この事象は手動での確認が必要です。",
+        actions: [
+          "ルール検索で関連規則を確認してください。",
+          "Chief Arbiterへ相談してください。",
+          ...(options.extraAction ? [options.extraAction] : []),
+        ],
+        escalationReason:
+          options.escalationReason ??
+          "このカテゴリのDecision Treeは実装されていません",
+        llm: options.llm,
+      },
+      rulesVersion
+    );
+  }
+
+  private route(
+    context: DecisionEngineContext
+  ): DecisionEngineResult | UncoveredIncident {
     const { incident } = context;
     const ruleset = context.ruleset ?? {};
 
@@ -181,15 +341,15 @@ export class DecisionEngine {
     if (!incident.description.trim())
       return this.ask(incident, [QUESTIONS.situationNote], rulesVersion);
 
-    return this.terminal(incident, {
-      kind: "manual-review",
-      conclusion: "この事象は手動での確認が必要です。",
-      actions: [
-        "ルール検索で関連規則を確認してください。",
-        "Chief Arbiterへ相談してください。",
-      ],
-      escalationReason: "このカテゴリのDecision Treeは実装されていません",
-    });
+    return {
+      uncovered: true,
+      rulesVersion,
+      ruleset: {
+        competitionType,
+        supervisionRegime: regime,
+        rulesVersion,
+      },
+    };
   }
 
   private processIllegalMoveStandard(
@@ -322,7 +482,7 @@ export class DecisionEngine {
     incident: Incident,
     fields: Pick<
       DecisionFields,
-      "kind" | "conclusion" | "actions" | "escalationReason"
+      "kind" | "conclusion" | "actions" | "escalationReason" | "llm"
     > & {
       sources?: RuleCitation[];
     },

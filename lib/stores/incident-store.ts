@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   Decision,
+  Game,
   Incident,
   IncidentCategory,
   Tournament,
@@ -17,6 +18,7 @@ import {
 } from "@/lib/domain/follow-up";
 import { IncidentCounter } from "@/lib/domain/services/incident-counter";
 import {
+  deriveRulesetFromTournament,
   validateReportContext,
   type ReportContext,
 } from "@/lib/domain/services/game-context";
@@ -34,7 +36,13 @@ export type SubmitResult =
   { ok: true; result: DecisionEngineResult } | { ok: false; error: string };
 
 export interface SubmitIncidentParams {
-  context: ReportContext;
+  /**
+   * 大会の対局（大会管理で作成した Game.id）。指定した場合は大会から規則セットを導出する（ADR-006）。
+   * 未指定の場合は context（暫定大会。ADR-004）を使う。
+   */
+  gameId?: string;
+  /** 暫定大会のコンテキスト（gameId 未指定時は必須） */
+  context?: ReportContext;
   category: IncidentCategory;
   /** 任意: カテゴリ選択時に確定した subtype（QUICK_REPORTS） */
   subtype?: string;
@@ -98,6 +106,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
             competitionType: tournament.competitionType,
             supervisionRegime: tournament.supervisionRegime,
             rulesVersion: tournament.rulesVersion,
+            tournamentOverrides: tournament.overrides,
           }
         : undefined,
       illegalMoveHistory,
@@ -127,6 +136,28 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
       });
     }
     return result;
+  }
+
+  /** 報告対象の対局を解決する（大会の対局 or 暫定大会の対局） */
+  async function resolveGame(
+    params: SubmitIncidentParams,
+    now: Date
+  ): Promise<{ game: Game; adHocContext?: ReportContext }> {
+    if (params.gameId !== undefined) {
+      const game = await db.games.get(params.gameId);
+      if (!game) throw new Error("対局が見つかりません");
+      const tournament = await db.tournaments.get(game.tournamentId);
+      if (!tournament) throw new Error("対局の大会が見つかりません");
+      const derived = deriveRulesetFromTournament(tournament);
+      if (!derived.ok) throw new Error(derived.errors.join(" / "));
+      return { game };
+    }
+    if (!params.context) throw new Error("対局を指定してください");
+    const contextErrors = validateReportContext(params.context);
+    if (contextErrors.length > 0) throw new Error(contextErrors.join(" / "));
+    const { game } = await ensureGameForContext(db, params.context, now);
+    await saveLastReportContext(db, params.context, now);
+    return { game, adHocContext: params.context };
   }
 
   return create<IncidentStore>((set, get) => {
@@ -180,9 +211,6 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
       submitIncident: (params) =>
         run(
           async () => {
-            const contextErrors = validateReportContext(params.context);
-            if (contextErrors.length > 0)
-              throw new Error(contextErrors.join(" / "));
             if (
               params.subtype !== undefined &&
               !isKnownSubtype(params.category, params.subtype)
@@ -190,13 +218,8 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
               throw new Error(`不正な subtype です: ${params.subtype}`);
 
             const now = providers.now();
-            const { game } = await ensureGameForContext(
-              db,
-              params.context,
-              now
-            );
-            await saveLastReportContext(db, params.context, now);
-            set({ lastContext: params.context });
+            const { game, adHocContext } = await resolveGame(params, now);
+            if (adHocContext) set({ lastContext: adHocContext });
 
             const incident: Incident = {
               id: providers.generateId(),

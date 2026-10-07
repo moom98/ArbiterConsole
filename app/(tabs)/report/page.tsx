@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useIncidentStore } from "@/lib/stores/incident-store";
+import { useTournamentStore } from "@/lib/stores/tournament-store";
+import { TournamentGamePicker } from "@/components/tournament/TournamentGamePicker";
 import { DecisionDisplay } from "@/components/features/DecisionDisplay";
 import { FollowUpQuestions } from "@/components/features/FollowUpQuestions";
 import type {
   CompetitionType,
+  Game,
   IncidentCategory,
   SupervisionRegime,
 } from "@/lib/domain/entities";
@@ -17,9 +20,12 @@ import {
   type IncidentQuestionId,
 } from "@/lib/domain/follow-up";
 import {
+  deriveRulesetFromTournament,
   validateReportContext,
   type ReportContext,
 } from "@/lib/domain/services/game-context";
+import { formatRulesetSummary } from "@/lib/domain/services/tournament-profile";
+import { currentRound } from "@/lib/domain/services/round-planning";
 
 const INCIDENT_CATEGORIES: Array<{
   value: IncidentCategory;
@@ -62,6 +68,20 @@ export default function ReportPage() {
   const [description, setDescription] = useState("");
   const [draft, setDraft] = useState<ContextDraft>({});
 
+  // 大会の対局（ADR-006）。大会がない場合・暫定を選んだ場合は draft（ADR-004）を使う
+  const {
+    active: activeTournament,
+    rounds,
+    service: tournamentService,
+    load: loadTournaments,
+  } = useTournamentStore();
+  const [useAdHoc, setUseAdHoc] = useState(false);
+  const [roundNumber, setRoundNumber] = useState<number | null>(null);
+  const [games, setGames] = useState<Game[]>([]);
+  const [loadingGames, setLoadingGames] = useState(false);
+  const [selectedGame, setSelectedGame] = useState<Game | null>(null);
+  const [pickError, setPickError] = useState<string | null>(null);
+
   const {
     currentDecision,
     followUpQuestions,
@@ -74,11 +94,47 @@ export default function ReportPage() {
     reset,
   } = useIncidentStore();
 
-  // 前回の判断を必ずクリアし、前回のコンテキストを読み込む
+  // 前回の判断を必ずクリアし、前回のコンテキストと選択中の大会を読み込む
   useEffect(() => {
     reset();
     void loadLastContext();
-  }, [reset, loadLastContext]);
+    void loadTournaments();
+  }, [reset, loadLastContext, loadTournaments]);
+
+  // 大会が変わったら（またはラウンド未選択なら）「今のラウンド」を選択する
+  const activeTournamentId = activeTournament?.id;
+  const [roundsFor, setRoundsFor] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (activeTournamentId !== roundsFor) {
+      setRoundsFor(activeTournamentId);
+      setSelectedGame(null);
+      setRoundNumber(currentRound(rounds)?.roundNumber ?? null);
+    } else if (roundNumber === null && rounds.length > 0) {
+      setRoundNumber(currentRound(rounds)?.roundNumber ?? null);
+    }
+  }, [activeTournamentId, roundsFor, rounds, roundNumber]);
+
+  // 選択したラウンドのボードを読み込む
+  useEffect(() => {
+    if (!activeTournamentId || roundNumber === null) {
+      setGames([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingGames(true);
+    tournamentService
+      .listGames(activeTournamentId, roundNumber)
+      .then((g) => {
+        if (!cancelled) setGames(g);
+      })
+      .catch((e) => console.error("Failed to load games:", e))
+      .finally(() => {
+        if (!cancelled) setLoadingGames(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTournamentId, roundNumber, tournamentService]);
 
   // 前回のコンテキストで初期化（ユーザーが未入力の場合のみ）
   useEffect(() => {
@@ -87,16 +143,63 @@ export default function ReportPage() {
     }
   }, [lastContext]);
 
-  const contextErrors = validateReportContext(draft);
+  const tournamentMode = activeTournament !== null && !useAdHoc;
+  const derivedRuleset = useMemo(
+    () =>
+      activeTournament ? deriveRulesetFromTournament(activeTournament) : null,
+    [activeTournament]
+  );
+  const rulesetErrors =
+    derivedRuleset && !derivedRuleset.ok ? derivedRuleset.errors : [];
+
+  const contextErrors = tournamentMode
+    ? rulesetErrors.length > 0
+      ? rulesetErrors
+      : selectedGame
+        ? []
+        : ["ボードを選択してください"]
+    : validateReportContext(draft);
   const needsRegime =
     draft.competitionType !== undefined && draft.competitionType !== "standard";
+
+  /** 報告先の対局（大会の対局 or 暫定コンテキスト） */
+  const target =
+    tournamentMode && selectedGame
+      ? { gameId: selectedGame.id }
+      : { context: draft as ReportContext };
+
+  const proceedFromContext = () =>
+    setStep(selectedCategory ? "description" : "category");
+
+  const handlePickGame = (game: Game) => {
+    setPickError(null);
+    setSelectedGame(game);
+    proceedFromContext();
+  };
+
+  const handlePickOther = async (round: number, board: number) => {
+    if (!activeTournament) return;
+    setPickError(null);
+    try {
+      const game = await tournamentService.ensureGame(
+        activeTournament.id,
+        round,
+        board
+      );
+      await loadTournaments();
+      setRoundNumber(round);
+      handlePickGame(game);
+    } catch (e) {
+      setPickError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   // よく使う決定木へ直接（subtype 込み・メモなし）で報告する
   const handleQuickReport = async (quick: QuickReport) => {
     if (contextErrors.length > 0) return;
     setSelectedCategory(quick.category);
     const res = await submitIncident({
-      context: draft as ReportContext,
+      ...target,
       category: quick.category,
       subtype: quick.subtype,
       description: "",
@@ -119,7 +222,7 @@ export default function ReportPage() {
     if (descriptionRequired && !description.trim()) return;
 
     const res = await submitIncident({
-      context: draft as ReportContext,
+      ...target,
       category: selectedCategory,
       description,
       arbiterObserved: true,
@@ -138,6 +241,7 @@ export default function ReportPage() {
     setStep("context");
     setSelectedCategory(null);
     setDescription("");
+    setSelectedGame(null);
     reset();
   };
 
@@ -149,18 +253,29 @@ export default function ReportPage() {
   );
 
   const contextSummary =
-    contextErrors.length === 0
+    contextErrors.length === 0 && tournamentMode && selectedGame
       ? [
-          optionLabel("competitionType", draft.competitionType),
-          needsRegime
-            ? optionLabel("supervisionRegime", draft.supervisionRegime)
+          activeTournament?.name,
+          `R${selectedGame.round}`,
+          `Board ${selectedGame.boardNumber}`,
+          selectedGame.white.name || selectedGame.black.name
+            ? `${selectedGame.white.name || "?"} – ${selectedGame.black.name || "?"}`
             : null,
-          `R${draft.round}`,
-          `Board ${draft.boardNumber}`,
         ]
           .filter(Boolean)
           .join(" · ")
-      : "";
+      : contextErrors.length === 0
+        ? [
+            optionLabel("competitionType", draft.competitionType),
+            needsRegime
+              ? optionLabel("supervisionRegime", draft.supervisionRegime)
+              : null,
+            `R${draft.round}`,
+            `Board ${draft.boardNumber}`,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : "";
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto">
@@ -180,9 +295,52 @@ export default function ReportPage() {
         </div>
       )}
 
-      {/* Game context */}
-      {step === "context" && (
+      {/* Game context: 大会の対局（ラウンド → ボード） */}
+      {step === "context" && tournamentMode && activeTournament && (
+        <>
+          {pickError && (
+            <div
+              role="alert"
+              className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm"
+            >
+              {pickError}
+            </div>
+          )}
+          <TournamentGamePicker
+            tournament={activeTournament}
+            rulesetSummary={formatRulesetSummary(activeTournament)}
+            rulesetErrors={rulesetErrors}
+            rounds={rounds}
+            selectedRound={roundNumber}
+            games={games}
+            loadingGames={loadingGames}
+            disabled={isProcessing}
+            onSelectRound={(n) => {
+              setSelectedGame(null);
+              setRoundNumber(n);
+            }}
+            onPickGame={handlePickGame}
+            onPickOther={(r, b) => void handlePickOther(r, b)}
+            onUseAdHoc={() => {
+              setSelectedGame(null);
+              setUseAdHoc(true);
+            }}
+          />
+        </>
+      )}
+
+      {/* Game context: 暫定（大会なし。ADR-004） */}
+      {step === "context" && !tournamentMode && (
         <div className="space-y-5">
+          {activeTournament && (
+            <button
+              type="button"
+              onClick={() => setUseAdHoc(false)}
+              className="min-h-12 px-3 text-blue-700 underline"
+            >
+              「{activeTournament.name}」の対局から選ぶ
+            </button>
+          )}
           <p className="text-gray-600">
             {lastContext
               ? "対局を確認してください（前回の値を表示しています。ラウンド・ボードが正しいか確認）"

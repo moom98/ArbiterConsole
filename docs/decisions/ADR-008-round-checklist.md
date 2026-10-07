@@ -4,8 +4,6 @@
 
 **Date:** 2026-10-07
 
-> Numbering: ADR-007 is used by Milestone 5 (LLM provider, on another branch). This ADR takes 008
-> to avoid a collision.
 
 ---
 

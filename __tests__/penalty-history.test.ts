@@ -98,6 +98,7 @@ describe("summarizePenalties", () => {
       results: 1,
       expulsions: 1,
       escalations: 1,
+      aiReferencePenalties: 0,
     });
   });
 

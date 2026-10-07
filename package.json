@@ -13,6 +13,7 @@
     "fetch-models": "node scripts/fetch-model-assets.mjs"
   },
   "dependencies": {
+    "@google/genai": "2.27.0",
     "@xenova/transformers": "^2.17.2",
     "chess.js": "1.4.0",
     "clsx": "^2.1.1",

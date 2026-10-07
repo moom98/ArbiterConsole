@@ -1,3 +1,4 @@
+import { isUnconfirmedAiDecision } from "./incident-status";
 import type {
   Decision,
   Game,
@@ -88,6 +89,11 @@ export interface PenaltySummary {
   expulsions: number;
   /** CA への確認が推奨された / CA へ相談した Incident 数 */
   escalations: number;
+  /**
+   * AI 参考情報（generatedBy "llm"、未確定）が提案したペナルティの数。
+   * 上記の集計には含めない（ADR-007: AI 参考情報は適用済みとして扱わない）
+   */
+  aiReferencePenalties: number;
 }
 
 /**
@@ -107,6 +113,7 @@ export function summarizePenalties(
     results: 0,
     expulsions: 0,
     escalations: 0,
+    aiReferencePenalties: 0,
   };
   for (const record of records) {
     const decision = decisionOf(record);
@@ -118,6 +125,10 @@ export function summarizePenalties(
       summary.escalations++;
     }
     if (!decision) continue;
+    if (isUnconfirmedAiDecision(decision)) {
+      summary.aiReferencePenalties += decision.penalties.length;
+      continue;
+    }
     for (const penalty of decision.penalties) {
       // 対局結果（ドロー・時間切れの結果）はペナルティ・負けの件数に含めない
       if (isResultOutcome(penalty, decision)) {
@@ -214,6 +225,8 @@ export interface GamePenaltyHistory {
    * 違反者ごとの履歴にも「違反者不明」にも入れない。
    */
   results: PenaltyHistoryItem[];
+  /** AI 参考情報（未確定）が提案したペナルティ。違反者ごとの履歴とは分けて表示する */
+  aiReference: PenaltyHistoryItem[];
 }
 
 /** 違反へのペナルティではなく、対局結果を表す出力か */
@@ -237,13 +250,14 @@ export function penaltyHistoryForGame(
 ): GamePenaltyHistory {
   const illegal = IncidentCounter.illegalMoveHistory(records, gameId);
   const buckets: Record<
-    PlayerColor | "unknown" | "results",
+    PlayerColor | "unknown" | "results" | "ai",
     PenaltyHistoryItem[]
   > = {
     white: [],
     black: [],
     unknown: [],
     results: [],
+    ai: [],
   };
   for (const record of records) {
     const { incident } = record;
@@ -252,9 +266,11 @@ export function penaltyHistoryForGame(
     if (!decision) continue;
     const offenderBucket = buckets[incident.playerColor ?? "unknown"];
     for (const penalty of decision.penalties) {
-      const bucket = isResultOutcome(penalty, decision)
-        ? buckets.results
-        : offenderBucket;
+      const bucket = isUnconfirmedAiDecision(decision)
+        ? buckets.ai
+        : isResultOutcome(penalty, decision)
+          ? buckets.results
+          : offenderBucket;
       bucket.push({
         incidentId: incident.id,
         reportedAt: incident.reportedAt,
@@ -275,6 +291,7 @@ export function penaltyHistoryForGame(
     black: build("black"),
     unknownOffender: buckets.unknown.sort(byTime),
     results: buckets.results.sort(byTime),
+    aiReference: buckets.ai.sort(byTime),
   };
 }
 

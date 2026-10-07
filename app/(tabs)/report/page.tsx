@@ -9,6 +9,9 @@ import {
 } from "@/components/tournament/TournamentGamePicker";
 import { DecisionDisplay } from "@/components/features/DecisionDisplay";
 import { FollowUpQuestions } from "@/components/features/FollowUpQuestions";
+import { IncidentTextClassifier } from "@/components/features/IncidentTextClassifier";
+import { LlmAccessTokenField } from "@/components/features/LlmAccessTokenField";
+import type { IncidentClassification } from "@/lib/domain/llm/types";
 import type {
   CompetitionType,
   Game,
@@ -91,11 +94,13 @@ export default function ReportPage() {
     currentDecision,
     followUpQuestions,
     isProcessing,
+    llmPending,
     error,
     lastContext,
     loadLastContext,
     submitIncident,
     answerFollowUp,
+    retryEvaluation,
     reset,
   } = useIncidentStore();
 
@@ -109,15 +114,22 @@ export default function ReportPage() {
   // 大会が変わったら（またはラウンド未選択なら）「今のラウンド」を選択する
   const activeTournamentId = activeTournament?.id;
   const [roundsFor, setRoundsFor] = useState<string | undefined>(undefined);
+  // ストアの rounds は大会の切り替え直後に前の大会のものが残っていることがあるため、
+  // 選択中の大会のラウンドが揃ってから選ぶ（ユーザーの選択は上書きしない）
+  const roundsLoaded =
+    rounds.length > 0 &&
+    rounds.every((r) => r.tournamentId === activeTournamentId);
   useEffect(() => {
     if (activeTournamentId !== roundsFor) {
       setRoundsFor(activeTournamentId);
       setSelectedGame(null);
-      setRoundNumber(currentRound(rounds)?.roundNumber ?? null);
-    } else if (roundNumber === null && rounds.length > 0) {
+      setRoundNumber(
+        roundsLoaded ? (currentRound(rounds)?.roundNumber ?? null) : null
+      );
+    } else if (roundNumber === null && roundsLoaded) {
       setRoundNumber(currentRound(rounds)?.roundNumber ?? null);
     }
-  }, [activeTournamentId, roundsFor, rounds, roundNumber]);
+  }, [activeTournamentId, roundsFor, rounds, roundsLoaded, roundNumber]);
 
   // 選択したラウンドのボードを読み込む
   useEffect(() => {
@@ -215,6 +227,17 @@ export default function ReportPage() {
 
   const handleCategorySelect = (category: IncidentCategory) => {
     setSelectedCategory(category);
+    setStep("description");
+  };
+
+  // 分類の提案を採用: カテゴリと説明のみをプレフィルする。
+  // subtype は送らず、決定木の質問で確認する（提案が判断に入り込まないように）
+  const handleApplySuggestion = (
+    classification: IncidentClassification,
+    text: string
+  ) => {
+    setSelectedCategory(classification.category);
+    setDescription(text);
     setStep("description");
   };
 
@@ -571,6 +594,10 @@ export default function ReportPage() {
               {error}
             </div>
           )}
+          <IncidentTextClassifier
+            disabled={isProcessing || contextErrors.length > 0}
+            onApply={handleApplySuggestion}
+          />
           <p className="text-gray-600 mb-4">
             発生したインシデントのカテゴリを選択してください
           </p>
@@ -695,7 +722,18 @@ export default function ReportPage() {
               )}
             </div>
           ) : (
-            <DecisionDisplay decision={currentDecision} />
+            <>
+              <DecisionDisplay
+                decision={currentDecision}
+                onRetry={() => void retryEvaluation()}
+                retrying={isProcessing}
+              />
+              {currentDecision.llm?.errorCode === "unauthorized" && (
+                <div className="mt-4">
+                  <LlmAccessTokenField onSaved={() => void retryEvaluation()} />
+                </div>
+              )}
+            </>
           )}
           <button
             onClick={handleReset}
@@ -711,7 +749,11 @@ export default function ReportPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-8 text-center">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-            <p className="text-lg font-semibold">判断支援を準備中...</p>
+            <p className="text-lg font-semibold">
+              {llmPending
+                ? "AI参考情報を取得中...（オンライン）"
+                : "判断支援を準備中..."}
+            </p>
           </div>
         </div>
       )}

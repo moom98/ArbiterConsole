@@ -35,6 +35,8 @@
 | 音声入力 | Web Speech API | ネイティブAPI、コスト不要 |
 | PWA | next-pwa | Service Worker、オフラインキャッシュ |
 
+> **Note (ADR-007):** The LLM provider is now **Google Gemini**, called only through the server Route Handlers `app/api/llm/*`. The API key is never sent to the browser. Claude/Anthropic references in this document are historical. See [ADR-007](../decisions/ADR-007-gemini-llm-via-server-route.md).
+
 **制約事項**:
 - React 18に固定（デザインシステムがReact 19非対応）
 - オフライン動作必須（会場の通信品質問題）

@@ -23,6 +23,8 @@ import {
 import { defaultProviders, type DomainProviders } from "@/lib/domain/providers";
 import { db as defaultDb, type ArbiterDatabase } from "@/lib/infrastructure/db";
 import { chessJsPositionPort } from "@/lib/infrastructure/chess/chess-js-position-port";
+import type { LlmAssistPort } from "@/lib/domain/llm/ports";
+import { createLlmAssistPort } from "@/lib/infrastructure/llm/llm-assist-port";
 import {
   ensureGameForContext,
   loadGameRecords,
@@ -47,6 +49,8 @@ export interface IncidentStore {
   currentDecision: Decision | null;
   followUpQuestions: FollowUpQuestion[];
   isProcessing: boolean;
+  /** AI 参考情報（LLM）を取得中（決定木の対象外の事象のみ） */
+  llmPending: boolean;
   error: string | null;
   lastContext: ReportContext | null;
 
@@ -57,12 +61,16 @@ export interface IncidentStore {
   answerFollowUp: (
     answers: Partial<Record<IncidentQuestionId, string>>
   ) => Promise<SubmitResult>;
+  /** 現在の Incident を再評価する（例: オフラインだった AI 参考情報をオンラインで再取得） */
+  retryEvaluation: () => Promise<SubmitResult>;
   reset: () => void;
 }
 
 export interface IncidentStoreDeps {
   db: ArbiterDatabase;
   providers: DomainProviders;
+  /** 決定木の対象外の事象の AI 参考情報（未指定なら手動確認のみ）。ADR-006 */
+  llm?: LlmAssistPort;
 }
 
 function errorMessage(error: unknown): string {
@@ -75,8 +83,22 @@ function errorMessage(error: unknown): string {
  */
 export function createIncidentStore(deps: IncidentStoreDeps) {
   const { db, providers } = deps;
+  let setLlmPending: (pending: boolean) => void = () => {};
+  const llm: LlmAssistPort | undefined = deps.llm
+    ? {
+        assist: async (request) => {
+          setLlmPending(true);
+          try {
+            return await deps.llm!.assist(request);
+          } finally {
+            setLlmPending(false);
+          }
+        },
+      }
+    : undefined;
   const engine = new DecisionEngine(providers, {
     positions: chessJsPositionPort,
+    llm,
   });
 
   async function evaluate(incident: Incident): Promise<DecisionEngineResult> {
@@ -91,7 +113,8 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
       { excludeIncidentId: incident.id }
     );
 
-    const result = engine.processIncident({
+    // 決定木を優先し、対象外の事象のみ AI 参考情報を取得する（DecisionEngine.evaluate）
+    const result = await engine.evaluate({
       incident,
       ruleset: tournament
         ? {
@@ -101,6 +124,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
           }
         : undefined,
       illegalMoveHistory,
+      tournamentId: tournament?.id,
     });
 
     const now = providers.now();
@@ -130,6 +154,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
   }
 
   return create<IncidentStore>((set, get) => {
+    setLlmPending = (pending) => set({ llmPending: pending });
     async function run(
       fn: () => Promise<{ incident: Incident; result: DecisionEngineResult }>,
       options: { clearPrevious: boolean }
@@ -166,6 +191,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
       currentDecision: null,
       followUpQuestions: [],
       isProcessing: false,
+      llmPending: false,
       error: null,
       lastContext: null,
 
@@ -238,6 +264,21 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
           { clearPrevious: false }
         ),
 
+      retryEvaluation: () =>
+        run(
+          async () => {
+            const current = get().currentIncident;
+            if (!current) throw new Error("再評価するIncidentがありません");
+            const stored = (await db.incidents.get(current.id)) ?? current;
+            const result = await evaluate(stored);
+            return {
+              incident: (await db.incidents.get(stored.id)) ?? stored,
+              result,
+            };
+          },
+          { clearPrevious: false }
+        ),
+
       reset: () =>
         set({
           currentIncident: null,
@@ -252,4 +293,5 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
 export const useIncidentStore = createIncidentStore({
   db: defaultDb,
   providers: defaultProviders,
+  llm: createLlmAssistPort(),
 });

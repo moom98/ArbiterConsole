@@ -58,6 +58,7 @@ export class IllegalMoveFastCompetitionTree {
       priorIllegalMoves: input.priorIllegalMoves,
       opponentCanCheckmate: input.opponentCanCheckmate,
       regimeSources: this.regimeSources(),
+      tournamentOverrides: input.tournamentOverrides,
     });
   }
 }

@@ -212,6 +212,13 @@ Arbiter Console
 - **Confirmation**: Always confirm before saving
 - **Quick exit**: Can cancel at any step
 
+> **Implementation (Milestone 6, ADR-006):** when a tournament is active, the report flow's first
+> step shows the tournament's ruleset (read-only), its rounds (current round preselected) and a
+> board grid: tap a board (1 tap; 2 when changing round) → category. "その他のボード" creates a
+> missing board. An incomplete tournament ruleset blocks this step (no defaults). Without a
+> tournament, or via "大会を使わずに報告", the ad-hoc context form (ADR-004) is used. Rule search
+> passes the active tournament id (tournament regulations first; none when no tournament).
+
 ### 5.2 Flow 2: Rule Search
 
 **Scenario**: Arbiter needs to verify threefold repetition rule
@@ -435,6 +442,15 @@ Arbiter Console
 │ ホーム  報告  検索  履歴  設定 │ ← Bottom Nav
 └─────────────────────────────────────────┘
 ```
+
+> **Implementation (Milestone 6):** `/home` shows a full-width "トラブルを報告" button first, then the
+> active tournament card (ruleset, "Round N / total · status · boards", CA-escalation count, link to
+> round management), a tournament switcher (when >1), quick actions 報告 / 検索 / ログ, recent
+> incidents of the active tournament (max 5) and the decision-support notice. The round checklist
+> button arrives with Milestone 7. Tournament screens: `/tournament` (list/select),
+> `/tournament/new`, `/tournament/[id]` (bulk "Round N, boards a–b", start/end round, per-board
+> white/black, players, profile edit, delete). Settings links to them and enables the tournament
+> regulations upload for the active tournament.
 
 ### 6.2 Incident Report Screen (Category Selection)
 

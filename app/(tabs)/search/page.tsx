@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useTournamentStore } from "@/lib/stores/tournament-store";
 import type {
   HybridSearchResponse,
   RuleSearchResult,
@@ -34,6 +35,12 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<RuleSearchResult | null>(null);
   const requestIdRef = useRef(0);
+  const { active: activeTournament, load: loadTournaments } =
+    useTournamentStore();
+
+  useEffect(() => {
+    void loadTournaments();
+  }, [loadTournaments]);
 
   const handleSearch = async () => {
     const trimmed = query.trim();
@@ -48,9 +55,10 @@ export default function SearchPage() {
 
     try {
       const { hybridSearch } = await import("@/lib/infrastructure/ai");
-      // 大会管理（Milestone 6）実装までは大会未選択。大会固有規定は対象外になる
+      // 選択中の大会の大会固有規定を検索対象に含め、最優先で表示する（大会 > JCF > FIDE）。
+      // 大会未選択の場合、大会固有規定は対象外。
       const searchResponse = await hybridSearch(trimmed, {
-        tournamentId: undefined,
+        tournamentId: activeTournament?.id,
         limit: 10,
       });
       if (requestId !== requestIdRef.current) return;
@@ -78,7 +86,12 @@ export default function SearchPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <h1 className="text-2xl font-bold mb-4">ルール検索</h1>
+      <h1 className="text-2xl font-bold mb-2">ルール検索</h1>
+      <p className="text-sm text-gray-600 mb-4">
+        {activeTournament
+          ? `大会規定を優先: ${activeTournament.name}`
+          : "大会未選択（大会固有規定は検索対象外）"}
+      </p>
 
       <form
         className="mb-6 flex gap-2"

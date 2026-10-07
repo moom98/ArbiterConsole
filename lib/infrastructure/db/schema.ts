@@ -2,6 +2,8 @@ import Dexie, { type EntityTable } from "dexie";
 import type {
   Tournament,
   Game,
+  PlayerProfile,
+  Round,
   Incident,
   Decision,
   Rule,
@@ -25,6 +27,8 @@ export class ArbiterDatabase extends Dexie {
   ruleSources!: EntityTable<RuleSource, "id">;
   embeddings!: EntityTable<Embedding, "id">;
   appState!: EntityTable<AppStateEntry, "key">;
+  rounds!: EntityTable<Round, "id">;
+  players!: EntityTable<PlayerProfile, "id">;
 
   constructor(name = "ArbiterConsole") {
     super(name);
@@ -49,6 +53,16 @@ export class ArbiterDatabase extends Dexie {
     this.version(3).stores({
       rules: "id, source, sourceId, tournamentId, article, priority",
       ruleSources: "id, sourceType, tournamentId, status",
+    });
+
+    // v5: 大会管理（Milestone 6）。ラウンド・登録プレーヤーを追加し、対局をラウンド単位で引けるようにする。
+    // 既存データ（暫定大会・対局・Incident）は変換不要（追加フィールドはすべて任意）。
+    // v4 は欠番、v6 は LLM 連携（Milestone 5）用に予約。
+    this.version(5).stores({
+      games:
+        "id, tournamentId, round, boardNumber, startTime, roundId, [tournamentId+round]",
+      rounds: "id, tournamentId, [tournamentId+roundNumber], status",
+      players: "id, tournamentId, name",
     });
   }
 }

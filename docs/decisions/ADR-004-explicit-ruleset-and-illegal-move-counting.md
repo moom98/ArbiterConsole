@@ -57,4 +57,6 @@ Review of Milestones 2–3 found that:
   arbiter rules differently, history will not reflect it until an "arbiter override / final ruling"
   is recorded on the incident.
 - **Midnight game IDs.** Ad-hoc game IDs include the local date; a game spanning midnight would split
-  its history. Resolved once tournament/round management (Milestone 6) supplies real game IDs.
+  its history. **Resolved for tournament games by ADR-006** (Milestone 6): games picked from the
+  active tournament use date-free IDs (`{tournamentId}:r{n}:b{board}`). The ad-hoc path (no
+  tournament) still uses date-based IDs and keeps this limitation.

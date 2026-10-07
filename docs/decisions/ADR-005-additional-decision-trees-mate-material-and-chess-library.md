@@ -76,8 +76,8 @@ seminar PDF. Citations are verbatim and listed in `lib/domain/rules/citations.ts
 - The arbiter will see many minor-piece endings as "consult CA". This is deliberate: the system
   never claims certainty beyond what the counts prove.
 - The Blitz B.2 penalty amount stays an open question until confirmed by FIDE/JCF material or
-  tournament regulations. A tournament-level override can be added when tournament management
-  exists (Milestone 6).
+  tournament regulations. A sourced tournament-level override was added in Milestone 6 (ADR-006);
+  without it the behaviour above is unchanged.
 - Draw-claim incidents record the claimant as `Incident.playerColor`, so an incorrect-claim time
   addition appears in that player's penalty history.
 - Result outcomes are not offences and are shown in a separate "対局結果" section of the penalty

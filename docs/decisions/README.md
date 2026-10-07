@@ -15,6 +15,7 @@ ADRs document important architectural and design decisions made during the proje
 | [ADR-003](./ADR-003-offline-rule-search.md) | Offline Rule Search: Japanese Tokenization, Multilingual Embeddings, Self-hosted Assets | Accepted |
 | [ADR-004](./ADR-004-explicit-ruleset-and-illegal-move-counting.md) | Explicit Ruleset Context and Illegal-Move Counting | Accepted |
 | [ADR-005](./ADR-005-additional-decision-trees-mate-material-and-chess-library.md) | Additional Decision Trees, Mate-Material Check and Chess Library | Accepted |
+| [ADR-006](./ADR-006-tournament-management-and-sourced-overrides.md) | Tournament Management, Tournament Game IDs and Sourced Tournament Overrides | Accepted |
 
 ## Naming Convention
 

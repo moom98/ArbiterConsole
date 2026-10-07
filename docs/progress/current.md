@@ -11,19 +11,17 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
 - **Milestones 0–3:** foundation, rule search, DT-001, incident report, incident log.
   - A review found serious problems; they were fixed and re-reviewed. See `milestones/milestone-0-3-remediation.md`.
 - **Milestone 4:** DT-002 to DT-005, mate-material check, repetition analysis. See `milestones/milestone-4.md`.
+- **Milestone 6:** tournament profile (with sourced Blitz B.2 override), rounds/games/players (Dexie v5, ids `{t}:r{n}:b{board}`), ruleset snapshot on each incident, tournament regulations upload + search priority, home screen. Merged at `18ce691`; reviewed to MERGE. See `milestones/milestone-6.md` and ADR-006.
 
 ## In progress
 
-Each is being built by a separate agent in a git worktree under `.claude/worktrees/`; nothing has been merged yet.
+Being built by a separate agent in a git worktree under `.claude/worktrees/`; nothing has been merged yet.
 
 - **Milestone 5: LLM integration.**
-  - **User decision:** use the **Google Gemini API**, called **only through a Next.js server route**. The API key stays in a server env var. This will be recorded as ADR-006.
+  - **User decision:** use the **Google Gemini API**, called **only through a Next.js server route**. The API key stays in a server env var. Recorded as ADR-007.
+  - Review found blocking issues (open paid proxy without auth, total deadline not enforced, quote-stitching, severe penalties without CA, AI decisions counted as applied, fair-play sent to LLM); fixes in progress.
   - Trees keep priority over the LLM.
   - LLM output is checked by a deterministic validator (ADR-002); invalid output becomes "consult the CA".
-- **Milestone 6: Tournament management.**
-  - Tournament profile, rounds and games, uploading tournament regulations, home screen.
-  - Tournament overrides, such as the Blitz B.2 penalty amount, are explicit inputs that carry their source.
-  - Dexie `version(5)`; Milestone 5 reserves `version(6)`.
 
 ## Important implementation decisions
 
@@ -76,17 +74,18 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 
 ## Tests and verification performed
 
-On `feature/m4-and-review-fixes` at `bb0f8ef`:
+On `feature/m4-and-review-fixes` at `18ce691`:
 
 - `npx tsc --noEmit` is clean.
-- `npx vitest run`: 22 files, 403 tests passed.
+- `npx vitest run`: 33 files, 472 tests passed.
 - `npm run lint`: 0 errors; only prettier warnings remain.
 - `ALLOW_MISSING_MODEL=1 npm run build` succeeds.
 
 ## Known issues
 
 - The illegal-move count follows the *suggested* decision, not the arbiter's actual ruling. There is no "applied / not applied" confirmation yet (ADR-004).
-- Ad-hoc game ids contain the local date, so a game's history splits at midnight. Tournament games in Milestone 6 address this.
+- Ad-hoc (no tournament) game ids contain the local date, so their history splits at midnight. Tournament games are not affected.
+- Report page: a board-load failure is only logged to the console; the picker then says no boards exist.
 - **Blitz B.2 time penalty:** the literal reading is 2 minutes, and the app shows it as "要確認" (needs confirmation). The user has not confirmed federation practice.
 - **Search:**
   - Thresholds have not been tuned on real PDFs.
@@ -106,7 +105,7 @@ On `feature/m4-and-review-fixes` at `bb0f8ef`:
 
 ## Next milestone
 
-After Milestones 5 and 6 are reviewed and merged:
+After Milestone 5 is reviewed and merged:
 
 - **Milestone 7:** round checklist. The `Round` model from Milestone 6 must stay compatible.
 - **Milestone 8:** voice input, clock guide, player Q&A mode, UX polish.

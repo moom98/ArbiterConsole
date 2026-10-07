@@ -40,6 +40,11 @@ export interface RuleCitation {
   pageDocument?: string;
   /** 登録規則（IndexedDB の Rule.id）から引用した場合の ID（AI参考情報の引用） */
   ruleId?: string;
+  /**
+   * AI の引用を含む原文の文全体（引用部分を強調表示するため before / match / after に分割）。
+   * 引用の切り出しで意味が変わっていないかを、アービターが文全体で確認できるようにする。
+   */
+  quoteContext?: { before: string; match: string; after: string };
 }
 
 export interface Penalty {

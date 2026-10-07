@@ -42,13 +42,31 @@ describe("DecisionDisplay – AI-assisted decisions", () => {
     expect(screen.getByText("根拠検証: 合格")).toBeTruthy();
     // 引用は最初から展開し、資料名・版・ページを表示する
     expect(
-      screen.getByText("根拠の原文（登録規則と照合済み） (2件)")
+      screen.getByText(
+        "根拠の原文（原文に存在。文全体を確認してください） (2件)"
+      )
     ).toBeTruthy();
     expect(
       screen.getAllByText("第1回テスト大会 大会規定 2026").length
     ).toBeGreaterThan(0);
     expect(screen.getByText("第1回テスト大会 大会規定 2026 p.2")).toBeTruthy();
     expect(screen.queryByText("Decision Tree")).toBeNull();
+  });
+
+  it("shows the full stored sentence with the quoted part highlighted", () => {
+    const { container } = render(
+      <DecisionDisplay decision={llmDecision(validDraft())} />
+    );
+    const sentences = screen.getAllByLabelText("引用を含む原文の文全体");
+    expect(sentences.length).toBe(2);
+    const marks = Array.from(container.querySelectorAll("mark")).map(
+      (m) => m.textContent
+    );
+    expect(marks).toContain(
+      "During play, a player is forbidden to have any electronic device not specifically approved by the arbiter"
+    );
+    // 引用の後に続く部分（文の残り）も表示される
+    expect(sentences[1].textContent).toContain("in the playing venue.");
   });
 
   it("shows a rejected AI output as CA escalation with the validation errors", () => {

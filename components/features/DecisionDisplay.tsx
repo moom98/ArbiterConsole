@@ -290,7 +290,7 @@ export function DecisionDisplay({
             className="flex items-center justify-between w-full min-h-12 p-3 bg-gray-50 hover:bg-gray-100 rounded"
           >
             <span className="font-semibold text-gray-700">
-              {`${isLlm ? "根拠の原文（登録規則と照合済み）" : "根拠の原文"} (${decision.sources.length}件)`}
+              {`${isLlm ? "根拠の原文（原文に存在。文全体を確認してください）" : "根拠の原文"} (${decision.sources.length}件)`}
             </span>
             <span aria-hidden>{showSources ? "▲" : "▼"}</span>
           </button>
@@ -314,7 +314,18 @@ export function DecisionDisplay({
                       {source.pageDocument ?? source.edition} p.{source.page}
                     </p>
                   )}
-                  {source.text ? (
+                  {source.quoteContext ? (
+                    <p
+                      className="text-sm text-gray-700"
+                      aria-label="引用を含む原文の文全体"
+                    >
+                      {source.quoteContext.before}
+                      <mark className="bg-yellow-200 text-gray-900">
+                        {source.quoteContext.match}
+                      </mark>
+                      {source.quoteContext.after}
+                    </p>
+                  ) : source.text ? (
                     <p className="text-sm text-gray-700">{source.text}</p>
                   ) : (
                     <p className="text-sm text-gray-500">（原文未登録）</p>

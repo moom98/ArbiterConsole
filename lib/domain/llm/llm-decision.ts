@@ -8,6 +8,7 @@ import type {
 import { validateDecision } from "@/lib/domain/decision-trees/validation";
 import type { DomainProviders } from "@/lib/domain/providers";
 import { validateLlmDecisionDraft } from "./output-validator";
+import { extractQuoteContext } from "./quote-match";
 import type { LlmArticle } from "./types";
 
 const SOURCE_LABELS: Record<RuleSourceType, string> = {
@@ -36,6 +37,7 @@ export function citationFromArticle(
     page: article.page,
     pageDocument: article.page !== undefined ? edition : undefined,
     ruleId: article.id,
+    quoteContext: extractQuoteContext(quote, article.content) ?? undefined,
   };
 }
 

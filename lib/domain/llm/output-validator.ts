@@ -11,6 +11,7 @@ import {
   type LlmDecisionDraft,
   type LlmPenaltyDraft,
 } from "./types";
+import { normalizeForQuote, quoteMatchesArticle } from "./quote-match";
 
 /**
  * LLM 出力の検証（ADR-002 / ADR-007）。
@@ -59,19 +60,6 @@ const MAX_CITATIONS = 10;
 const MAX_QUOTE = 3000;
 const MAX_SHORT = 500;
 const MAX_MISSING = 10;
-/**
- * 引用の最小文字数（正規化後）。日本語を含む断片は文字あたりの情報量が多いため短めにする。
- * - 連続した引用: 20 文字（日本語 10 文字）以上
- * - 省略記号で2つに分けた引用: 各断片 15 文字（日本語 8 文字）以上
- */
-const MIN_CONTIGUOUS_CHARS = 20;
-const MIN_CONTIGUOUS_CHARS_JA = 10;
-const MIN_FRAGMENT_CHARS = 15;
-const MIN_FRAGMENT_CHARS_JA = 8;
-/** 省略できる本文の最大文字数（正規化後） */
-const MAX_ELLIPSIS_GAP = 200;
-/** 引用の直後を確認する文字数（日本語の否定は述語の後ろに付くため） */
-const TRAILING_CONTEXT = 8;
 const MAX_TIME_ADJUSTMENT_SECONDS = 3600;
 
 const COLORS: readonly PlayerColor[] = ["white", "black"];
@@ -98,94 +86,8 @@ export function findSpeculativeLanguage(text: string): string | null {
   return en ? en[0] : null;
 }
 
-/** 省略記号の表記揺れを "…" に統一する（NFKC 後の "..." / "⋯" / "．．．" 等） */
-function unifyEllipsis(text: string): string {
-  return text.normalize("NFKC").replace(/\.{3,}|⋯|…+/g, "…");
-}
-
-/**
- * 引用照合用の正規化:
- * NFKC → 引用符・ダッシュの統一 → 小文字化 → 空白（改行を含む）の除去。
- * PDF 抽出では日本語の文字間に空白・改行が入ることがあるため、空白はすべて除去して比較する。
- */
-export function normalizeForQuote(text: string): string {
-  return text
-    .normalize("NFKC")
-    .replace(/[‘’‚‛′]/g, "'")
-    .replace(/[“”„‟″]/g, '"')
-    .replace(/[‐‑‒–—―−]/g, "-")
-    .toLowerCase()
-    .replace(/\s+/g, "");
-}
-
-const CJK = /[぀-ヿ㐀-鿿]/;
-
-/**
- * 省略した本文に含まれると意味が反転しうる語（否定・禁止・例外）。
- * 正規化後（小文字・空白除去）の文字列に対して判定するため、英語は部分一致になる
- * （"another" 等の誤検出は安全側＝不合格として扱う）。
- */
-const NEGATION_IN_GAP =
-  /not|never|n't|cannot|except|unless|however|prohibit|forbid|ない|ず|ません|禁止|禁じ|除く|除き|ただし|但し|例外/;
-/** 引用の直後に続くと、引用部分の意味を反転させる日本語の否定・禁止 */
-const NEGATION_AFTER =
-  /^(?:し|せ|さ)?(?:てはならな|てはいけな|ない|ず|ません|禁止|禁じ)/;
-
-function minChars(fragment: string, ja: number, other: number): number {
-  return CJK.test(fragment) ? ja : other;
-}
-
-/**
- * 引用が条文本文と一致するか（意味の反転を防ぐため厳格に判定する）。
- * - 連続した引用（省略なし）: 20 文字（日本語 10 文字）以上
- * - 省略記号は1か所まで（断片は2つまで）。各断片 15 文字（日本語 8 文字）以上、
- *   省略した本文は 200 文字以内で、否定・禁止・例外の語を含まないこと
- * - 引用の直後が否定・禁止で続く場合（例:「所持」→「所持してはならない」）は不一致
- */
-export function quoteMatchesArticle(quote: string, content: string): boolean {
-  const body = normalizeForQuote(content);
-  const fragments = unifyEllipsis(quote)
-    .split("…")
-    .map(normalizeForQuote)
-    .filter((f) => f.length > 0);
-  if (fragments.length === 0 || fragments.length > 2) return false;
-
-  if (fragments.length === 1) {
-    const [f] = fragments;
-    if (f.length < minChars(f, MIN_CONTIGUOUS_CHARS_JA, MIN_CONTIGUOUS_CHARS))
-      return false;
-  } else if (
-    fragments.some(
-      (f) => f.length < minChars(f, MIN_FRAGMENT_CHARS_JA, MIN_FRAGMENT_CHARS)
-    )
-  ) {
-    return false;
-  }
-
-  const negatedAfter = (end: number) =>
-    NEGATION_AFTER.test(body.slice(end, end + TRAILING_CONTEXT));
-
-  // すべての出現位置を試す（最初の出現だけでは誤って不一致になる場合がある）
-  const [first, second] = fragments;
-  for (
-    let at = body.indexOf(first);
-    at >= 0;
-    at = body.indexOf(first, at + 1)
-  ) {
-    const firstEnd = at + first.length;
-    if (second === undefined) {
-      if (!negatedAfter(firstEnd)) return true;
-      continue;
-    }
-    const at2 = body.indexOf(second, firstEnd);
-    if (at2 < 0) continue;
-    const gap = body.slice(firstEnd, at2);
-    if (gap.length > MAX_ELLIPSIS_GAP || NEGATION_IN_GAP.test(gap)) continue;
-    if (negatedAfter(at2 + second.length)) continue;
-    return true;
-  }
-  return false;
-}
+// 引用の照合は quote-match.ts（表示用の文脈抽出と共通）
+export { normalizeForQuote, quoteMatchesArticle };
 
 // ---------------------------------------------------------------------------
 // スキーマ検証

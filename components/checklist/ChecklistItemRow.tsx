@@ -1,7 +1,10 @@
 "use client";
 
 import { useId, useState } from "react";
-import type { ChecklistViewItem } from "@/lib/domain/services/round-checklist";
+import {
+  MAX_NOTE_LENGTH,
+  type ChecklistViewItem,
+} from "@/lib/domain/services/round-checklist";
 import { formatTime } from "@/lib/application/incident-labels";
 
 interface Props {
@@ -84,6 +87,7 @@ export function ChecklistItemRow({ item, onToggle, onSaveNote }: Props) {
             aria-label={`${item.label}のメモを入力`}
             autoFocus
             rows={2}
+            maxLength={MAX_NOTE_LENGTH}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={() => void saveNote()}

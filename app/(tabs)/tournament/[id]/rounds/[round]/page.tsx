@@ -193,6 +193,8 @@ export default function RoundChecklistPage() {
         {editing ? (
           <div className="mt-4">
             <ChecklistEditor
+              // 段階を切り替えたら追加先の区分を初期化する（別の段階に追加されないように）
+              key={stage}
               phases={STAGE_PHASES[stage]}
               items={data.items}
               customized={data.customized}

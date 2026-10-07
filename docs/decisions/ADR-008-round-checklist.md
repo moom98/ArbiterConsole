@@ -70,10 +70,13 @@ Milestone 7 adds the Round Checklist (requirements §26; implementation plan Mil
    - Warnings never block. The arbiter decides, consistent with decision support.
    - The confirmation is in-page (`RoundTransitionControl`); it does not use `confirm()`.
    - The tournament detail page uses the same control, so it cannot bypass the warning.
+   - The confirmation sends the warnings that were shown (`acknowledged`). If new warnings have
+     appeared since then (more pending incidents, more incomplete items, or a new kind), the
+     service asks again (`warningsAcknowledged`).
 6. **Schema.**
    - Dexie `version(7)` only adds the `roundChecklists` (`id, tournamentId`) and
      `checklistTemplates` (`tournamentId`) tables; existing data needs no conversion.
-   - Version 6 is reserved for Milestone 5.
+   - Version 6 is unused. Milestone 5 adds no stores. Any future schema change must use version 8 or higher.
    - Tournament deletion also removes these rows in the same transaction.
 
 ## Consequences
@@ -82,9 +85,8 @@ Milestone 7 adds the Round Checklist (requirements §26; implementation plan Mil
 - Template edits apply to every round of the tournament, past rounds included. A past round's
   progress can change if items are added later. This is accepted: the record keeps what was ticked
   and when.
-- **Dexie version ordering:** if a device opened a v7 build before Milestone 5's v6 schema
-  exists, Dexie will not re-run v6 later. Merge Milestone 5 (v6) before any v7 build reaches
-  real devices, or move Milestone 5's stores into a version above 7.
+- **Dexie version ordering:** new schema versions must be above 7, because a device that has opened
+  a v7 build will not run a lower version later.
 - Not included:
   - checklist history or audit across edits;
   - per-board checklists (for example, marking the specific boards whose clocks were checked);

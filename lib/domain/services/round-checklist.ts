@@ -133,7 +133,7 @@ export const DEFAULT_CHECKLIST_ITEMS: readonly ChecklistItemDefinition[] = [
   {
     id: "pre-devices",
     phase: "pre",
-    label: "電子機器に関するアナウンス",
+    label: "電子機器の持ち込み禁止の周知",
     citations: cite("FIDE_11_3_2"),
   },
   // ---- 開始直後 ----
@@ -531,6 +531,31 @@ export function assessRoundTransition(input: {
     };
   }
   throw new Error(`ラウンドの状態を ${status} から ${to} に変更できません`);
+}
+
+/**
+ * 確認済みの警告で、現在の警告がすべて説明されているか。
+ * 確認後に増えた未完了項目・保留中の Incident・新しい種類の警告があれば false（再確認が必要）。
+ */
+export function warningsAcknowledged(
+  current: readonly RoundTransitionWarning[],
+  acknowledged: readonly RoundTransitionWarning[]
+): boolean {
+  return current.every((w) => {
+    switch (w.kind) {
+      case "incomplete-pre-round": {
+        const seen = acknowledged.find((a) => a.kind === w.kind);
+        return (
+          seen?.kind === "incomplete-pre-round" &&
+          w.items.every((label) => seen.items.includes(label))
+        );
+      }
+      case "pending-incidents": {
+        const seen = acknowledged.find((a) => a.kind === w.kind);
+        return seen?.kind === "pending-incidents" && w.count <= seen.count;
+      }
+    }
+  });
 }
 
 export function describeTransitionWarning(w: RoundTransitionWarning): string {

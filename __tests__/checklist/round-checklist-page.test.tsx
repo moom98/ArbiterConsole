@@ -245,6 +245,26 @@ describe("Round Checklist page", () => {
     expect(progress()).toBe(`0 / ${PRE.length + 1}`);
   });
 
+  it("switching stage while editing adds the item to the visible stage", async () => {
+    const { t } = await seed();
+    render(<RoundChecklistPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "項目を編集（この大会）" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /終了時/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "追加する項目名" }), {
+      target: { value: "結果掲示" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "追加" }));
+    expect(await screen.findByText("結果掲示")).toBeTruthy();
+    const template = await db.checklistTemplates.get(t.id);
+    expect(
+      template?.entries.find(
+        (e) => e.kind === "custom" && e.label === "結果掲示"
+      )
+    ).toMatchObject({ phase: "post" });
+  });
+
   it("shows not found for a missing round", async () => {
     await seed();
     params.round = "9";

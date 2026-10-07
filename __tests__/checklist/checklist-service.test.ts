@@ -231,6 +231,46 @@ describe("RoundChecklistService (Dexie)", () => {
     );
   });
 
+  it("end: a confirmation of stale warnings asks again when more incidents became pending", async () => {
+    const { t, round } = await setup();
+    await service.changeRoundStatus(round.id, "active", { confirmed: true });
+    await db.incidents.add(incident("a", `${t.id}:r1:b1`, "pending"));
+    const first = await service.changeRoundStatus(round.id, "completed");
+    expect(first.status).toBe("confirmation-required");
+    if (first.status !== "confirmation-required") return;
+
+    // 確認画面の表示中に、別の Incident が保留になった
+    await db.incidents.add(incident("b", `${t.id}:r1:b2`, "pending"));
+    const stale = await service.changeRoundStatus(round.id, "completed", {
+      confirmed: true,
+      acknowledged: first.assessment.warnings,
+    });
+    expect(stale).toMatchObject({
+      status: "confirmation-required",
+      assessment: { warnings: [{ kind: "pending-incidents", count: 2 }] },
+    });
+    expect((await service.load(t.id, 1))!.round.status).toBe("active");
+    if (stale.status !== "confirmation-required") return;
+
+    const done = await service.changeRoundStatus(round.id, "completed", {
+      confirmed: true,
+      acknowledged: stale.assessment.warnings,
+    });
+    expect(done.status).toBe("changed");
+  });
+
+  it("start: a confirmation still holds when fewer items are incomplete than were shown", async () => {
+    const { round } = await setup();
+    const first = await service.changeRoundStatus(round.id, "active");
+    if (first.status !== "confirmation-required") throw new Error("expected");
+    await service.setDone(round.id, PRE_IDS[0], true);
+    const result = await service.changeRoundStatus(round.id, "active", {
+      confirmed: true,
+      acknowledged: first.assessment.warnings,
+    });
+    expect(result.status).toBe("changed");
+  });
+
   it("rejects invalid transitions without changing the round", async () => {
     const { t, round } = await setup();
     await expect(

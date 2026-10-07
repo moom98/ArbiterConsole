@@ -71,7 +71,7 @@ export class ArbiterDatabase extends Dexie {
 
     // v7: Round Checklist（Milestone 7）。ラウンドごとの完了状態（id = roundId）と、
     // 大会ごとのチェックリスト構成を追加する。既存テーブルは変更しない（変換不要）。
-    // v6 は LLM 連携（Milestone 5）用に予約（別ブランチ）。
+    // v6 は欠番（Milestone 5 はスキーマを変更しない）。今後のスキーマ変更は v8 以降を使う。
     this.version(7).stores({
       roundChecklists: "id, tournamentId",
       checklistTemplates: "tournamentId",

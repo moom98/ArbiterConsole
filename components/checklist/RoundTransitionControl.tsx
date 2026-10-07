@@ -52,8 +52,10 @@ export function RoundTransitionControl({
     setBusy(true);
     setError(null);
     try {
+      // 確認時は表示した警告を渡す（表示後に増えた警告があれば再確認になる）
       const result = await service.changeRoundStatus(round.id, next, {
         confirmed,
+        acknowledged: confirmed ? (pending?.warnings ?? []) : undefined,
       });
       if (result.status === "confirmation-required") {
         setPending(result.assessment);
@@ -105,8 +107,8 @@ export function RoundTransitionControl({
                   未完了の項目
                 </summary>
                 <ul className="list-disc ml-5">
-                  {w.items.map((label) => (
-                    <li key={label}>{label}</li>
+                  {w.items.map((label, i) => (
+                    <li key={`${i}-${label}`}>{label}</li>
                   ))}
                 </ul>
               </details>

@@ -24,8 +24,10 @@ import {
   resolveChecklistItems,
   setItemDone,
   setItemNote,
+  warningsAcknowledged,
   type ChecklistView,
   type RoundTransitionAssessment,
+  type RoundTransitionWarning,
 } from "@/lib/domain/services/round-checklist";
 import type { TournamentService } from "./tournament-management";
 
@@ -249,14 +251,23 @@ export class RoundChecklistService {
   /**
    * ラウンドを開始・終了する。警告がある場合は、confirmed: true（アービターが警告を確認した）
    * でなければ変更せずに確認を求める。確認後の判断はアービターに委ねる。
+   * acknowledged（アービターに表示した警告）を渡した場合、その後に増えた警告があれば再確認を求める。
    */
   async changeRoundStatus(
     roundId: string,
     to: RoundStatus,
-    options: { confirmed?: boolean } = {}
+    options: {
+      confirmed?: boolean;
+      acknowledged?: readonly RoundTransitionWarning[];
+    } = {}
   ): Promise<RoundTransitionResult> {
     const assessment = await this.assessTransition(roundId, to);
-    if (assessment.warnings.length > 0 && !options.confirmed)
+    if (
+      assessment.warnings.length > 0 &&
+      (!options.confirmed ||
+        (options.acknowledged !== undefined &&
+          !warningsAcknowledged(assessment.warnings, options.acknowledged)))
+    )
       return { status: "confirmation-required", assessment };
     const round = await this.tournaments.changeRoundStatus(roundId, to);
     return { status: "changed", round };

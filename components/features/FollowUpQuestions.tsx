@@ -99,7 +99,11 @@ export function FollowUpQuestions({
 
     if (input === "text") {
       return (
-        <details key={q.id} className="rounded-lg border border-gray-200 p-3">
+        <details
+          key={q.id}
+          open={!q.optional}
+          className="rounded-lg border border-gray-200 p-3"
+        >
           <summary className="min-h-11 cursor-pointer font-semibold">
             {q.label}
           </summary>
@@ -109,6 +113,7 @@ export function FollowUpQuestions({
             disabled={disabled}
             placeholder={q.placeholder}
             onChange={(e) => set(q.id, e.target.value)}
+            aria-label={q.label}
             spellCheck={false}
             autoCapitalize="off"
             className="mt-2 w-full h-24 px-3 py-2 font-mono text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

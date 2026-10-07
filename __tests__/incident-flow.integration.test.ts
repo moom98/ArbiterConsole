@@ -303,6 +303,54 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
       expect(stored?.subtype).toBe("flag-fall");
     });
 
+    it("M3: quick flag-fall report reaches a decision in 2 answer rounds", async () => {
+      const res = await store.getState().submitIncident({
+        context: STANDARD_CTX,
+        category: "clock-time",
+        subtype: "flag-fall",
+        description: "",
+        arbiterObserved: true,
+      });
+      if (!res.ok) throw new Error(res.error);
+      expect(res.result.followUpQuestions.map((q) => q.id)).toEqual([
+        "flagFallen",
+        "gameEndedBeforeFlag",
+      ]);
+      await answer({ flagFallen: "white", gameEndedBeforeFlag: "false" });
+      const zeros = Object.fromEntries(
+        ["white", "black"].flatMap((c) =>
+          [
+            "Queens",
+            "Rooks",
+            "LightBishops",
+            "DarkBishops",
+            "Knights",
+            "Pawns",
+          ].map((p) => [`${c}${p}`, "0"])
+        )
+      );
+      const final = await answer({
+        movesNotCompleted: "true",
+        ...zeros,
+        blackRooks: "1",
+        materialConfirmed: "true",
+      });
+      expect(final.requiresFollowUp).toBe(false);
+      expect(final.decision.penalties[0].type).toBe("game-loss");
+    });
+
+    it("rejects an unknown quick-report subtype without creating an incident", async () => {
+      const res = await store.getState().submitIncident({
+        context: STANDARD_CTX,
+        category: "draw",
+        subtype: "bogus",
+        description: "",
+        arbiterObserved: true,
+      });
+      expect(res.ok).toBe(false);
+      expect(await db.incidents.count()).toBe(0);
+    });
+
     it("threefold claim with a move list is checked automatically", async () => {
       await submit("draw", STANDARD_CTX);
       await answer({ drawSubtype: "threefold-repetition-claim" });

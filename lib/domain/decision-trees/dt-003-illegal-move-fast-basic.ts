@@ -71,13 +71,23 @@ export class IllegalMoveFastBasicTree {
     // 相手が次の手を指した後 → 訂正不可（A.5.2）
     if (input.opponentMadeNextMove) {
       const pawnOnLastRank = subtype === "promotion-not-replaced";
+      // 7.5.1 の違法手（キングをチェックに晒す等）は、両キングがチェックされた不正な局面を残しうる
+      const mayLeaveKingInCheck = subtype === "illegal-move";
       const sources: CitationKey[] = [...this.regimeSources()];
       if (pawnOnLastRank)
         sources.push("FIDE_A_5_4", "MANUAL_3_10_FAST_INTERVENE");
+      if (mayLeaveKingInCheck)
+        sources.push("FIDE_A_5_4", "MANUAL_A_BOTH_KINGS_IN_CHECK");
+      const bothKingsNote = mayLeaveKingInCheck
+        ? [
+            "盤上で両方のキングがチェックされている場合（A.5.4）: 次の手が完了するまで待つ。その後も両キングがチェックされていればドローを宣言する",
+            "次の手で手番側が自分のキングのチェックを外し、相手のキングだけがチェックされている場合は不正な局面ではないため続行する。手番側がチェックを外さなかった場合は、その手番側の違法手とする（解説）",
+          ]
+        : [];
       return this.out.decided({
         kind: "recommendation",
         conclusion: pawnOnLastRank
-          ? `${label}: 相手が次の手を指した後のため、${COLOR_JA[color]}の違法手（${SUBTYPE_LABELS[subtype]}）は訂正できず、ペナルティもありません。ただしポーンが最終段にある不正な局面のため、A.5.4 の手順に従います。`
+          ? `${label}: 相手が次の手を指した後のため、${COLOR_JA[color]}の違法手（${SUBTYPE_LABELS[subtype]}）は訂正できず、ペナルティもありません。ただしポーンが最終段にある不正な局面のため、A.5.4 により次の手の完了を待ちます。`
           : `${label}: 相手が次の手を指した後のため、${COLOR_JA[color]}の違法手（${SUBTYPE_LABELS[subtype]}）は成立したままです。訂正もペナルティもなく対局を続行します。`,
         actions: pawnOnLastRank
           ? [
@@ -89,11 +99,12 @@ export class IllegalMoveFastBasicTree {
               "違法手としてのペナルティは科さず、対局を続行する",
               "プレーヤー同士がアービターの介入なしに合意した場合に限り訂正できる",
               "この違法手は違法手回数に数えない（ペナルティ未適用のため）",
+              ...bothKingsNote,
             ],
-        intervention: pawnOnLastRank ? "immediate" : "no-intervention",
+        intervention: pawnOnLastRank ? "wait-next-move" : "no-intervention",
         penalties: [],
         sources: cite(...sources),
-        confidence: pawnOnLastRank ? "medium" : "high",
+        confidence: pawnOnLastRank || mayLeaveKingInCheck ? "medium" : "high",
         escalationRecommended: false,
       });
     }

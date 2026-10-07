@@ -259,6 +259,11 @@ export const CITATIONS = {
     41,
     "This means that the player does not lose the game with the first illegal move, but only with the second, as it is in standard chess. The penalty is the addition of one minute to the opponent, instead of two minutes."
   ),
+  MANUAL_A_BOTH_KINGS_IN_CHECK: manual(
+    "Appendix A (both kings in check)",
+    41,
+    "The arbiter arrives at a board where both kings are in check. If that situation continues after the next move is played the arbiter shall declare the game drawn. If that move removes his/her own king from check but the opponent is still in check then the game continues as it is no longer an illegal position. If the second player remains in check after completing his/her next move the arbiter should declare an illegal move by that player."
+  ),
   MANUAL_A_BOTH_ZERO: manual(
     "Appendix A (both clocks show 0.00)",
     41,

@@ -34,12 +34,31 @@ function articles(r: ReturnType<typeof run>) {
 }
 
 describe("DT-004 Flag fall", () => {
-  it("asks who flagged, whether the game had ended and the move count first", () => {
+  it("asks who flagged and whether the game had ended first", () => {
     expect(ids(run({ competitionType: "standard" }))).toEqual([
       "flagFallen",
       "gameEndedBeforeFlag",
-      "movesNotCompleted",
     ]);
+  });
+
+  it("R6: asks the move count together with material once the flagged player is known", () => {
+    const r = run({
+      competitionType: "standard",
+      flagFallen: "black",
+      gameEndedBeforeFlag: false,
+    });
+    expect(ids(r)[0]).toBe("movesNotCompleted");
+    expect(ids(r)).toContain("whiteQueens");
+    expect(r.decision.conclusion).toContain("黒のフラッグ");
+  });
+
+  it("R6: with both flags, the order is asked before the move count", () => {
+    const r = run({
+      competitionType: "standard",
+      flagFallen: "both",
+      gameEndedBeforeFlag: false,
+    });
+    expect(ids(r)).toEqual(["bothFlagsOrder"]);
   });
 
   it("result reached before the flag was noticed stands", () => {

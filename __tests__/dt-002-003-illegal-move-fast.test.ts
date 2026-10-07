@@ -234,7 +234,35 @@ describe("DT-003 Illegal move — Rapid A.5 / Blitz B.3 (basic rules)", () => {
     });
     expect(articles(r)).toContain("FIDE A.5.4");
     expect(r.decision.penalties).toHaveLength(0);
-    expect(r.decision.intervention).toBe("immediate");
+    expect(r.decision.intervention).toBe("wait-next-move");
+  });
+
+  it("R5: an illegal move that stood notes the A.5.4 both-kings-in-check procedure", () => {
+    const r = a5().evaluate({ ...A5_BASE, opponentMadeNextMove: true });
+    expect(r.decision.actions.join("\n")).toContain("両方のキング");
+    expect(articles(r)).toEqual(
+      expect.arrayContaining([
+        "FIDE A.5.4",
+        "FIDE Arbiters' Manual: Appendix A (both kings in check)",
+      ])
+    );
+  });
+
+  it("R3: Blitz B.2 game loss does not cite the Rapid one-minute commentary", () => {
+    const r = a4("blitz").evaluate({
+      ...BASE,
+      playerIncidentCount: 1,
+      opponentCanCheckmate: true,
+    });
+    expect(articles(r)).not.toContain(
+      "FIDE Arbiters' Manual: Appendix A (illegal move penalty)"
+    );
+  });
+
+  it("R2: Blitz B.2 suggests 2 minutes as the literal reading", () => {
+    const r = a4("blitz").evaluate(BASE);
+    expect(r.decision.conclusion).toContain("2分（文言上の解釈・要確認）");
+    expect(r.decision.penalties[0].timeAdjustmentSeconds).toBeUndefined();
   });
 
   it("reported by a spectator → consult CA", () => {

@@ -153,6 +153,10 @@ const EXPECTED_JCF_P48 = [
  * pdfjs-dist で抽出したテキスト（FIDE は改行を半角スペース、JCF は改行を詰めて結合）と照合済み。
  */
 const EXPECTED_M4_NON_LAWS: Record<string, { page: number; text: string }> = {
+  MANUAL_A_BOTH_KINGS_IN_CHECK: {
+    page: 41,
+    text: "The arbiter arrives at a board where both kings are in check. If that situation continues after the next move is played the arbiter shall declare the game drawn. If that move removes his/her own king from check but the opponent is still in check then the game continues as it is no longer an illegal position. If the second player remains in check after completing his/her next move the arbiter should declare an illegal move by that player.",
+  },
   MANUAL_3_10_FAST_INTERVENE: {
     page: 15,
     text: "In Rapid and Blitz chess the arbiter intervenes when an illegal position has occurred as a direct consequence of an illegal move which the arbiter has seen being completed. Otherwise, the arbiter intervenes according to Article A.5.4 of Appendix A, or when a player submits a claim.",

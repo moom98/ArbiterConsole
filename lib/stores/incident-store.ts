@@ -11,6 +11,7 @@ import {
 } from "@/lib/domain/decision-engine";
 import {
   applyIncidentAnswers,
+  isKnownSubtype,
   type FollowUpQuestion,
   type IncidentQuestionId,
 } from "@/lib/domain/follow-up";
@@ -35,6 +36,8 @@ export type SubmitResult =
 export interface SubmitIncidentParams {
   context: ReportContext;
   category: IncidentCategory;
+  /** 任意: カテゴリ選択時に確定した subtype（QUICK_REPORTS） */
+  subtype?: string;
   description: string;
   arbiterObserved: boolean;
 }
@@ -180,6 +183,11 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
             const contextErrors = validateReportContext(params.context);
             if (contextErrors.length > 0)
               throw new Error(contextErrors.join(" / "));
+            if (
+              params.subtype !== undefined &&
+              !isKnownSubtype(params.category, params.subtype)
+            )
+              throw new Error(`不正な subtype です: ${params.subtype}`);
 
             const now = providers.now();
             const { game } = await ensureGameForContext(
@@ -194,6 +202,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
               id: providers.generateId(),
               gameId: game.id,
               category: params.category,
+              subtype: params.subtype,
               description: params.description,
               arbiterObserved: params.arbiterObserved,
               reportedBy: "arbiter",

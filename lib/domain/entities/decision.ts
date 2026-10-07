@@ -4,11 +4,16 @@ import type { PlayerColor } from "./incident";
  * - immediate: アービターが今すぐ介入する
  * - wait-for-claim: プレーヤーのクレームを待つ
  * - consult-ca: CAへ確認する / 判断不能
+ * - wait-next-move: 次の手の完了を待ってから判断する（例: A.5.4 の不正な局面）
  * - no-intervention: 違法手等としての介入・訂正は行わない
  *   （例: 時計が押されておらず違法手が未成立 / 対局終了後で結果が確定している）
  */
 export type InterventionType =
-  "immediate" | "wait-for-claim" | "consult-ca" | "no-intervention";
+  | "immediate"
+  | "wait-for-claim"
+  | "wait-next-move"
+  | "consult-ca"
+  | "no-intervention";
 export type ConfidenceLevel = "high" | "medium" | "low";
 export type PenaltyType =
   | "warning"

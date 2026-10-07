@@ -80,8 +80,6 @@ export class FlagFallTree {
     if (input.flagFallen === undefined) basic.push(QUESTIONS.flagFallen);
     if (input.gameEndedBeforeFlag === undefined)
       basic.push(QUESTIONS.gameEndedBeforeFlag);
-    if (input.movesNotCompleted === undefined)
-      basic.push(QUESTIONS.movesNotCompleted);
     if (basic.length > 0) return this.out.needsInput(basic);
 
     // 2. フラッグに気付く前に結果が出ていた → 結果は変わらない
@@ -108,12 +106,48 @@ export class FlagFallTree {
       });
     }
 
-    // 3. 規定手数（6.4）
+    // 4. 両フラッグ
+    let flagged: PlayerColor;
+    const extraSources: CitationKey[] = [];
+    if (input.flagFallen === "both") {
+      if (input.bothFlagsOrder === undefined)
+        return this.out.needsInput([QUESTIONS.bothFlagsOrder]);
+      if (input.bothFlagsOrder === "unknown") return this.bothUnknown(input);
+      flagged = input.bothFlagsOrder === "white-first" ? "white" : "black";
+      extraSources.push(
+        "MANUAL_6_BOTH_ZERO_ELECTRONIC",
+        ...(input.competitionType !== "standard" &&
+        input.supervisionRegime === "basic-rules"
+          ? (["MANUAL_A_BOTH_ZERO"] as const)
+          : [])
+      );
+    } else {
+      flagged = input.flagFallen as PlayerColor;
+    }
+
+    // 5. 規定手数（6.4）: 時間切れのプレーヤーが確定した後に確認する
+    const material = this.resolveMaterial(input);
+    if (input.movesNotCompleted === undefined) {
+      // 時間切れのプレーヤーが確定してから質問する。駒数も同じラウンドで尋ねる
+      return this.out.needsInput(
+        [
+          QUESTIONS.movesNotCompleted,
+          ...(material.ok
+            ? []
+            : [
+                ...materialQuestions(),
+                QUESTIONS.positionFen,
+                QUESTIONS.materialConfirmed,
+              ]),
+        ],
+        `${COLOR_JA[flagged]}のフラッグが落ちました。${COLOR_JA[flagged]}が規定手数を完了していたかと、盤上の駒数を確認してください。${!material.ok && material.error ? `\n${material.error}` : ""}`,
+        cite("FIDE_6_4", "FIDE_6_9", "MANUAL_6_9_CHECK_POSITION")
+      );
+    }
     if (input.movesNotCompleted === false) {
       return this.out.decided({
         kind: "manual-review",
-        conclusion:
-          "時間切れのプレーヤーは規定手数を完了していたため、時間切れ負けにはなりません（6.9 は規定手数を完了しなかった場合）。時計の設定を確認してください。",
+        conclusion: `${COLOR_JA[flagged]}は規定手数を完了していたため、時間切れ負けにはなりません（6.9 は規定手数を完了しなかった場合）。時計の設定を確認してください。`,
         actions: [
           "時計を止める",
           "両方の時計の表示時間と手数を記録する",
@@ -146,27 +180,7 @@ export class FlagFallTree {
       });
     }
 
-    // 4. 両フラッグ
-    let flagged: PlayerColor;
-    const extraSources: CitationKey[] = [];
-    if (input.flagFallen === "both") {
-      if (input.bothFlagsOrder === undefined)
-        return this.out.needsInput([QUESTIONS.bothFlagsOrder]);
-      if (input.bothFlagsOrder === "unknown") return this.bothUnknown(input);
-      flagged = input.bothFlagsOrder === "white-first" ? "white" : "black";
-      extraSources.push(
-        "MANUAL_6_BOTH_ZERO_ELECTRONIC",
-        ...(input.competitionType !== "standard" &&
-        input.supervisionRegime === "basic-rules"
-          ? (["MANUAL_A_BOTH_ZERO"] as const)
-          : [])
-      );
-    } else {
-      flagged = input.flagFallen as PlayerColor;
-    }
-
-    // 5. メイト可能性（駒数または FEN）
-    const material = this.resolveMaterial(input);
+    // 6. メイト可能性（駒数または FEN）
     if (!material.ok) {
       return this.out.needsInput(
         [

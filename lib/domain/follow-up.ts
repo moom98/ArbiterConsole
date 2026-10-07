@@ -59,7 +59,9 @@ export type IncidentQuestionId =
   | "seventyFiveCheck"
   | "lastMoveCheckmate"
   | "positionsText"
-  | "intendedMove";
+  | "intendedMove"
+  // 手動確認（決定木の対象外）
+  | "situationNote";
 
 export type GameContextQuestionId = "competitionType" | "supervisionRegime";
 
@@ -454,6 +456,17 @@ export const QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     options: [],
   },
 
+  // ---- 手動確認 ----
+  situationNote: {
+    id: "situationNote",
+    scope: "incident",
+    label: "状況のメモ（必須）",
+    help: "決定木の対象外のため、CA・記録用に状況を簡潔に記入してください。",
+    input: "text",
+    placeholder: "例: 時計の表示が消えた",
+    options: [],
+  },
+
   // ---- 対局コンテキスト ----
   competitionType: {
     id: "competitionType",
@@ -540,6 +553,7 @@ export function applyIncidentAnswers(
   let touchedIllegal = false;
   let touchedFlag = false;
   let touchedDraw = false;
+  let next_description = incident.description;
 
   for (const [id, raw] of Object.entries(answers) as [
     IncidentQuestionId,
@@ -701,6 +715,15 @@ export function applyIncidentAnswers(
           touchedDraw = true;
         }
         break;
+      case "situationNote": {
+        const note = raw.trim();
+        if (note !== "") {
+          next_description = next_description.trim()
+            ? `${next_description}\n${note}`
+            : note;
+        }
+        break;
+      }
       case "positionsText":
       case "intendedMove": {
         const text = raw.trim();
@@ -711,7 +734,12 @@ export function applyIncidentAnswers(
     }
   }
 
-  const next: Incident = { ...incident, playerColor, subtype };
+  const next: Incident = {
+    ...incident,
+    playerColor,
+    subtype,
+    description: next_description,
+  };
   if (
     incident.category === "illegal-move" ||
     touchedIllegal ||
@@ -739,6 +767,56 @@ export function usesStructuredQuestions(
     category === "clock-time" ||
     category === "draw"
   );
+}
+
+/**
+ * カテゴリ選択画面のショートカット（M3: 頻出の決定木へ subtype 込みで直接入る）。
+ * subtype をカテゴリ選択時に確定し、追加質問のラウンドを減らす。
+ */
+export interface QuickReport {
+  id: string;
+  category: Incident["category"];
+  subtype: string;
+  label: string;
+}
+
+export const QUICK_REPORTS: readonly QuickReport[] = [
+  {
+    id: "flag-fall",
+    category: "clock-time",
+    subtype: "flag-fall",
+    label: "フラッグ（時間切れ）",
+  },
+  {
+    id: "threefold",
+    category: "draw",
+    subtype: "threefold-repetition-claim",
+    label: "三回同一局面のクレーム",
+  },
+  {
+    id: "fivefold",
+    category: "draw",
+    subtype: "fivefold-repetition",
+    label: "五回同一局面",
+  },
+  {
+    id: "75-move",
+    category: "draw",
+    subtype: "75-move-rule",
+    label: "75手ルール",
+  },
+];
+
+/** カテゴリに対して有効な subtype か（報告時の検証用） */
+export function isKnownSubtype(
+  category: Incident["category"],
+  subtype: string
+): boolean {
+  if (category === "clock-time")
+    return Object.keys(CLOCK_TIME_SUBTYPE_LABELS).includes(subtype);
+  if (category === "draw")
+    return Object.keys(DRAW_SUBTYPE_LABELS).includes(subtype);
+  return false;
 }
 
 /** game-context スコープの回答を解釈する（純粋関数） */

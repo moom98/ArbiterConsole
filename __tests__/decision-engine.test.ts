@@ -235,6 +235,28 @@ describe("DecisionEngine", () => {
       expect(second.decision.treeId).toBe("DT-005-repetition");
     });
 
+    it("M2: 'other' without a note asks for a required situation note", () => {
+      const r = run({
+        incident: incident({
+          category: "draw",
+          subtype: "other",
+          description: "",
+        }),
+        ruleset: STANDARD,
+      });
+      expect(r.requiresFollowUp).toBe(true);
+      expect(r.followUpQuestions.map((q) => q.id)).toEqual(["situationNote"]);
+      expect(r.followUpQuestions[0].optional).toBeFalsy();
+      const answered = applyIncidentAnswers(
+        incident({ category: "draw", subtype: "other", description: "" }),
+        { situationNote: "合意ドローの手順に疑義" }
+      );
+      expect(answered.description).toBe("合意ドローの手順に疑義");
+      expect(run({ incident: answered, ruleset: STANDARD }).decision.kind).toBe(
+        "manual-review"
+      );
+    });
+
     it("draw 'other' and other clock problems go to manual review", () => {
       for (const inc of [
         incident({ category: "draw", subtype: "other" }),

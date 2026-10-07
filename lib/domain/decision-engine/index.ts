@@ -177,6 +177,10 @@ export class DecisionEngine {
       }
     }
 
+    // 決定木の対象外（例: "other" を選んだ場合）。状況の記録がなければメモを求める
+    if (!incident.description.trim())
+      return this.ask(incident, [QUESTIONS.situationNote], rulesVersion);
+
     return this.terminal(incident, {
       kind: "manual-review",
       conclusion: "この事象は手動での確認が必要です。",

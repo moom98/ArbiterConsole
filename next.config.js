@@ -6,7 +6,9 @@ const withPWA = require("next-pwa")({
   // モデル・WASMは大きく（数十〜百MB超）precacheに含めない。初回利用時に
   // 下記の runtimeCaching (CacheFirst) でキャッシュしオフラインでも利用する。
   publicExcludes: ["!noprecache/**/*", "!models/**/*", "!ort/**/*"],
-  // LLM API (api.anthropic.com) の応答はキャッシュしない（ルールを追加しないこと）
+  // LLM（ADR-006）: 同一オリジンの POST /api/llm/* のみ。Workbox の runtimeCaching は GET のみを
+  // 対象とし、さらに下の "others" ルールで /api/ を除外しているため応答はキャッシュされない。
+  // /api/ をキャッシュするルールを追加しないこと
   runtimeCaching: [
     {
       // 埋め込みモデル（Transformers.js, 同一オリジン /models/）
@@ -154,6 +156,10 @@ const withPWA = require("next-pwa")({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    // Gemini SDK はサーバー（Route Handler）専用。webpack でバンドルせず Node から読み込む（ADR-006）
+    serverComponentsExternalPackages: ["@google/genai"],
+  },
   webpack: (config, { isServer }) => {
     // Transformers.jsはブラウザ専用とするため、サーバー側ではonnxruntime-nodeを除外
     if (isServer) {

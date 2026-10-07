@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { LlmAccessTokenField } from "@/components/features/LlmAccessTokenField";
 import { useTournamentStore } from "@/lib/stores/tournament-store";
 import { formatRulesetSummary } from "@/lib/domain/services/tournament-profile";
 import type {
@@ -551,7 +552,10 @@ export default function SettingsPage() {
 
         <section className="bg-white rounded-lg shadow p-4">
           <h2 className="text-lg font-semibold mb-2">AI設定</h2>
-          <p className="text-sm text-gray-500">LLM連携は未実装です</p>
+          <p className="text-sm text-gray-600 mb-3">
+            決定木の対象外の事象について、オンライン時にAI参考情報を表示します（最終判断はアービターが行います）。サーバーでアクセストークンが設定されている場合のみ、入力が必要です。
+          </p>
+          <LlmAccessTokenField />
         </section>
 
         <section className="bg-white rounded-lg shadow p-4">

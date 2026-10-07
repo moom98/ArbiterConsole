@@ -233,15 +233,13 @@ export function createLlmRouteHandler(
     }
 
     const config = deps.config();
-    const limiter =
-      deps.rateLimiter ?? defaultLimiter(kind, config.rateLimitPerMinute[kind]);
-    const limit = limiter.take(clientKey(req.headers, config.trustProxy));
-    if (!limit.allowed) {
-      return fail("rate-limited", undefined, {
-        "Retry-After": String(limit.retryAfterSeconds),
-      });
+    // 本番ではアクセストークン未設定の公開を拒否する（明示的にプラットフォーム側で保護している場合を除く）
+    if (!config.accessToken && config.requireAccessToken) {
+      deps.log({ route: kind, code: "not-configured" });
+      return fail("not-configured");
     }
 
+    // トークンの確認はレート制限より先に行う（未認証の要求で正規利用者の枠を消費させない）
     if (
       config.accessToken &&
       !tokenMatches(
@@ -250,6 +248,15 @@ export function createLlmRouteHandler(
       )
     ) {
       return fail("unauthorized");
+    }
+
+    const limiter =
+      deps.rateLimiter ?? defaultLimiter(kind, config.rateLimitPerMinute[kind]);
+    const limit = limiter.take(clientKey(req.headers, config.trustProxy));
+    if (!limit.allowed) {
+      return fail("rate-limited", undefined, {
+        "Retry-After": String(limit.retryAfterSeconds),
+      });
     }
 
     if (!config.apiKey) {

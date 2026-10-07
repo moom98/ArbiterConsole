@@ -138,9 +138,11 @@ npm run fetch-models
 | `GEMINI_MODEL_REASONING`                                                  | `gemini-flash-latest`      | 決定木の対象外の事象の推論（構造化出力）                                                                                          |
 | `GEMINI_MODEL_CLASSIFIER`                                                 | `gemini-flash-lite-latest` | 自由記述のインシデント分類（低コスト）                                                                                            |
 | `GEMINI_THINKING_LEVEL`                                                   | `low`                      | 思考の量（`off` / `minimal` / `low` / `medium`）。思考に対応しないモデルでは `off`                                                |
-| `LLM_ACCESS_TOKEN`                                                        | （なし）                   | 設定すると `/api/llm/*` は `X-Arbiter-Access-Token` ヘッダーの一致を要求（401）。Gemini キーとは別物。`NEXT_PUBLIC_` にしないこと |
+| `LLM_ACCESS_TOKEN`                                                        | （なし）                   | 設定すると `/api/llm/*` は `X-Arbiter-Access-Token` ヘッダーの一致を要求（401）。Gemini キーとは別物。`NEXT_PUBLIC_` にしないこと。**本番（`NODE_ENV=production`）で未設定の場合、AIルートは 503 を返す** |
 | `LLM_RATE_LIMIT_REASON_PER_MINUTE` / `LLM_RATE_LIMIT_CLASSIFY_PER_MINUTE` | `10` / `10`                | ルートごとのレート制限                                                                                                            |
 | `LLM_DAILY_REQUEST_LIMIT`                                                 | `500`                      | プロセスあたりの1日（UTC）の上限（`0` は無制限）                                                                                  |
+| `LLM_ALLOW_UNAUTHENTICATED`                                               | （なし）                   | `1` のときのみ、本番でトークン未設定でも AI ルートを有効にする（デプロイ先の認証で保護している場合のみ） |
+| `GEMINI_THINKING_BUDGET`                                                  | （なし）                   | 思考トークン数（予算方式のモデル向け。設定時はレベルより優先） |
 | `TRUST_PROXY`                                                             | （なし）                   | `1` のときのみ `X-Forwarded-For` を IP として使う（信頼できるプロキシの背後のみ）                                                 |
 
 - キー未設定の場合、`/api/llm/*` は 503（`not-configured`）を返し、アプリは手動確認（CAへ確認）とキーワード分類で動作します。

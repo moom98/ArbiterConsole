@@ -69,6 +69,8 @@ export const SEVERE_PENALTIES: readonly PenaltyType[] = [
   "game-loss",
   "both-lose",
   "expulsion",
+  // 対局結果を変える
+  "draw",
 ];
 
 /** 推測的な表現（日本語） */

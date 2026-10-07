@@ -1,5 +1,8 @@
 import { parseLlmClassification } from "@/lib/domain/llm/classification";
-import { classifyByKeywords } from "@/lib/domain/llm/keyword-classifier";
+import {
+  classifyByKeywords,
+  mentionsFairPlay,
+} from "@/lib/domain/llm/keyword-classifier";
 import type { IncidentClassification } from "@/lib/domain/llm/types";
 import { LLM_LIMITS } from "@/lib/infrastructure/llm/contract";
 import {
@@ -41,7 +44,7 @@ export async function classifyIncidentText(
 
   // フェアプレー（不正の疑い・申告）と思われる記述は外部へ送信せず、端末内の分類のみ（§23）
   const local = classifyByKeywords(input);
-  if (local?.category === "fair-play") {
+  if (local?.category === "fair-play" || mentionsFairPlay(input)) {
     return {
       classification: local,
       notice:

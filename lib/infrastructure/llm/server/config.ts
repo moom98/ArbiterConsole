@@ -31,6 +31,11 @@ export interface LlmServerConfig {
    * Gemini の API キーとは別の、このアプリのルート専用のトークン。
    */
   accessToken?: string;
+  /**
+   * accessToken が未設定の場合にルートを無効にする。本番（NODE_ENV=production）では既定で true。
+   * プラットフォーム側で保護している場合のみ LLM_ALLOW_UNAUTHENTICATED=1 で解除する。
+   */
+  requireAccessToken: boolean;
   /** X-Forwarded-For / X-Real-IP を信頼する（信頼できるリバースプロキシの背後のみ） */
   trustProxy: boolean;
   rateLimitPerMinute: { reason: number; classify: number };
@@ -115,6 +120,9 @@ export function readLlmConfig(
       DEFAULT_CLASSIFIER_MODEL
     ),
     accessToken: accessToken ? accessToken : undefined,
+    requireAccessToken:
+      env.NODE_ENV === "production" &&
+      env.LLM_ALLOW_UNAUTHENTICATED?.trim() !== "1",
     trustProxy: env.TRUST_PROXY?.trim() === "1",
     rateLimitPerMinute: {
       reason: Math.max(

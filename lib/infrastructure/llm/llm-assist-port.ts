@@ -2,6 +2,7 @@ import type { LlmAssistPort } from "@/lib/domain/llm/ports";
 import type { LlmArticle, LlmReasoningRequest } from "@/lib/domain/llm/types";
 import { db } from "@/lib/infrastructure/db";
 import type { RuleSearchResult } from "@/lib/infrastructure/ai/hybrid-search";
+import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
 import { LLM_LIMITS } from "./contract";
 import {
   browserIsOnline,
@@ -74,6 +75,17 @@ export function createLlmAssistPort(
 
   return {
     async assist(request) {
+      // 多重防御: フェアプレーに触れる記述は送信しない（通常は DecisionEngine で止まる）
+      if (
+        request.incident.category === "fair-play" ||
+        mentionsFairPlay(request.incident.description)
+      )
+        return {
+          status: "error",
+          code: "fair-play-not-sent",
+          message:
+            "フェアプレー関連の記述はAIへ送信しません。CAへ報告してください",
+        };
       // オフラインでは規則検索もサーバー呼び出しも行わない
       if (!(deps.isOnline ?? browserIsOnline)()) return { status: "offline" };
 

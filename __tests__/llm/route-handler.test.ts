@@ -431,6 +431,7 @@ describe("readLlmConfig", () => {
       reasoningModel: "gemini-flash-latest",
       classifierModel: "gemini-flash-lite-latest",
       accessToken: undefined,
+      requireAccessToken: false,
       trustProxy: false,
       rateLimitPerMinute: { reason: 10, classify: 10 },
       dailyRequestLimit: 500,
@@ -568,6 +569,76 @@ describe("access control and cost caps (S-H1)", () => {
     expect((await classify(request({ text: "スマホ" }))).status).toBe(200);
     expect((await classify(request({ text: "スマホ" }))).status).toBe(200);
     expect((await classify(request({ text: "スマホ" }))).status).toBe(429);
+  });
+
+  it("fails closed in production when no access token is configured", async () => {
+    const generate = vi.fn<GenerateJsonFn>(async () => ({ text: "{}" }));
+    const prod =
+      (extra: Record<string, string> = {}) =>
+      () =>
+        readLlmConfig({
+          GEMINI_API_KEY: SECRET,
+          NODE_ENV: "production",
+          ...extra,
+        });
+    const closed = await createLlmRouteHandler(
+      "reason",
+      makeDeps(generate, { config: prod() })
+    )(request(reasonBody()));
+    expect(closed.status).toBe(503);
+    expect((await errorOf(closed)).code).toBe("not-configured");
+    expect(generate).not.toHaveBeenCalled();
+
+    // プラットフォーム側で保護している場合の明示的な解除
+    const optedOut = await createLlmRouteHandler(
+      "reason",
+      makeDeps(okGenerate, { config: prod({ LLM_ALLOW_UNAUTHENTICATED: "1" }) })
+    )(request(reasonBody()));
+    expect(optedOut.status).toBe(200);
+
+    // トークンを設定すれば本番でも利用できる
+    const withTok = await createLlmRouteHandler(
+      "reason",
+      makeDeps(okGenerate, { config: prod({ LLM_ACCESS_TOKEN: "t0k" }) })
+    )(request(reasonBody(), { headers: { "x-arbiter-access-token": "t0k" } }));
+    expect(withTok.status).toBe(200);
+  });
+
+  it("unauthenticated requests do not consume the rate-limit bucket", async () => {
+    const deps = makeDeps(okGenerate, {
+      config: () =>
+        readLlmConfig({
+          GEMINI_API_KEY: SECRET,
+          LLM_ACCESS_TOKEN: "s3cret-token",
+        }),
+      rateLimiter: new TokenBucketRateLimiter({
+        capacity: 1,
+        refillIntervalMs: 60_000,
+      }),
+    });
+    const handler = createLlmRouteHandler("reason", deps);
+    for (let i = 0; i < 5; i++)
+      expect((await handler(request(reasonBody()))).status).toBe(401);
+    const ok = await handler(
+      request(reasonBody(), {
+        headers: { "x-arbiter-access-token": "s3cret-token" },
+      })
+    );
+    expect(ok.status).toBe(200);
+  });
+
+  it("rejects fair-play incidents on the server", async () => {
+    const generate = vi.fn<GenerateJsonFn>(async () => ({ text: "{}" }));
+    const handler = createLlmRouteHandler("reason", makeDeps(generate));
+    const body = reasonBody();
+    const res = await handler(
+      request({
+        ...body,
+        incident: { ...(body.incident as object), category: "fair-play" },
+      })
+    );
+    expect(res.status).toBe(400);
+    expect(generate).not.toHaveBeenCalled();
   });
 });
 

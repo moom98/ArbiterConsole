@@ -60,6 +60,7 @@ const RULES: KeywordRule[] = [
       /不正|カンニング|チート|cheat/i,
       /(身体|ボディ|バッグ|所持品)?検査.{0,3}(拒|断)|金属探知/,
       /外部.{0,4}(情報|助言|援助)|エンジン.{0,4}(使|利用)/,
+      /\b(engine|computer|electronic|outside|external)\s*(assist|help|aid|advice|use)|fair[\s-]*play|suspicio\w*\s+of\s+(cheat|engine)|body\s*search|metal\s*detector/i,
     ],
     weight: 2,
   },
@@ -137,6 +138,18 @@ export function detectPlayerColor(text: string): PlayerColor | undefined {
   if (white && !black) return "white";
   if (black && !white) return "black";
   return undefined;
+}
+
+/**
+ * フェアプレー（不正の疑い・申告）に触れている記述か（最高得点のカテゴリかどうかに関係なく）。
+ * true の記述は外部の LLM に送信しない（要件 §23, ADR-007）。
+ */
+export function mentionsFairPlay(text: string): boolean {
+  const input = text.normalize("NFKC");
+  return RULES.some(
+    (rule) =>
+      rule.category === "fair-play" && rule.patterns.some((p) => p.test(input))
+  );
 }
 
 /**

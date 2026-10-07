@@ -32,6 +32,7 @@ import {
 } from "@/lib/domain/services/position-analysis";
 import type { LlmAssistOutcome, LlmAssistPort } from "@/lib/domain/llm/ports";
 import { buildLlmDecision } from "@/lib/domain/llm/llm-decision";
+import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
 import {
   FAIR_PLAY_ACTIONS,
   FAIR_PLAY_CONCLUSION,
@@ -357,8 +358,12 @@ export class DecisionEngine {
     if (!incident.description.trim())
       return this.ask(incident, [QUESTIONS.situationNote], rulesVersion);
 
-    // フェアプレーは LLM に送らず、事実記録と CA への報告のみ（§23, ADR-007）
-    if (incident.category === "fair-play")
+    // フェアプレー（他カテゴリでも不正の疑いに触れる記述を含む）は LLM に送らず、
+    // 事実記録と CA への報告のみ（§23, ADR-007）
+    if (
+      incident.category === "fair-play" ||
+      mentionsFairPlay(incident.description)
+    )
       return this.terminal(
         incident,
         {

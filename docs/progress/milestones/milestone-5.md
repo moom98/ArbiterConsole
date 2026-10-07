@@ -72,13 +72,31 @@
 - **S-L4:** `maxDuration` is set on the routes.
 - `Decision.llm` records the model and error code.
 
+## Re-review fixes (after the M6 merge, 2026-10-07)
+
+The re-review returned MERGE and confirmed all earlier blockers fixed. Its should-fix items and nits were then addressed:
+
+- **M6 merge:** `incident-store` passes the game's `tournamentId` to the engine (M6 moved the tournament lookup into `rulesetFor`).
+- **SF-1:** fail closed. In production without `LLM_ACCESS_TOKEN`, the routes return 503 unless `LLM_ALLOW_UNAUTHENTICATED=1`.
+- **SF-2:** the access token is checked before the rate limit.
+- **SF-3:** `mentionsFairPlay()` (with new English patterns) stops fair-play text in the engine, the classification service and the assist port, whatever the top category is. The server rejects `category: "fair-play"` (NIT-2).
+- **SF-4:**
+  - The quote-context check catches ん+で prohibitions (〜んではならない / いけない, 〜ではない).
+  - The preceding-negation check scans back to the start of the sentence (at most 400 characters) instead of 30 characters.
+- **NIT-1:** `draw` counts as a severe penalty and forces CA escalation.
+- **NIT-4:** `GEMINI_THINKING_BUDGET` is documented in `.env.example` and the README.
+- **NIT-5:** `LlmAccessTokenField` is mounted in Settings (AI設定).
+- **Not changed (NIT-3):** a quote that ends exactly at the 4,000-character cut. This is rare, and the full-sentence display mitigates it.
+
 ## Env vars
 
 - `GEMINI_API_KEY` (required, server only)
 - `GEMINI_MODEL_REASONING` (default `gemini-flash-latest`)
 - `GEMINI_MODEL_CLASSIFIER` (default `gemini-flash-lite-latest`)
 - `GEMINI_THINKING_LEVEL` (default `low`; `off` for models without thinking)
-- `LLM_ACCESS_TOKEN` (optional; strongly recommended when the app is publicly reachable without platform auth)
+- `LLM_ACCESS_TOKEN` (required in production unless `LLM_ALLOW_UNAUTHENTICATED=1` behind platform auth)
+- `LLM_ALLOW_UNAUTHENTICATED` (`1` only when the platform protects the routes)
+- `GEMINI_THINKING_BUDGET` (optional explicit thinking token budget)
 - `LLM_RATE_LIMIT_REASON_PER_MINUTE` / `LLM_RATE_LIMIT_CLASSIFY_PER_MINUTE` (default 10)
 - `LLM_DAILY_REQUEST_LIMIT` (default 500, `0` = unlimited)
 - `TRUST_PROXY` (`1` only behind a proxy that overwrites `X-Forwarded-For`)
@@ -105,7 +123,7 @@ Both default models are aliases listed in the SDK's model type and README.
   - store + IndexedDB integration with a fake port (including an article deleted mid-request, and offline → retry);
   - component tests;
   - the review fixes: quote-inversion cases, severe-penalty escalation, speculation in every field, fair-play skip, pending status and penalty exclusion, CSV, access token, daily cap, trusted proxy, per-route buckets, streaming body limit, deadline-bounded retry, unknown errors not retried, thinking level.
-- Full suite: 33 files, 545 passed.
+- Full suite after the M6 merge and re-review fixes: 45 files, 657 passed.
 - `tsc --noEmit` and eslint report no new findings. One existing prettier warning remains in `lib/domain/entities/game.ts`. In the nested worktree, eslint must run with `--no-eslintrc -c .eslintrc.json`.
 - `ALLOW_MISSING_MODEL=1 npm run build` succeeds. No SDK code appears in `.next/static`.
 - Not tested against the real Gemini API (no key available).
@@ -114,7 +132,6 @@ Both default models are aliases listed in the SDK's model type and README.
 
 - The rate limit and daily cap are per instance and in memory, so they are not a quota on serverless. Configure Google Cloud quotas and a billing budget. Without `TRUST_PROXY=1`, all callers share one bucket.
 - The access token sits in localStorage (shared devices). Platform authentication is preferred.
-- `LlmAccessTokenField` is shown only on the report result after a 401. It is not yet mounted in Settings, which is owned by M6. Mounting it there is a one-line addition.
 - There is no "confirm AI suggestion" flow yet. AI-assisted incidents stay `pending` until edited.
 - Thinking-level support differs by model. If a configured model rejects `thinkingConfig`, set `GEMINI_THINKING_LEVEL=off`.
 - Gemini may return `RECITATION` (treated as `blocked`) when quoting rule text verbatim. This needs a live check.

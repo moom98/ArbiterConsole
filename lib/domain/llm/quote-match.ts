@@ -16,6 +16,8 @@ const MIN_FRAGMENT_CHARS_JA = 8;
 const MAX_ELLIPSIS_GAP = 200;
 /** 引用の前後を確認する文字数（空白を1つに詰めた文字列で数える） */
 const CONTEXT_CHARS = 30;
+/** 直前の否定語を探す最大範囲（文頭まで。極端に長い文の上限） */
+const SENTENCE_LOOKBACK_CHARS = 400;
 
 const CJK = /[぀-ヿ㐀-鿿]/;
 
@@ -100,10 +102,23 @@ const NEGATION_BEFORE_JA = /[無不非未]$/;
 const NEGATION_AFTER_EN =
   /^[\s,;:]*(not|never|unless|except|only if|only when|provided that|provided,|if and only if|but not|save that|subject to)\b/;
 const NEGATION_AFTER_JA =
-  /^(?:し|せ|さ)?(?:てはならな|てはいけな|ない|ず|ません|禁止|禁じ)|^(?:こと|事)?(?:はできな|ができな)|^(?:わけ|訳)ではな|^とは限らな|^場合(?:を|は)除|^ただし|^但し|^に限り|^に限る|^のみ/;
+  /^(?:し|せ|さ)?(?:てはならな|てはいけな|ない|ず|ません|禁止|禁じ)|^(?:ん)?[でて]?は(?:ならな|いけな)|^ではな|^(?:こと|事)?(?:はできな|ができな)|^(?:わけ|訳)ではな|^とは限らな|^場合(?:を|は)除|^ただし|^但し|^に限り|^に限る|^のみ/;
 
 function minChars(fragment: string, ja: number, other: number): number {
   return CJK.test(fragment) ? ja : other;
+}
+
+/** 引用の直前の、同じ文の範囲（最大 SENTENCE_LOOKBACK_CHARS 文字） */
+function sentenceBefore(text: string, start: number): string {
+  const from = Math.max(0, start - SENTENCE_LOOKBACK_CHARS);
+  for (let i = start - 1; i >= from; i--) {
+    const c = text[i];
+    // 和文の句点等は常に文末。英文の . ; : ! ? は後ろが空白の場合のみ（"6.5" 等の番号は除く）
+    if ("。！？".includes(c)) return text.slice(i + 1, start);
+    if (".;:!?".includes(c) && /\s/.test(text[i + 1] ?? " "))
+      return text.slice(i + 1, start);
+  }
+  return text.slice(from, start);
 }
 
 function contextNegates(
@@ -113,7 +128,8 @@ function contextNegates(
 ): boolean {
   const s = idx.toSpaced[compactStart];
   const e = idx.toSpaced[compactEnd - 1] + 1;
-  const before = idx.spaced.slice(Math.max(0, s - CONTEXT_CHARS), s);
+  // 直前の否定は文頭まで遡って確認する（"No player, having been warned …, shall …" のような長い主語）
+  const before = sentenceBefore(idx.spaced, s);
   const after = idx.spaced.slice(e, e + CONTEXT_CHARS);
   const afterCompact = after.replace(/\s+/g, "");
   return (

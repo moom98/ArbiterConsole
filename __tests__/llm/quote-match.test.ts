@@ -70,6 +70,46 @@ describe("quoteMatchesArticle – residual inversion cases", () => {
       )
     ).toBe(true);
   });
+
+  it.each([
+    [
+      "競技者は電子機器を対局場に持ち込ん",
+      "競技者は電子機器を対局場に持ち込んではならない。",
+    ],
+    [
+      "競技者は電子機器を対局場に持ち込んで",
+      "競技者は電子機器を対局場に持ち込んではならない。",
+    ],
+    [
+      "対局中に他の対局の棋譜を読ん",
+      "対局者は対局中に他の対局の棋譜を読んではいけない。",
+    ],
+    [
+      "対局者は飲食物を対局場に持ち込ん",
+      "対局者は飲食物を対局場に持ち込んではならない。",
+    ],
+  ])("rejects a quote cut before a ん+で prohibition: %s", (quote, content) => {
+    expect(quoteMatchesArticle(quote, content)).toBe(false);
+  });
+
+  it("looks back to the sentence start for an English negation (>30 chars)", () => {
+    const content =
+      "No player, having been warned once for this offence during the same game, shall be allowed to continue the game.";
+    expect(
+      quoteMatchesArticle("shall be allowed to continue the game", content)
+    ).toBe(false);
+  });
+
+  it("does not carry a negation over from the previous sentence", () => {
+    const content =
+      "The arbiter shall not intervene. The player may claim a draw under Article 9.2 at any time.";
+    expect(
+      quoteMatchesArticle(
+        "The player may claim a draw under Article 9.2",
+        content
+      )
+    ).toBe(true);
+  });
 });
 
 describe("extractQuoteContext – full sentence for display", () => {

@@ -74,7 +74,11 @@ Constraints that still apply:
     and it is kept in the device's `localStorage`. Trade-off: anyone with the device or the token can use
     the AI routes. The cost is still bounded by the caps below, and changing `LLM_ACCESS_TOKEN` revokes
     the token.
-  - Without (a) or (b), anyone who can reach the deployment can spend the Gemini quota.
+  - **Fail closed in production (re-review SF-1).** With `NODE_ENV=production` and no `LLM_ACCESS_TOKEN`,
+    both routes return 503 `not-configured`. Only `LLM_ALLOW_UNAUTHENTICATED=1` (meaning "option (a) is
+    in place") lifts this. Development builds stay open for local use.
+  - The token is checked **before** the rate limit, so requests without it cannot use up the
+    shared bucket and lock arbiters out (re-review SF-2).
 - **Rate limits.** Each route has its own in-memory token bucket:
   `LLM_RATE_LIMIT_REASON_PER_MINUTE` and `LLM_RATE_LIMIT_CLASSIFY_PER_MINUTE` (default 10 each). Over the
   limit the route returns 429 with `Retry-After`.
@@ -198,8 +202,14 @@ action.
 - LLM features need a deployed Node server. A purely static export would have no `/api`.
 - The in-memory rate limit and daily cap are per instance (see §2). Without `TRUST_PROXY=1` all
   callers share one bucket. Configure Google Cloud quotas and budgets for a hard limit.
-- Without platform authentication or `LLM_ACCESS_TOKEN`, the routes can be used by anyone who can
-  reach the deployment.
+- A production deployment must set `LLM_ACCESS_TOKEN` or explicitly set `LLM_ALLOW_UNAUTHENTICATED=1`
+  behind platform authentication; otherwise the AI features are off (503).
+- **Fair-play text is never sent (re-review SF-3).** `mentionsFairPlay()` (domain keyword patterns,
+  Japanese and English) is checked in three places:
+  - the engine routes any incident whose description mentions fair-play to the fixed CA checklist;
+  - the classification service keeps such text on the device;
+  - the assist port refuses it as a second guard.
+  The server also rejects `category: "fair-play"` (400).
 - Quote matching is strict. Paraphrased quotes are rejected and lead to CA escalation. This is
   intentional (fail safe, §34) but may lower the share of accepted AI answers.
 - Model aliases (`*-latest`) can change behaviour over time. Pin a version through the env vars for a

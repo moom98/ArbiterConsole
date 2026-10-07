@@ -132,6 +132,9 @@ export function validateReasoningRequest(
     "incident.category",
     INCIDENT_CATEGORIES
   );
+  // フェアプレーは外部に送らない（§23, ADR-007）。クライアント側の防御が破られた場合の多重防御
+  if (category === "fair-play")
+    c.errors.push("フェアプレー事象はAIへ送信できません");
   const subtype = c.str(
     inc,
     "subtype",

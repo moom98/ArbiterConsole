@@ -63,10 +63,6 @@ export default function ReportPage() {
   const [selectedCategory, setSelectedCategory] =
     useState<IncidentCategory | null>(null);
   const [description, setDescription] = useState("");
-  // 自由記述の分類（提案）で確定した subtype（カテゴリが一致する場合のみ送信）
-  const [suggestion, setSuggestion] = useState<IncidentClassification | null>(
-    null
-  );
   const [draft, setDraft] = useState<ContextDraft>({});
 
   const {
@@ -116,17 +112,16 @@ export default function ReportPage() {
 
   const handleCategorySelect = (category: IncidentCategory) => {
     setSelectedCategory(category);
-    setSuggestion(null);
     setStep("description");
   };
 
-  // 分類の提案を採用: カテゴリと説明をプレフィルする（判断は決定木・判断支援が行う）
+  // 分類の提案を採用: カテゴリと説明のみをプレフィルする。
+  // subtype は送らず、決定木の質問で確認する（提案が判断に入り込まないように）
   const handleApplySuggestion = (
     classification: IncidentClassification,
     text: string
   ) => {
     setSelectedCategory(classification.category);
-    setSuggestion(classification);
     setDescription(text);
     setStep("description");
   };
@@ -142,10 +137,6 @@ export default function ReportPage() {
     const res = await submitIncident({
       context: draft as ReportContext,
       category: selectedCategory,
-      subtype:
-        suggestion?.category === selectedCategory
-          ? suggestion.subtype
-          : undefined,
       description,
       arbiterObserved: true,
     });
@@ -163,7 +154,6 @@ export default function ReportPage() {
     setStep("context");
     setSelectedCategory(null);
     setDescription("");
-    setSuggestion(null);
     reset();
   };
 

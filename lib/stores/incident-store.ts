@@ -84,15 +84,19 @@ function errorMessage(error: unknown): string {
  */
 export function createIncidentStore(deps: IncidentStoreDeps) {
   const { db, providers } = deps;
+  // 同時に複数の AI 参考情報の取得が走っても正しく表示できるよう件数で管理する
   let setLlmPending: (pending: boolean) => void = () => {};
+  let inFlight = 0;
   const llm: LlmAssistPort | undefined = deps.llm
     ? {
         assist: async (request) => {
+          inFlight++;
           setLlmPending(true);
           try {
             return await deps.llm!.assist(request);
           } finally {
-            setLlmPending(false);
+            inFlight--;
+            setLlmPending(inFlight > 0);
           }
         },
       }

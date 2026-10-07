@@ -4,7 +4,10 @@ import Dexie from "dexie";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ArbiterDatabase } from "@/lib/infrastructure/db/schema";
 import { createTournamentRepositories } from "@/lib/infrastructure/db/tournament-repository";
-import type { TournamentRepositories } from "@/lib/domain/repositories";
+import {
+  TournamentHasIncidentsError,
+  type TournamentRepositories,
+} from "@/lib/domain/repositories";
 import type {
   Game,
   Incident,
@@ -107,17 +110,63 @@ describe("Tournament repositories (Dexie)", () => {
     expect(await repos.tournaments.findById("old")).toBeNull();
   });
 
-  it("deleting a tournament removes its rounds, players and the active selection but keeps games", async () => {
+  it("deleting a tournament removes rounds, games, players, its rule sources/rules/embeddings and the active selection atomically", async () => {
     await repos.tournaments.save(tournament());
     await repos.rounds.save(round());
     await repos.players.save(player());
     await repos.games.save(game());
     await repos.active.setActiveTournamentId("T1");
+    await db.ruleSources.add({
+      id: "src-t1",
+      name: "要項",
+      fileName: "r.pdf",
+      sourceType: "tournament",
+      version: "1",
+      status: "active",
+      language: "ja",
+      tournamentId: "T1",
+      totalPages: 1,
+      importedAt: FIXED_NOW,
+    });
+    const rule = (id: string, tournamentId: string) => ({
+      id,
+      source: "tournament" as const,
+      sourceId: tournamentId === "T1" ? "src-t1" : "src-t2",
+      tournamentId,
+      article: "1",
+      title: "",
+      content: "",
+      priority: 1000,
+      createdAt: FIXED_NOW,
+      updatedAt: FIXED_NOW,
+    });
+    await db.rules.bulkAdd([rule("r1", "T1"), rule("r2", "T2")]);
+    await db.embeddings.bulkAdd([
+      { id: "e1", ruleId: "r1", vector: [1], model: "m", createdAt: FIXED_NOW },
+      { id: "e2", ruleId: "r2", vector: [1], model: "m", createdAt: FIXED_NOW },
+    ]);
 
     await repos.tournaments.delete("T1");
+    expect(await repos.tournaments.findById("T1")).toBeNull();
     expect(await repos.rounds.findByTournament("T1")).toEqual([]);
     expect(await repos.players.findByTournament("T1")).toEqual([]);
     expect(await repos.active.getActiveTournamentId()).toBeNull();
+    expect(await repos.games.findById("T1:r1:b1")).toBeNull();
+    expect(await db.ruleSources.get("src-t1")).toBeUndefined();
+    expect((await db.rules.toArray()).map((r) => r.id)).toEqual(["r2"]);
+    expect((await db.embeddings.toArray()).map((e) => e.id)).toEqual(["e2"]);
+  });
+
+  it("refuses deletion (and deletes nothing) when incidents exist", async () => {
+    await repos.tournaments.save(tournament());
+    await repos.rounds.save(round());
+    await repos.games.save(game());
+    await db.incidents.add(incident("T1:r1:b1"));
+    await expect(repos.tournaments.delete("T1")).rejects.toBeInstanceOf(
+      TournamentHasIncidentsError
+    );
+    expect(await repos.tournaments.findById("T1")).not.toBeNull();
+    expect(await repos.rounds.findByTournament("T1")).toHaveLength(1);
     expect(await repos.games.findById("T1:r1:b1")).not.toBeNull();
   });
 

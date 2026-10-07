@@ -97,6 +97,8 @@ describe("Report page — game context from the active tournament", () => {
   it("creates a missing board from the 'other board' input", async () => {
     const t = await seedTournament();
     render(<ReportPage />);
+    // 今のラウンド（R2）が選択されるまで待つ
+    await screen.findByRole("button", { name: /ボード4/ });
     fireEvent.click(
       await screen.findByRole("button", {
         name: "その他のボード（番号を入力）",
@@ -162,6 +164,7 @@ describe("Report page — game context from the active tournament", () => {
   it("other board: an empty round is a validation error, not a fallback", async () => {
     await seedTournament();
     render(<ReportPage />);
+    await screen.findByRole("button", { name: /ボード4/ });
     fireEvent.click(
       await screen.findByRole("button", {
         name: "その他のボード（番号を入力）",

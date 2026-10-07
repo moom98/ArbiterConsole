@@ -13,6 +13,7 @@ import type {
   TournamentRepositories,
   TournamentRepository,
 } from "@/lib/domain/repositories";
+import { TournamentHasIncidentsError } from "@/lib/domain/repositories";
 import type { ArbiterDatabase } from "./schema";
 
 /**
@@ -46,8 +47,41 @@ export class DexieTournamentRepository implements TournamentRepository {
     const db = this.db;
     await db.transaction(
       "rw",
-      [db.tournaments, db.rounds, db.players, db.appState],
+      [
+        db.tournaments,
+        db.rounds,
+        db.players,
+        db.games,
+        db.incidents,
+        db.ruleSources,
+        db.rules,
+        db.embeddings,
+        db.appState,
+      ],
       async () => {
+        const gameIds = (await db.games
+          .where("tournamentId")
+          .equals(id)
+          .primaryKeys()) as string[];
+        const incidentCount =
+          gameIds.length === 0
+            ? 0
+            : await db.incidents.where("gameId").anyOf(gameIds).count();
+        if (incidentCount > 0)
+          throw new TournamentHasIncidentsError(incidentCount);
+
+        // 大会固有規定（資料・条文・Embedding）
+        const ruleIds = (await db.rules
+          .where("tournamentId")
+          .equals(id)
+          .primaryKeys()) as string[];
+        if (ruleIds.length > 0) {
+          await db.embeddings.where("ruleId").anyOf(ruleIds).delete();
+          await db.rules.bulkDelete(ruleIds);
+        }
+        await db.ruleSources.where("tournamentId").equals(id).delete();
+
+        await db.games.bulkDelete(gameIds);
         await db.rounds.where("tournamentId").equals(id).delete();
         await db.players.where("tournamentId").equals(id).delete();
         await db.tournaments.delete(id);

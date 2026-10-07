@@ -160,16 +160,8 @@ export async function deleteRuleSource(
 }
 
 /**
- * 大会固有規定の資料をすべて削除する（大会の削除時）
+ * ルール検索の全文インデックスを破棄する（大会削除などで条文が削除された後）
  */
-export async function deleteTournamentRuleSources(
-  tournamentId: string,
-  database: ArbiterDatabase = db
-): Promise<number> {
-  const sources = await database.ruleSources
-    .where("tournamentId")
-    .equals(tournamentId)
-    .toArray();
-  for (const s of sources) await deleteRuleSource(s.id, database);
-  return sources.length;
+export function invalidateRuleSearchIndex(): void {
+  clearFulltextIndex();
 }

@@ -407,9 +407,9 @@ export default function TournamentDetailPage() {
                   void (async () => {
                     try {
                       await service.deleteTournament(tournament.id);
-                      const { deleteTournamentRuleSources } =
+                      const { invalidateRuleSearchIndex } =
                         await import("@/lib/application/rule-library");
-                      await deleteTournamentRuleSources(tournament.id);
+                      invalidateRuleSearchIndex();
                       await load();
                       router.push("/tournament");
                     } catch (e) {

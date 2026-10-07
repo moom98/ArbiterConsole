@@ -15,7 +15,11 @@ export interface TournamentRepository {
   /** 大会管理で作成した大会（暫定大会 adhoc:* は含めない）。開始日の新しい順 */
   findAll(): Promise<Tournament[]>;
   save(tournament: Tournament): Promise<void>;
-  /** 大会と、そのラウンド・登録プレーヤーを削除する（対局・Incident は履歴として残す） */
+  /**
+   * 大会と、そのラウンド・対局・登録プレーヤー・大会固有規定（資料・条文・Embedding）を
+   * 1トランザクションで削除する。Incident が記録されている場合は何も削除せず
+   * TournamentHasIncidentsError を投げる（判定も同じトランザクション内で行う）。
+   */
   delete(id: string): Promise<void>;
 }
 
@@ -61,4 +65,14 @@ export interface TournamentRepositories {
   active: ActiveTournamentStore;
   /** 大会の対局に記録された Incident 数（削除可否の判定用） */
   countIncidents(tournamentId: string): Promise<number>;
+}
+
+/** Incident が記録されている大会は削除できない（履歴保全） */
+export class TournamentHasIncidentsError extends Error {
+  constructor(readonly incidentCount: number) {
+    super(
+      `この大会には${incidentCount}件のIncidentが記録されているため削除できません`
+    );
+    this.name = "TournamentHasIncidentsError";
+  }
 }

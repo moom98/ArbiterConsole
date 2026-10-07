@@ -65,15 +65,11 @@ export class TournamentService {
   }
 
   /**
-   * 大会を削除する。Incident が記録されている大会は履歴保全のため削除できない。
-   * 大会固有規定の資料は呼び出し側で削除する（rule-library.deleteRuleSource）。
+   * 大会を削除する（ラウンド・対局・プレーヤー・大会固有規定を含めて1トランザクション）。
+   * Incident が記録されている大会は削除できない（TournamentHasIncidentsError）。
+   * 削除後、呼び出し側でルール検索のインデックスを破棄すること（rule-library）。
    */
   async deleteTournament(id: string): Promise<void> {
-    const count = await this.repos.countIncidents(id);
-    if (count > 0)
-      throw new Error(
-        `この大会には${count}件のIncidentが記録されているため削除できません`
-      );
     await this.repos.tournaments.delete(id);
   }
 

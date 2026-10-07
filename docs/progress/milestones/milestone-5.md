@@ -53,7 +53,7 @@ Both default models are aliases listed in the SDK's model type and README.
 
 ## Tests / verification
 
-- `__tests__/llm/` has 10 files and 111 tests:
+- `__tests__/llm/` has 9 test files and 110 tests:
   - validator (each rule);
   - Decision builder;
   - keyword and LLM classification;

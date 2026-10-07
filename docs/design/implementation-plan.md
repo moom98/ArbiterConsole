@@ -280,6 +280,9 @@ Write tests **alongside** implementation, not after.
 
 ### Milestone 5: LLM Integration (Week 8-9)
 
+> **Note (ADR-007):** The LLM provider is now **Google Gemini**, called only through the server Route Handlers `app/api/llm/*`. The API key is never sent to the browser. Claude/Anthropic references below are historical. See [ADR-007](../decisions/ADR-007-gemini-llm-via-server-route.md).
+
+
 **Goal**: LLM-based incident classification and reasoning
 
 **Why Fifth**:
@@ -347,28 +350,32 @@ Write tests **alongside** implementation, not after.
 **Tasks**:
 
 #### 6.1 Tournament Profile (3 days)
-- [ ] Tournament creation form
-- [ ] Tournament Profile model
-- [ ] TournamentRepository
-- [ ] Save to IndexedDB
+- [x] Tournament creation form
+- [x] Tournament Profile model
+- [x] TournamentRepository
+- [x] Save to IndexedDB
 
 #### 6.2 Round & Game Management (3 days)
-- [ ] Round model (status: pending/active/completed)
-- [ ] Game model (board, players)
-- [ ] PlayerRepository
-- [ ] Create rounds and games for tournament
+- [x] Round model (status: pending/active/completed)
+- [x] Game model (board, players)
+- [x] PlayerRepository
+- [x] Create rounds and games for tournament
 
 #### 6.3 Tournament Regulations Upload (3 days)
-- [ ] Upload tournament-specific PDF
-- [ ] Parse into TournamentRegulation entities
-- [ ] Link to tournament
-- [ ] Include in rule search (highest priority)
+- [x] Upload tournament-specific PDF
+- [x] Parse into TournamentRegulation entities
+- [x] Link to tournament
+- [x] Include in rule search (highest priority)
 
 #### 6.4 Home Screen (3 days)
-- [ ] Display active tournament
-- [ ] Quick actions (Report, Search)
-- [ ] Recent incidents list
-- [ ] Tournament selection dropdown
+- [x] Display active tournament
+- [x] Quick actions (Report, Search)
+- [x] Recent incidents list
+- [x] Tournament selection dropdown
+
+**Status**: Implemented (see ADR-006). "Parse into TournamentRegulation entities" is done through the
+existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentId`), not the embedded
+`Tournament.regulations` array.
 
 **Deliverable**: Tournament management system
 
@@ -396,20 +403,20 @@ Write tests **alongside** implementation, not after.
 **Tasks**:
 
 #### 7.1 Checklist Model (1 day)
-- [ ] ChecklistItem model
-- [ ] Pre-round and post-round templates
-- [ ] Store completion status
+- [x] ChecklistItem model
+- [x] Pre-round and post-round templates
+- [x] Store completion status
 
 #### 7.2 Checklist UI (3 days)
-- [ ] Round Checklist screen
-- [ ] Phase-aware display (pre/post/during)
-- [ ] Large checkboxes (48px target)
-- [ ] Notes field per item
+- [x] Round Checklist screen
+- [x] Phase-aware display (pre/post/during)
+- [x] Large checkboxes (48px target)
+- [x] Notes field per item
 
 #### 7.3 Round Status (2 days)
-- [ ] Round status transitions (pending → active → completed)
-- [ ] Trigger checklist phase changes
-- [ ] Button to start/end round
+- [x] Round status transitions (pending → active → completed)
+- [x] Trigger checklist phase changes
+- [x] Button to start/end round
 
 **Deliverable**: Working round checklist
 
@@ -421,6 +428,12 @@ Write tests **alongside** implementation, not after.
 
 **Test Coverage**:
 - E2E test: Complete pre-round checklist → start round
+  (Milestone 7 covers this flow with component tests in `__tests__/checklist/`; Playwright E2E is Milestone 9.)
+
+> **Implementation (Milestone 7, ADR-008):** four §26 phases (開始前 / 開始直後 / 対局中 / 終了時) shown
+> as three stages following the round status; per-tournament add/remove/reorder; start/end round
+> with in-page warnings (incomplete pre-round items / pending incidents) and explicit confirmation.
+> Dexie `version(7)`.
 
 ---
 
@@ -529,8 +542,10 @@ Write tests **alongside** implementation, not after.
 **Tasks**:
 
 #### 10.1 Deployment (2 days)
-- [ ] Set up Vercel/Netlify project
-- [ ] Configure environment variables (Claude API key)
+- [ ] Set up a hosting project with a Node runtime (Vercel recommended; the `/api/llm/*` routes need a server — ADR-007)
+- [ ] Build command: `npm run fetch-models && npm run build` (prebuild fails without the embedding model)
+- [ ] Configure environment variables: `GEMINI_API_KEY`, and `LLM_ACCESS_TOKEN` (or `LLM_ALLOW_UNAUTHENTICATED=1` behind platform auth); see `.env.example`
+- [ ] Set Google Cloud quotas and a billing budget for the Gemini key
 - [ ] Deploy to production
 - [ ] Test production deployment
 

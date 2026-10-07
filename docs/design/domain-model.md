@@ -170,6 +170,18 @@ function deriveCompetitionType(tc: TimeControl): CompetitionType {
 }
 ```
 
+> **Implementation (Milestone 6, ADR-006):** `lib/domain/entities/tournament.ts`. Required ruleset
+> fields are `competitionType`, `rulesVersion` (`"FIDE-2023"`) and, for Rapid/Blitz,
+> `supervisionRegime` (`"competition-rules"` = A.4/B.2, `"basic-rules"` = A.5/B.3; replaces
+> `rapidRulesType`). `timeControl` is `{ initialMinutes, incrementSeconds, delaySeconds?, ... }`.
+> Optional: `endDate`, `venue`, `chiefArbiter`, `totalRounds`. The competition type is entered
+> explicitly and is **not** derived from the time control (`deriveCompetitionType` is not used).
+> `overrides?: TournamentOverrides` holds explicit, sourced values consumed by the trees; currently
+> only `blitzCompetitionTimePenaltySeconds: { value, source: { document, article?, quote? } }`
+> (Blitz B.2 amount for 7.5.5 / 9.5.3). Not yet implemented: `format`, `teamSize`,
+> `fixedBoardOrder`, `boardCount`, `defaultTime`, `clockModel`, `status`. Ad-hoc tournaments
+> (`adhoc:*`, ADR-004) are hidden from the tournament list.
+
 ### 3.2 TournamentRegulation
 
 Custom rules specific to a tournament (§6: highest priority).
@@ -247,6 +259,21 @@ interface ChecklistItem {
 }
 ```
 
+> **Implementation (Milestone 6):** `lib/domain/entities/round.ts`. `RoundStatus` is
+> `pending | active | completed` (no `pre-setup`/`ready`); transitions only pending → active →
+> completed (`transitionRound`). Checklists are not embedded; Milestone 7 attaches them to
+> `Round.id`. IDs are deterministic: `{tournamentId}:r{n}`. Games are queried by
+> `[tournamentId+round]`, not embedded in the Round.
+
+> **Implementation (Milestone 7, ADR-008):** `lib/domain/entities/checklist.ts`. Items have a
+> §26 phase `pre | start | during | post`; the screen shows the stage for the round status
+> (`pending` → pre, `active` → start + during, `completed` → post). Completion is stored per round
+> in `RoundChecklist` (`id = roundId`, items `{itemId, done, doneAt?, note?}`), not embedded in
+> `Round`. Default items are code (`DEFAULT_CHECKLIST_ITEMS`, stable ids, verbatim citations only);
+> per-tournament customisation is `TournamentChecklistTemplate` (ordered builtin-id / custom
+> entries). Start/end of a round goes through `RoundChecklistService.changeRoundStatus` with
+> warnings (incomplete pre-round items / pending incidents) that require explicit confirmation.
+
 ### 3.4 Game
 
 Represents a single game between two players.
@@ -299,6 +326,12 @@ type GameResult =
   | 'black-default'; // Black defaulted
 ```
 
+> **Implementation (Milestone 6):** `Game` keeps `tournamentId` + `round` (number) + optional
+> `roundId`, `boardNumber`, and player snapshots `white` / `black` (`{ id?, name, rating?, fideId? }`)
+> instead of `whitePlayerId` / `blackPlayerId`. Tournament game IDs are
+> `{tournamentId}:r{n}:b{board}` (no date). Incidents reference games by `gameId`; they are not
+> embedded. `status` / clock fields are not yet implemented.
+
 ### 3.5 Player
 
 Represents a chess player participating in the tournament.
@@ -334,6 +367,10 @@ interface FairPlayNote {
   escalated: boolean;
 }
 ```
+
+> **Implementation (Milestone 6):** registered players are `PlayerProfile`
+> (`{ id, tournamentId, name, rating?, fideId?, title? }`, `lib/domain/entities/game.ts`), stored in
+> the `players` table. Penalty history is computed from incidents (§25), not stored on the player.
 
 ### 3.6 Incident
 
@@ -878,6 +915,12 @@ interface TournamentRepository {
   delete(id: string): Promise<void>;
 }
 ```
+
+> **Implementation (Milestone 6):** `lib/domain/repositories.ts` defines `TournamentRepository`
+> (`findAll` excludes ad-hoc tournaments), `RoundRepository`, `GameRepository` (`addMissing` never
+> overwrites), `PlayerRepository`, `ActiveTournamentStore` (active id in `appState`). Dexie
+> implementations: `lib/infrastructure/db/tournament-repository.ts`; use cases:
+> `lib/application/tournament-management.ts`.
 
 ### 8.2 IncidentRepository
 

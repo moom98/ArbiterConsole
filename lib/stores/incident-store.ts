@@ -1,148 +1,351 @@
 import { create } from "zustand";
-import type { Incident, Decision } from "@/lib/domain/entities";
-import { db } from "@/lib/infrastructure/db";
-import { DecisionEngine } from "@/lib/domain/decision-engine";
+import type {
+  Decision,
+  Game,
+  Incident,
+  IncidentCategory,
+  RulesetSnapshot,
+  Tournament,
+} from "@/lib/domain/entities";
+import {
+  DecisionEngine,
+  type DecisionEngineResult,
+} from "@/lib/domain/decision-engine";
+import {
+  applyIncidentAnswers,
+  isKnownSubtype,
+  type FollowUpQuestion,
+  type IncidentQuestionId,
+} from "@/lib/domain/follow-up";
+import { IncidentCounter } from "@/lib/domain/services/incident-counter";
+import {
+  deriveRulesetFromTournament,
+  validateReportContext,
+  type ReportContext,
+} from "@/lib/domain/services/game-context";
+import { defaultProviders, type DomainProviders } from "@/lib/domain/providers";
+import { incidentStatusAfterDecision } from "@/lib/domain/services/incident-status";
+import { db as defaultDb, type ArbiterDatabase } from "@/lib/infrastructure/db";
+import { chessJsPositionPort } from "@/lib/infrastructure/chess/chess-js-position-port";
+import type { LlmAssistPort } from "@/lib/domain/llm/ports";
+import { createLlmAssistPort } from "@/lib/infrastructure/llm/llm-assist-port";
+import {
+  ensureGameForContext,
+  loadGameRecords,
+  loadLastReportContext,
+  saveLastReportContext,
+} from "@/lib/infrastructure/db/incident-repository";
 
-interface IncidentStore {
-  // State
-  currentIncident: Incident | null;
-  currentDecision: Decision | null;
-  isProcessing: boolean;
-  error: string | null;
+export type SubmitResult =
+  { ok: true; result: DecisionEngineResult } | { ok: false; error: string };
 
-  // Actions
-  createIncident: (
-    gameId: string,
-    category: Incident["category"],
-    description: string,
-    arbiterObserved: boolean
-  ) => Promise<void>;
-
-  processIncident: (incidentId: string) => Promise<void>;
-
-  clearCurrentIncident: () => void;
-
-  setError: (error: string | null) => void;
+export interface SubmitIncidentParams {
+  /**
+   * 大会の対局（大会管理で作成した Game.id）。指定した場合は大会から規則セットを導出する（ADR-006）。
+   * 未指定の場合は context（暫定大会。ADR-004）を使う。
+   */
+  gameId?: string;
+  /** 暫定大会のコンテキスト（gameId 未指定時は必須） */
+  context?: ReportContext;
+  category: IncidentCategory;
+  /** 任意: カテゴリ選択時に確定した subtype（QUICK_REPORTS） */
+  subtype?: string;
+  description: string;
+  arbiterObserved: boolean;
 }
 
-export const useIncidentStore = create<IncidentStore>((set, get) => ({
-  // Initial state
-  currentIncident: null,
-  currentDecision: null,
-  isProcessing: false,
-  error: null,
+export interface IncidentStore {
+  currentIncident: Incident | null;
+  currentDecision: Decision | null;
+  followUpQuestions: FollowUpQuestion[];
+  isProcessing: boolean;
+  /** AI 参考情報（LLM）を取得中（決定木の対象外の事象のみ） */
+  llmPending: boolean;
+  error: string | null;
+  lastContext: ReportContext | null;
 
-  // Create new incident
-  createIncident: async (gameId, category, description, arbiterObserved) => {
-    try {
-      set({ isProcessing: true, error: null });
+  loadLastContext: () => Promise<void>;
+  /** 新しい Incident を登録し、判断支援を評価する */
+  submitIncident: (params: SubmitIncidentParams) => Promise<SubmitResult>;
+  /** 現在の Incident に追加質問の回答を反映し、同じ Incident を再評価する */
+  answerFollowUp: (
+    answers: Partial<Record<IncidentQuestionId, string>>
+  ) => Promise<SubmitResult>;
+  /** 現在の Incident を再評価する（例: オフラインだった AI 参考情報をオンラインで再取得） */
+  retryEvaluation: () => Promise<SubmitResult>;
+  reset: () => void;
+}
 
-      const incident: Incident = {
-        id: crypto.randomUUID(),
-        gameId,
-        category,
-        description,
-        arbiterObserved,
-        reportedBy: "arbiter",
-        reportedAt: new Date(),
-        status: "pending",
-        escalatedToCA: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+export interface IncidentStoreDeps {
+  db: ArbiterDatabase;
+  providers: DomainProviders;
+  /** 決定木の対象外の事象の AI 参考情報（未指定なら手動確認のみ）。ADR-007 */
+  llm?: LlmAssistPort;
+}
 
-      // Save to DB
-      await db.incidents.add(incident);
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
-      set({ currentIncident: incident });
-
-      // Automatically process the incident
-      await get().processIncident(incident.id);
-    } catch (error) {
-      console.error("Failed to create incident:", error);
-      set({ error: String(error) });
-    } finally {
-      set({ isProcessing: false });
-    }
-  },
-
-  // Process incident through decision engine
-  processIncident: async (incidentId) => {
-    try {
-      set({ isProcessing: true, error: null });
-
-      const incident = await db.incidents.get(incidentId);
-      if (!incident) {
-        throw new Error("Incident not found");
+/**
+ * Store は薄く保つ: コンテキスト収集 → Engine 呼び出し → 永続化。
+ * 違法手回数の算出は IncidentCounter（ドメイン）が行う。
+ */
+export function createIncidentStore(deps: IncidentStoreDeps) {
+  const { db, providers } = deps;
+  // 同時に複数の AI 参考情報の取得が走っても正しく表示できるよう件数で管理する
+  let setLlmPending: (pending: boolean) => void = () => {};
+  let inFlight = 0;
+  const llm: LlmAssistPort | undefined = deps.llm
+    ? {
+        assist: async (request) => {
+          inFlight++;
+          setLlmPending(true);
+          try {
+            return await deps.llm!.assist(request);
+          } finally {
+            inFlight--;
+            setLlmPending(inFlight > 0);
+          }
+        },
       }
+    : undefined;
+  const engine = new DecisionEngine(providers, {
+    positions: chessJsPositionPort,
+    llm,
+  });
 
-      // Get game context
-      const game = await db.games.get(incident.gameId);
-      const tournament = game
-        ? await db.tournaments.get(game.tournamentId)
-        : null;
+  /**
+   * 判断に用いる規則セット: 報告時のスナップショット（ADR-006）。
+   * スナップショットのない旧 Incident は大会から導出する（不足があれば undefined → context-required）。
+   */
+  async function rulesetFor(
+    incident: Incident,
+    game: Game | undefined
+  ): Promise<RulesetSnapshot | undefined> {
+    if (incident.rulesetSnapshot) return incident.rulesetSnapshot;
+    const tournament: Tournament | undefined = game
+      ? await db.tournaments.get(game.tournamentId)
+      : undefined;
+    if (!tournament) return undefined;
+    const derived = deriveRulesetFromTournament(tournament);
+    return derived.ok ? derived.ruleset : undefined;
+  }
 
-      // Count previous incidents for this game
-      const previousIncidents = await db.incidents
-        .where("gameId")
-        .equals(incident.gameId)
-        .and((i) => i.category === "illegal-move" && i.id !== incident.id)
-        .toArray();
+  async function evaluate(incident: Incident): Promise<DecisionEngineResult> {
+    const game = await db.games.get(incident.gameId);
+    const ruleset = await rulesetFor(incident, game);
+    const records = await loadGameRecords(db, incident.gameId);
+    const illegalMoveHistory = IncidentCounter.illegalMoveHistory(
+      records,
+      incident.gameId,
+      { excludeIncidentId: incident.id }
+    );
 
-      const playerIncidentHistory = {
-        white: previousIncidents.filter(
-          (i) => i.description.includes("白") || i.description.includes("white")
-        ).length,
-        black: previousIncidents.filter(
-          (i) => i.description.includes("黒") || i.description.includes("black")
-        ).length,
-      };
+    // 決定木を優先し、対象外の事象のみ AI 参考情報を取得する（DecisionEngine.evaluate）
+    const result = await engine.evaluate({
+      incident,
+      ruleset,
+      illegalMoveHistory,
+      tournamentId: game?.tournamentId,
+    });
 
-      // Process through decision engine
-      const engine = new DecisionEngine();
-      const result = await engine.processIncident({
-        incident,
-        gameContext: game
-          ? {
-              tournamentId: game.tournamentId,
-              gameId: game.id,
-              competitionType: tournament?.competitionType || "standard",
-              rapidRulesType: tournament?.rapidRulesType,
-            }
-          : undefined,
-        playerIncidentHistory,
+    const now = providers.now();
+    if (result.requiresFollowUp) {
+      // 追加質問待ち: Incident は保留のまま（エスカレーション扱いにしない）
+      await db.incidents.put({
+        ...incident,
+        status: "pending",
+        updatedAt: now,
       });
-
-      // Save decision
-      await db.decisions.add(result.decision);
-
-      // Update incident
-      await db.incidents.update(incident.id, {
-        status: result.decision.escalationRecommended
-          ? "escalated"
-          : "resolved",
-        decisionId: result.decision.id,
-        escalatedToCA: result.decision.escalationRecommended,
-        escalationReason: result.decision.escalationReason,
-        updatedAt: new Date(),
+    } else {
+      await db.transaction("rw", db.incidents, db.decisions, async () => {
+        await db.decisions.add(result.decision);
+        // 再評価（例: AI 参考情報の再取得）で置き換えた前回の判断を記録する
+        if (incident.decisionId && incident.decisionId !== result.decision.id)
+          await db.decisions.update(incident.decisionId, {
+            supersededBy: result.decision.id,
+          });
+        await db.incidents.put({
+          ...incident,
+          status: incidentStatusAfterDecision(result.decision),
+          decisionId: result.decision.id,
+          escalatedToCA: result.decision.escalationRecommended,
+          escalationReason: result.decision.escalationReason,
+          updatedAt: now,
+        });
       });
-
-      set({ currentDecision: result.decision });
-    } catch (error) {
-      console.error("Failed to process incident:", error);
-      set({ error: String(error) });
-    } finally {
-      set({ isProcessing: false });
     }
-  },
+    return result;
+  }
 
-  // Clear current incident
-  clearCurrentIncident: () => {
-    set({ currentIncident: null, currentDecision: null, error: null });
-  },
+  /** 報告対象の対局を解決する（大会の対局 or 暫定大会の対局） */
+  async function resolveGame(
+    params: SubmitIncidentParams,
+    now: Date
+  ): Promise<{
+    game: Game;
+    ruleset: RulesetSnapshot;
+    adHocContext?: ReportContext;
+  }> {
+    if (params.gameId !== undefined) {
+      const game = await db.games.get(params.gameId);
+      if (!game) throw new Error("対局が見つかりません");
+      const tournament = await db.tournaments.get(game.tournamentId);
+      if (!tournament) throw new Error("対局の大会が見つかりません");
+      const derived = deriveRulesetFromTournament(tournament);
+      if (!derived.ok) throw new Error(derived.errors.join(" / "));
+      return { game, ruleset: derived.ruleset };
+    }
+    if (!params.context) throw new Error("対局を指定してください");
+    const contextErrors = validateReportContext(params.context);
+    if (contextErrors.length > 0) throw new Error(contextErrors.join(" / "));
+    const { game, tournament } = await ensureGameForContext(
+      db,
+      params.context,
+      now
+    );
+    const derived = deriveRulesetFromTournament(tournament);
+    if (!derived.ok) throw new Error(derived.errors.join(" / "));
+    await saveLastReportContext(db, params.context, now);
+    return { game, ruleset: derived.ruleset, adHocContext: params.context };
+  }
 
-  // Set error
-  setError: (error) => {
-    set({ error });
-  },
-}));
+  return create<IncidentStore>((set, get) => {
+    setLlmPending = (pending) => set({ llmPending: pending });
+    async function run(
+      fn: () => Promise<{ incident: Incident; result: DecisionEngineResult }>,
+      options: { clearPrevious: boolean }
+    ): Promise<SubmitResult> {
+      set({ isProcessing: true, error: null });
+      // 新規報告では前回の判断を必ず消す（失敗時に古い判断が表示されないように）
+      if (options.clearPrevious) {
+        set({
+          currentIncident: null,
+          currentDecision: null,
+          followUpQuestions: [],
+        });
+      }
+      try {
+        const { incident, result } = await fn();
+        set({
+          currentIncident: incident,
+          currentDecision: result.decision,
+          followUpQuestions: result.followUpQuestions,
+        });
+        return { ok: true, result };
+      } catch (error) {
+        console.error("Failed to process incident:", error);
+        const message = errorMessage(error);
+        set({ error: message });
+        return { ok: false, error: message };
+      } finally {
+        set({ isProcessing: false });
+      }
+    }
+
+    return {
+      currentIncident: null,
+      currentDecision: null,
+      followUpQuestions: [],
+      isProcessing: false,
+      llmPending: false,
+      error: null,
+      lastContext: null,
+
+      loadLastContext: async () => {
+        try {
+          set({ lastContext: await loadLastReportContext(db) });
+        } catch (error) {
+          console.error("Failed to load last context:", error);
+        }
+      },
+
+      submitIncident: (params) =>
+        run(
+          async () => {
+            if (
+              params.subtype !== undefined &&
+              !isKnownSubtype(params.category, params.subtype)
+            )
+              throw new Error(`不正な subtype です: ${params.subtype}`);
+
+            const now = providers.now();
+            const { game, ruleset, adHocContext } = await resolveGame(
+              params,
+              now
+            );
+            if (adHocContext) set({ lastContext: adHocContext });
+
+            const incident: Incident = {
+              id: providers.generateId(),
+              gameId: game.id,
+              category: params.category,
+              subtype: params.subtype,
+              rulesetSnapshot: ruleset,
+              description: params.description,
+              arbiterObserved: params.arbiterObserved,
+              reportedBy: "arbiter",
+              reportedAt: now,
+              status: "pending",
+              escalatedToCA: false,
+              createdAt: now,
+              updatedAt: now,
+            };
+            await db.incidents.add(incident);
+            const result = await evaluate(incident);
+            return {
+              incident: (await db.incidents.get(incident.id)) ?? incident,
+              result,
+            };
+          },
+          { clearPrevious: true }
+        ),
+
+      answerFollowUp: (answers) =>
+        run(
+          async () => {
+            const current = get().currentIncident;
+            if (!current) throw new Error("回答対象のIncidentがありません");
+            const stored = (await db.incidents.get(current.id)) ?? current;
+            const updated = applyIncidentAnswers(stored, answers);
+            const result = await evaluate(updated);
+            return {
+              incident: (await db.incidents.get(updated.id)) ?? updated,
+              result,
+            };
+          },
+          { clearPrevious: false }
+        ),
+
+      retryEvaluation: () =>
+        run(
+          async () => {
+            const current = get().currentIncident;
+            if (!current) throw new Error("再評価するIncidentがありません");
+            const stored = (await db.incidents.get(current.id)) ?? current;
+            const result = await evaluate(stored);
+            return {
+              incident: (await db.incidents.get(stored.id)) ?? stored,
+              result,
+            };
+          },
+          { clearPrevious: false }
+        ),
+
+      reset: () =>
+        set({
+          currentIncident: null,
+          currentDecision: null,
+          followUpQuestions: [],
+          error: null,
+        }),
+    };
+  });
+}
+
+export const useIncidentStore = createIncidentStore({
+  db: defaultDb,
+  providers: defaultProviders,
+  llm: createLlmAssistPort(),
+});

@@ -15,27 +15,33 @@
 
 ## Project Status
 
-**現在の状態**: Milestone 3完了（基本機能実装済み）
+**現在の状態**: Milestone 7 完了。初回デプロイの準備中
 
 - ✅ Milestone 0: Project Foundation
 - ✅ Milestone 1: Rule Search MVP
 - ✅ Milestone 2: Illegal Move Decision Tree
 - ✅ Milestone 3: Incident Log
-- 🔄 Milestone 4-10: 開発予定
+- ✅ Milestone 4: 追加 Decision Trees（Rapid/Blitz 違法手、フラッグフォール、同一局面）
+- ✅ Milestone 5: AI参考情報（Gemini、サーバー経由。ADR-007）
+- ✅ Milestone 6: 大会管理（大会・ラウンド・対局・大会規定、ホーム画面）
+- ✅ Milestone 7: ラウンドチェックリスト（ADR-008）
+- 🔄 Milestone 8–10: 未着手（音声入力・多言語対応は当面見送り）
 
-詳細な実装状況は [IMPLEMENTATION_STATUS.md](./docs/IMPLEMENTATION_STATUS.md) を参照してください。
+詳細な実装状況は [docs/progress/current.md](./docs/progress/current.md) を参照してください。
 
 ## Features
 
 ### 実装済み機能
 
 #### 📚 Rule Search
+
 - FIDE Laws of Chess、JCF規則のPDFインポート
 - AI embeddings生成（Transformers.js、オフライン対応）
 - Hybrid search（Vector検索 + Full-text検索）
 - ルール優先度システム（大会規則 > JCF > FIDE）
 
 #### ⚖️ Decision Support
+
 - DT-001: Illegal Move (Standard) の完全実装
   - 1回目: 相手に2分追加
   - 2回目以降: Game Loss
@@ -45,12 +51,14 @@
 - 根拠規則の自動引用
 
 #### 📊 Incident Management
+
 - インシデント履歴の表示・管理
 - カテゴリフィルタリング（10カテゴリ）
 - ペナルティ統計ダッシュボード
 - CSV export機能
 
 #### 📱 Mobile-First Design
+
 - PWA対応（オフライン動作可能）
 - Bottom tab navigation
 - レスポンシブデザイン
@@ -58,15 +66,15 @@
 
 ### 開発予定機能
 
-- 🔄 追加Decision Trees (Rapid A4/A5, Flag Fall, Threefold Repetition)
-- 🔄 LLM統合（Claude API）
-- 🔄 Tournament管理
-- 🔄 音声入力
-- 🔄 多言語対応
+- ✅ 追加Decision Trees（Milestone 4 で実装済み）
+- ✅ Tournament管理（Milestone 6 で実装済み。拡張は当面見送り）
+- ⏸ 音声入力（当面見送り。2026-10-07 の判断）
+- ⏸ 多言語対応（当面見送り。2026-10-07 の判断）
 
 ## Tech Stack
 
 ### Frontend
+
 - **Framework**: Next.js 14.2.x (App Router)
 - **UI Library**: React 18.3.1
 - **Styling**: Tailwind CSS 3.4.1
@@ -74,16 +82,19 @@
 - **State Management**: Zustand 5.x
 
 ### Data & Storage
+
 - **Database**: Dexie.js (IndexedDB wrapper)
-- **Vector Search**: Transformers.js (all-MiniLM-L6-v2)
-- **Full-text Search**: Lunr.js
+- **Vector Search**: Transformers.js (paraphrase-multilingual-MiniLM-L12-v2)
+- **Full-text Search**: Lunr.js（日本語は文字bi-gram）
 
 ### AI & ML
-- **LLM**: Claude API (planned)
-- **Embeddings**: Xenova/all-MiniLM-L6-v2 (384-dim, 23MB)
+
+- **LLM**: Google Gemini API（`@google/genai`、サーバーの Route Handler 経由のみ。[ADR-007](./docs/decisions/ADR-007-gemini-llm-via-server-route.md)）
+- **Embeddings**: Xenova/paraphrase-multilingual-MiniLM-L12-v2 (384-dim, 多言語, 約120MB, 自己ホスト — [ADR-003](./docs/decisions/ADR-003-offline-rule-search.md))
 - **Runtime**: WebAssembly (browser-based)
 
 ### Tools
+
 - **Linting**: ESLint 8.x + Prettier
 - **Testing**: Vitest
 - **PWA**: next-pwa
@@ -105,7 +116,50 @@ cd ArbiterConsole
 
 # Install dependencies
 npm install
+
+# Download the embedding model into public/models/ (one-time, ~120MB, needs network)
+npm run fetch-models
 ```
+
+オフライン動作のため、実行時アセットはすべて同一オリジンから配信します（[ADR-003](./docs/decisions/ADR-003-offline-rule-search.md)）。
+
+- `public/pdfjs/`, `public/ort/`: `npm run dev` / `npm run build` の前に `scripts/copy-runtime-assets.mjs` が node_modules から自動コピー
+- `public/models/`: `npm run fetch-models` で Hugging Face からダウンロード（デプロイ前に実行）。リビジョンはコミットSHAに固定され、ダウンロード後にファイルのハッシュを検証します
+
+いずれも生成物のためリポジトリには含めません（.gitignore 対象）。モデル未配置の場合、ルール検索はキーワード検索のみで動作します。
+
+`npm run build` はモデル未配置だとエラーで停止します（意味検索なしでのデプロイ防止）。開発・CIでモデル無しのままビルドする場合は明示的に `ALLOW_MISSING_MODEL=1` を指定してください。
+
+### LLM（AI参考情報）の設定
+
+決定木の対象外の事象（例: スマートウォッチ・携帯電話などの選手の行動）では、Google Gemini による「AI参考」情報を表示します。Gemini はサーバー（`app/api/llm/*` の Route Handler）からのみ呼び出し、API キーをブラウザに送ることはありません（[ADR-007](./docs/decisions/ADR-007-gemini-llm-via-server-route.md)）。
+
+`.env.example` を `.env.local` にコピーし、サーバーの環境変数を設定してください（`.env.local` はコミットしない）。
+
+| 変数                                                                      | 既定値                     | 説明                                                                                                                              |
+| ------------------------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `GEMINI_API_KEY`                                                          | （なし・必須）             | Gemini API キー（サーバー専用。`NEXT_PUBLIC_` を付けないこと）                                                                    |
+| `GEMINI_MODEL_REASONING`                                                  | `gemini-flash-latest`      | 決定木の対象外の事象の推論（構造化出力）                                                                                          |
+| `GEMINI_MODEL_CLASSIFIER`                                                 | `gemini-flash-lite-latest` | 自由記述のインシデント分類（低コスト）                                                                                            |
+| `GEMINI_THINKING_LEVEL`                                                   | `low`                      | 思考の量（`off` / `minimal` / `low` / `medium`）。思考に対応しないモデルでは `off`                                                |
+| `LLM_ACCESS_TOKEN`                                                        | （なし）                   | 設定すると `/api/llm/*` は `X-Arbiter-Access-Token` ヘッダーの一致を要求（401）。Gemini キーとは別物。`NEXT_PUBLIC_` にしないこと。**本番（`NODE_ENV=production`）で未設定の場合、AIルートは 503 を返す** |
+| `LLM_RATE_LIMIT_REASON_PER_MINUTE` / `LLM_RATE_LIMIT_CLASSIFY_PER_MINUTE` | `10` / `10`                | ルートごとのレート制限                                                                                                            |
+| `LLM_DAILY_REQUEST_LIMIT`                                                 | `500`                      | プロセスあたりの1日（UTC）の上限（`0` は無制限）                                                                                  |
+| `LLM_ALLOW_UNAUTHENTICATED`                                               | （なし）                   | `1` のときのみ、本番でトークン未設定でも AI ルートを有効にする（デプロイ先の認証で保護している場合のみ） |
+| `GEMINI_THINKING_BUDGET`                                                  | （なし）                   | 思考トークン数（予算方式のモデル向け。設定時はレベルより優先） |
+| `TRUST_PROXY`                                                             | （なし）                   | `1` のときのみ `X-Forwarded-For` を IP として使う（信頼できるプロキシの背後のみ）                                                 |
+
+- キー未設定の場合、`/api/llm/*` は 503（`not-configured`）を返し、アプリは手動確認（CAへ確認）とキーワード分類で動作します。
+- **公開時のアクセス制御（必須）:** そのまま公開すると誰でも Gemini の利用枠を消費できます。(a) デプロイ先の保護・認証（Vercel Deployment Protection、Cloudflare Access 等）でアプリ全体を保護するか、(b) `LLM_ACCESS_TOKEN` を設定し、アービターにトークンを配布してください。(b) では、トークンは認証エラー時に表示される入力欄から入力し、端末の localStorage に保存されます。端末を共有すると利用できてしまうため、漏えい時はトークンを変更してください。
+- **費用の上限:** Google Cloud / AI Studio でプロジェクトの API クォータ（1分・1日あたり）と予算アラートを設定してください。アプリ内のレート制限・1日上限はプロセス内メモリのため、サーバーレス・複数インスタンスではインスタンスごとになります。また `TRUST_PROXY=1` でない場合は全利用者で1つのバケットを共有します。
+- `*-latest` は別名のため挙動が変わることがあります。大会中の再現性が必要な場合はバージョン固定のモデル ID を指定してください。
+- AI の出力は端末内の決定的な検証器（引用条文の存在・原文との一致・根拠のないペナルティ・推測表現など）を通過した場合のみ「AI参考」として表示され、それ以外は「CAへ確認」になります。決定木の対象となる事象では AI は判断に使われません。AI参考の判断は未確定（Incident は保留）として扱われます。そのペナルティは集計に含めず、「AI参考（未確定）」として別に表示します。負け・除外は常に CA への確認を推奨します。フェアプレー事象は AI に送信しません。
+
+#### モデル・プロバイダーの変更方法
+
+- **モデルの変更（判定=分類 / 推論）:** サーバーの環境変数 `GEMINI_MODEL_CLASSIFIER`（分類）と `GEMINI_MODEL_REASONING`（推論）を変更し、サーバーを再起動するだけです。コード変更は不要です。既定値は `lib/infrastructure/llm/server/config.ts` の `DEFAULT_CLASSIFIER_MODEL` / `DEFAULT_REASONING_MODEL` の1か所だけで定義しています（他のファイルにモデル ID を書かないこと）。
+- **既定値の変更:** `config.ts` の2つの定数のみを変更し、`.env.example` と本 README の表を合わせて更新します。
+- **プロバイダーの変更:** `GenerateJsonFn`（`lib/infrastructure/llm/server/generate.ts`）を実装したアダプターを追加します。次に `lib/infrastructure/llm/server/provider.ts` の `llmProvider` を差し替え、必要なら `config.ts` の環境変数名を変更します。ドメイン（検証器・DecisionEngine）、クライアント、UI は変更不要です。
 
 ### Development
 
@@ -120,17 +174,44 @@ npm run dev
 ### Build
 
 ```bash
-# Production build
+# Production build (requires `npm run fetch-models` first)
 npm run build
+
+# Build without the embedding model (development / CI only; keyword search only)
+ALLOW_MISSING_MODEL=1 npm run build
 
 # Start production server
 npm start
 ```
 
+### Deploy（Cloudflare Workers。ADR-009）
+
+OpenNext アダプター（`@opennextjs/cloudflare` 1.15.x。Next.js 14 対応の最終系列）で Workers にデプロイします。
+埋め込みモデル（118MB）は Workers の1ファイル上限（25MiB）を超えるため、現在はモデルなし（キーワード検索のみ）で配信します。
+
+```bash
+# 1. Cloudflare にログイン（初回のみ。ブラウザが開きます）
+npx wrangler login
+
+# 2. シークレットを設定（初回・変更時のみ。値は入力プロンプトで渡し、リポジトリには書かない）
+npx wrangler secret put GEMINI_API_KEY
+npx wrangler secret put LLM_ACCESS_TOKEN   # アービターに配布するトークン（設定画面の「AI設定」で入力）
+
+# 3. ビルドしてデプロイ
+ALLOW_MISSING_MODEL=1 npm run cf:deploy
+
+# ローカルで Workers 上の動作を確認する場合（.dev.vars に GEMINI_API_KEY / LLM_ACCESS_TOKEN を書く。.gitignore 済み）
+ALLOW_MISSING_MODEL=1 npm run cf:preview
+```
+
+- `.env.example` 以外の `.env*` ファイルがあると `cf:build` は中止します（必ず `npm run cf:*` を使用。`opennextjs-cloudflare` を直接実行するとこの確認は行われません）。OpenNext がその値をワーカーに埋め込むためです。ローカル確認の値は `.dev.vars`、本番の値は `wrangler secret put` で設定してください。
+- `npm run fetch-models` 済みでも、`public/models/` は `.assetsignore` によりアップロードされません。
+- 本番で `LLM_ACCESS_TOKEN` が未設定の場合、AI機能は 503 で無効になります（ADR-007）。
+- Gemini キーには Google Cloud 側でクォータと予算アラートを設定してください（レート制限はインスタンスごと）。
+
 ### Testing
 
 ```bash
-# Run tests (currently has dependency issues)
 npm test
 ```
 
@@ -138,10 +219,10 @@ npm test
 
 ### 1. Rule Search
 
-1. 設定画面から「FIDE Laws of Chess」または「JCF規則」のPDFをアップロード
-2. システムが自動的にembeddingsを生成（初回のみ、数分かかる場合があります）
-3. 検索画面でキーワードを入力（例: "違法手", "時間切れ"）
-4. 関連規則がスコア付きで表示されます
+1. 設定画面で資料種別（FIDE / JCF）を選び、資料名・版・PDFを指定してインポート。同じ種別の有効な資料が既にある場合は、「置き換える（既存資料は旧版として保存し検索対象外）」か「両方を有効にする」かを画面上で選択します。登録済み資料は設定画面から削除できます
+2. システムが条文とページ番号を抽出し、embeddingsを生成（初回のみ、数分かかる場合があります）
+3. 検索画面でキーワード・条文番号を入力（例: "違法手", "7.5.4", "illegal move"）
+4. 結果には資料名・版・ページが表示され、タップで条文全文と出典を確認できます
 
 ### 2. Incident Reporting
 
@@ -178,7 +259,7 @@ npm test
                       ↓
 ┌─────────────────────────────────────────────────┐
 │         Infrastructure Layer                    │
-│  (IndexedDB + Transformers.js + Claude API)    │
+│  (IndexedDB + Transformers.js + /api/llm→Gemini)│
 └─────────────────────────────────────────────────┘
 ```
 
@@ -187,18 +268,23 @@ npm test
 ## Core Principles
 
 ### 🚫 No Unfounded Rulings
+
 AIは根拠のない裁定を生成しません。すべての裁定には明確な規則の引用が含まれます。
 
 ### 🎯 Decision Support, Not Automation
+
 このシステムは審判の判断を**支援**するものであり、**自動化**するものではありません。
 
 ### 🛡️ Offline-First
+
 Decision Treesはオフラインで動作します。インターネット接続は検索やLLM機能でのみ必要です。
 
 ### 📖 Source Citation Required
+
 すべての裁定は、FIDE Laws of Chess、JCF規則、または大会特別規定に基づきます。
 
 ### ⚠️ Fair Play: No Auto-Detection
+
 フェアプレー違反の自動検出は行いません。AIは事実の記録と規則の提示のみを行います。
 
 ## Documentation
@@ -276,4 +362,4 @@ Issues: https://github.com/moom98/ArbiterConsole/issues
 - **FIDE** - Laws of Chess
 - **JCF** (Japan Chess Federation) - Japanese chess regulations
 - **Digital Agency Design System** - UI components
-- **Anthropic** - Claude AI for LLM capabilities (planned)
+- **Google** - Gemini API for AI-assisted reference information

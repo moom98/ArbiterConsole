@@ -10,7 +10,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // ズームは禁止しない（アクセシビリティ）。iOS の safe area を使うため cover にする
+  viewportFit: "cover",
   themeColor: "#000000",
 };
 

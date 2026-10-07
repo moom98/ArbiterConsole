@@ -1,0 +1,153 @@
+"use client";
+
+import { useState } from "react";
+import {
+  classifyIncidentText,
+  type ClassifyTextResult,
+} from "@/lib/application/llm-classification";
+import { CATEGORY_LABELS } from "@/lib/application/incident-labels";
+import type { IncidentClassification } from "@/lib/domain/llm/types";
+import {
+  CLOCK_TIME_SUBTYPE_LABELS,
+  DRAW_SUBTYPE_LABELS,
+  usesStructuredQuestions,
+} from "@/lib/domain/follow-up";
+
+interface IncidentTextClassifierProps {
+  disabled?: boolean;
+  /** 提案を採用する（カテゴリ・subtype・説明文のプレフィル） */
+  onApply: (classification: IncidentClassification, text: string) => void;
+}
+
+function subtypeLabel(c: IncidentClassification): string | undefined {
+  if (!c.subtype) return undefined;
+  if (c.category === "clock-time")
+    return CLOCK_TIME_SUBTYPE_LABELS[
+      c.subtype as keyof typeof CLOCK_TIME_SUBTYPE_LABELS
+    ];
+  if (c.category === "draw")
+    return DRAW_SUBTYPE_LABELS[c.subtype as keyof typeof DRAW_SUBTYPE_LABELS];
+  return undefined;
+}
+
+/**
+ * 自由記述からカテゴリを提案する（要件 §10, §11）。
+ * 提案はプレフィルのみで、カテゴリはアービターが確定する。判断は決定木・判断支援が行う。
+ */
+export function IncidentTextClassifier({
+  disabled,
+  onApply,
+}: IncidentTextClassifierProps) {
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<ClassifyTextResult | null>(null);
+
+  const handleClassify = async () => {
+    setLoading(true);
+    setResult(null);
+    try {
+      setResult(await classifyIncidentText(text));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const c = result?.classification ?? null;
+
+  return (
+    <section
+      aria-label="状況から分類"
+      className="mb-6 p-3 border border-gray-200 rounded-lg"
+    >
+      <label htmlFor="incident-free-text" className="block font-semibold mb-2">
+        状況を入力して分類（任意）
+      </label>
+      <textarea
+        id="incident-free-text"
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          setResult(null);
+        }}
+        placeholder="例: 黒がスマートウォッチを着けている"
+        className="w-full h-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <button
+        type="button"
+        onClick={() => void handleClassify()}
+        disabled={disabled || loading || !text.trim()}
+        className="mt-2 w-full min-h-12 px-4 bg-gray-800 text-white rounded-lg font-semibold disabled:bg-gray-300 disabled:cursor-not-allowed"
+      >
+        {loading ? "分類中..." : "カテゴリを提案"}
+      </button>
+
+      {result && !c && (
+        <p role="status" className="mt-3 text-sm text-gray-700">
+          分類できませんでした。下のカテゴリから選択してください。
+          {result.notice && (
+            <span className="block text-gray-500">{result.notice}</span>
+          )}
+        </p>
+      )}
+
+      {c && (
+        <div role="status" className="mt-3 p-3 bg-blue-50 rounded-lg">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
+            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-100 text-amber-900">
+              {c.method === "llm" ? "AI分類（提案）" : "キーワード分類（提案）"}
+            </span>
+            {c.needsTournamentRules && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-purple-100 text-purple-900">
+                大会規定を確認
+              </span>
+            )}
+          </div>
+          <p className="font-semibold">
+            {CATEGORY_LABELS[c.category]}
+            {subtypeLabel(c) && ` / ${subtypeLabel(c)}`}
+          </p>
+          {usesStructuredQuestions(c.category) && (
+            <p className="text-sm text-gray-700 mt-1">
+              このカテゴリは決定木の質問で判断します。
+            </p>
+          )}
+          {result?.notice && (
+            <p className="text-xs text-gray-600 mt-1">{result.notice}</p>
+          )}
+          {c.followUpQuestions.length > 0 && (
+            <div className="mt-2">
+              <p className="text-sm font-semibold text-gray-700">
+                確認ポイント
+              </p>
+              <ul className="list-disc ml-5 text-sm text-gray-700">
+                {c.followUpQuestions.map((q) => (
+                  <li key={q}>{q}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {c.missingInformation.length > 0 && (
+            <div className="mt-2">
+              <p className="text-sm font-semibold text-gray-700">
+                不足している情報
+              </p>
+              <ul className="list-disc ml-5 text-sm text-gray-700">
+                {c.missingInformation.map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => onApply(c, text.trim())}
+            disabled={disabled}
+            className="mt-3 w-full min-h-12 px-4 bg-blue-600 text-white rounded-lg font-semibold disabled:bg-gray-300"
+          >
+            このカテゴリで続ける
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}

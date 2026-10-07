@@ -149,6 +149,8 @@ const withPWA = require('next-pwa')({
       },
     },
 
+    // NOTE (ADR-007): superseded. LLM calls now go through the same-origin POST
+    // routes /api/llm/* (Gemini, server-side) and must NOT be cached.
     // API calls to Claude (optional caching)
     {
       urlPattern: /^https:\/\/api\.anthropic\.com\/.*/i,

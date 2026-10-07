@@ -567,6 +567,15 @@ class RulePriorityResolver {
 
 ## 7. LLM Integration
 
+> **Note (ADR-007):** The LLM provider is now **Google Gemini**, called only through the server Route Handlers `app/api/llm/*`. The API key is never sent to the browser. Claude/Anthropic references below are historical. See [ADR-007](../decisions/ADR-007-gemini-llm-via-server-route.md).
+>
+> **As implemented (Milestone 5):**
+> - Models: `GEMINI_MODEL_REASONING` (default `gemini-flash-latest`) and `GEMINI_MODEL_CLASSIFIER` (default `gemini-flash-lite-latest`), with structured output via `responseJsonSchema`. Citation `articleId` is restricted to the IDs of the articles that were sent.
+> - Retrieval (§5) runs on the client (`lib/infrastructure/llm/llm-assist-port.ts`). Up to 8 articles, each truncated to 4,000 characters, are sent to `/api/llm/reason`.
+> - Output validation (§7.3) is `lib/domain/llm/output-validator.ts` (pure). Citations use the Rule.id instead of sourceName and articleNumber. Quotes must match the article text that was sent. Confidence `high` is capped to `medium`.
+> - Prompt caching (§7.4) is not used.
+
+
 ### 7.1 Model Selection
 
 **Primary Model**: Claude Sonnet 4.5 (claude-sonnet-4-5-20250929)

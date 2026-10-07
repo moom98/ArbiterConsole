@@ -18,6 +18,8 @@ Arbiter Console is an **offline-first, mobile-optimized Decision Support system*
 
 ---
 
+> **Note (ADR-007):** The LLM provider is now **Google Gemini**, called only through the server Route Handlers `app/api/llm/*`. The API key is never sent to the browser. Claude/Anthropic references in this document are historical. See [ADR-007](../decisions/ADR-007-gemini-llm-via-server-route.md).
+
 ## 2. High-Level Architecture
 
 ```
@@ -617,6 +619,8 @@ class SyncService {
 - No backend server required for MVP
 - All data stored locally (IndexedDB)
 - Claude API called directly from browser (API key in env, rate-limited)
+
+> **Note (ADR-007, Milestone 5):** The notes above are superseded for LLM features. The app now needs a Node server for `app/api/llm/{classify,reason}` (Next.js Route Handlers, `runtime = "nodejs"`). These call Google Gemini with the server-only `GEMINI_API_KEY`. The browser never calls the provider or holds the key. Rule data stays in the client's IndexedDB. The client sends only retrieved candidate articles and structured context. Without the key or a server, the app falls back to Decision Trees, manual review / CA and keyword classification. See [ADR-007](../decisions/ADR-007-gemini-llm-via-server-route.md).
 
 ### 9.2 Future: Backend-Enabled Architecture
 

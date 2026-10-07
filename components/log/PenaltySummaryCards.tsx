@@ -21,6 +21,7 @@ export function PenaltySummaryCards({
     { label: "うちドロー", value: summary.draws },
     { label: "除外・退場", value: summary.expulsions },
     { label: "CA確認", value: summary.escalations },
+    { label: "AI参考（未確定）", value: summary.aiReferencePenalties },
   ];
   return (
     <section aria-labelledby="log-summary-title" className="mb-4">

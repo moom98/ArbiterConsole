@@ -69,6 +69,14 @@ export function PenaltyHistoryPanel({
           <PenaltyList items={history.results} />
         </div>
       )}
+      {history.aiReference.length > 0 && (
+        <div className="mt-3 border border-dashed border-amber-400 rounded p-2 bg-amber-50">
+          <p className="font-semibold text-sm mb-1">
+            AI参考（未確定）— 適用済みのペナルティではありません
+          </p>
+          <PenaltyList items={history.aiReference} />
+        </div>
+      )}
       {history.unknownOffender.length > 0 && (
         <div className="mt-3 border border-dashed border-gray-300 rounded p-2">
           <p className="font-semibold text-sm mb-1">違反者不明（旧データ）</p>

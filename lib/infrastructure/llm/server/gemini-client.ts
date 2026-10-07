@@ -1,9 +1,9 @@
 import { FinishReason, GoogleGenAI, ThinkingLevel } from "@google/genai";
-import type { LlmThinkingLevel } from "./config";
+import type { ThinkingSetting } from "./config";
 import type { GenerateJsonFn } from "./generate";
 
 const THINKING_LEVELS: Record<
-  Exclude<LlmThinkingLevel, "off">,
+  Extract<ThinkingSetting, { mode: "level" }>["level"],
   ThinkingLevel
 > = {
   minimal: ThinkingLevel.MINIMAL,
@@ -48,11 +48,12 @@ export const geminiGenerateJson: GenerateJsonFn = async (req) => {
       temperature: 0,
       maxOutputTokens: req.maxOutputTokens,
       // 思考トークンは maxOutputTokens に含まれるため、量を抑えて JSON の途中切れを防ぐ
-      ...(req.thinkingLevel !== "off"
+      ...(req.thinking
         ? {
-            thinkingConfig: {
-              thinkingLevel: THINKING_LEVELS[req.thinkingLevel],
-            },
+            thinkingConfig:
+              req.thinking.mode === "level"
+                ? { thinkingLevel: THINKING_LEVELS[req.thinking.level] }
+                : { thinkingBudget: req.thinking.tokens },
           }
         : {}),
       abortSignal: req.signal,

@@ -13,7 +13,10 @@ import {
   DailyRequestCounter,
   TokenBucketRateLimiter,
 } from "@/lib/infrastructure/llm/server/rate-limiter";
-import { readLlmConfig } from "@/lib/infrastructure/llm/server/config";
+import {
+  readLlmConfig,
+  resolveThinking,
+} from "@/lib/infrastructure/llm/server/config";
 import { LLM_LIMITS } from "@/lib/infrastructure/llm/contract";
 import { ARTICLES, validDraft } from "./fixtures";
 
@@ -432,6 +435,7 @@ describe("readLlmConfig", () => {
       rateLimitPerMinute: { reason: 10, classify: 10 },
       dailyRequestLimit: 500,
       thinkingLevel: "low",
+      thinkingBudget: undefined,
     });
   });
 
@@ -451,6 +455,34 @@ describe("readLlmConfig", () => {
       dailyRequestLimit: 0,
       thinkingLevel: "off",
     });
+  });
+});
+
+describe("resolveThinking (per model family)", () => {
+  const cfg = (level: "off" | "low" | "medium", budget?: number) => ({
+    thinkingLevel: level,
+    thinkingBudget: budget,
+  });
+  it.each([
+    ["gemini-3.5-flash", cfg("low"), { mode: "level", level: "low" }],
+    ["gemini-flash-latest", cfg("medium"), { mode: "level", level: "medium" }],
+    ["gemini-flash-latest", cfg("off"), null],
+    ["gemini-2.5-flash", cfg("low"), { mode: "budget", tokens: 1024 }],
+    ["gemini-2.5-flash-lite", cfg("off"), { mode: "budget", tokens: 0 }],
+    ["gemini-2.5-pro", cfg("off"), null],
+    ["gemini-2.0-flash", cfg("low"), null],
+    ["gemini-3.5-flash", cfg("low", 256), { mode: "budget", tokens: 256 }],
+  ])("%s %o → %o", (model, c, expected) => {
+    expect(resolveThinking(model, c)).toEqual(expected);
+  });
+
+  it("reads GEMINI_THINKING_BUDGET", () => {
+    expect(
+      readLlmConfig({ GEMINI_THINKING_BUDGET: "2048" }).thinkingBudget
+    ).toBe(2048);
+    expect(readLlmConfig({ GEMINI_THINKING_BUDGET: "x" }).thinkingBudget).toBe(
+      undefined
+    );
   });
 });
 
@@ -637,7 +669,7 @@ describe("total deadline (S-H2)", () => {
       makeDeps(generate)
     )(request(reasonBody()));
     expect(generate.mock.calls[0][0]).toMatchObject({
-      thinkingLevel: "low",
+      thinking: { mode: "level", level: "low" },
       maxOutputTokens: 6_000,
     });
   });

@@ -6,7 +6,7 @@ import {
   type LlmApiKind,
   type LlmApiResponse,
 } from "../contract";
-import { readLlmConfig, type LlmServerConfig } from "./config";
+import { readLlmConfig, resolveThinking, type LlmServerConfig } from "./config";
 import {
   DEFAULT_RETRY,
   UpstreamError,
@@ -303,7 +303,7 @@ export function createLlmRouteHandler(
             userContent,
             responseJsonSchema: schema,
             maxOutputTokens: MAX_OUTPUT_TOKENS[kind],
-            thinkingLevel: config.thinkingLevel,
+            thinking: resolveThinking(model, config),
             timeoutMs,
             signal,
           })

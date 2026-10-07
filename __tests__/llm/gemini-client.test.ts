@@ -26,7 +26,7 @@ const baseReq = {
   userContent: "user",
   responseJsonSchema: { type: "object" },
   maxOutputTokens: 100,
-  thinkingLevel: "low" as const,
+  thinking: { mode: "level" as const, level: "low" as const },
   timeoutMs: 1000,
   signal: new AbortController().signal,
 };
@@ -60,9 +60,20 @@ describe("geminiGenerateJson (SDK adapter, mocked)", () => {
     expect(arg.config.thinkingConfig).toEqual({ thinkingLevel: "LOW" });
   });
 
-  it("omits thinkingConfig when the level is off", async () => {
+  it("sends thinkingBudget for budget-based models", async () => {
     generateContent.mockResolvedValue({ text: "{}" });
-    await geminiGenerateJson({ ...baseReq, thinkingLevel: "off" });
+    await geminiGenerateJson({
+      ...baseReq,
+      thinking: { mode: "budget", tokens: 1024 },
+    });
+    expect(generateContent.mock.calls[0][0].config.thinkingConfig).toEqual({
+      thinkingBudget: 1024,
+    });
+  });
+
+  it("omits thinkingConfig when thinking is null", async () => {
+    generateContent.mockResolvedValue({ text: "{}" });
+    await geminiGenerateJson({ ...baseReq, thinking: null });
     expect(
       generateContent.mock.calls[0][0].config.thinkingConfig
     ).toBeUndefined();

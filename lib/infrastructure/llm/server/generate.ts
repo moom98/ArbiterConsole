@@ -1,4 +1,4 @@
-import type { LlmThinkingLevel } from "./config";
+import type { ThinkingSetting } from "./config";
 
 /**
  * LLM 呼び出しの抽象（SDK 非依存）と、タイムアウト・再試行（指数バックオフ）。
@@ -13,8 +13,8 @@ export interface GenerateJsonRequest {
   userContent: string;
   responseJsonSchema: unknown;
   maxOutputTokens: number;
-  /** 思考（thinking）の量（"off" は設定しない） */
-  thinkingLevel: LlmThinkingLevel;
+  /** 思考（thinking）の設定。null は送らない（resolveThinking でモデル系列ごとに決める） */
+  thinking: ThinkingSetting | null;
   /** 1回の試行のタイムアウト（ミリ秒） */
   timeoutMs: number;
   signal: AbortSignal;

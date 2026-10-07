@@ -37,6 +37,45 @@ export interface LlmServerConfig {
   /** プロセス全体の1日あたりの上限（0 は無制限） */
   dailyRequestLimit: number;
   thinkingLevel: LlmThinkingLevel;
+  /** 明示的な思考トークン数（GEMINI_THINKING_BUDGET。設定時は thinkingLevel より優先） */
+  thinkingBudget?: number;
+}
+
+/** 実際に送る思考の設定（プロバイダー非依存） */
+export type ThinkingSetting =
+  | { mode: "level"; level: Exclude<LlmThinkingLevel, "off"> }
+  | { mode: "budget"; tokens: number };
+
+/** Gemini 2.5 系（thinkingBudget で制御）で使う、レベルに対応するトークン数 */
+const BUDGET_FOR_LEVEL: Record<Exclude<LlmThinkingLevel, "off">, number> = {
+  minimal: 512,
+  low: 1_024,
+  medium: 4_096,
+};
+
+/**
+ * モデル系列ごとに思考の設定を決める（純粋関数）。null は設定を送らない。
+ * - GEMINI_THINKING_BUDGET が設定されていればそれを thinkingBudget として送る
+ * - Gemini 1.x / 2.0: 思考なし（送らない）
+ * - Gemini 2.5: thinkingBudget（low → 1024 等。off は Flash 系のみ 0、Pro は無効化できないため送らない）
+ * - それ以外（Gemini 3 以降・*-latest の別名）: thinkingLevel
+ * 別名（*-latest）の実体は変わりうるため、モデル変更時は実キーでの動作確認が必要（ADR-007）。
+ */
+export function resolveThinking(
+  model: string,
+  config: Pick<LlmServerConfig, "thinkingLevel" | "thinkingBudget">
+): ThinkingSetting | null {
+  if (config.thinkingBudget !== undefined)
+    return { mode: "budget", tokens: config.thinkingBudget };
+  const id = model.toLowerCase();
+  if (/gemini-(1\.|2\.0)/.test(id)) return null;
+  if (/gemini-2\.5/.test(id)) {
+    if (config.thinkingLevel === "off")
+      return /pro/.test(id) ? null : { mode: "budget", tokens: 0 };
+    return { mode: "budget", tokens: BUDGET_FOR_LEVEL[config.thinkingLevel] };
+  }
+  if (config.thinkingLevel === "off") return null;
+  return { mode: "level", level: config.thinkingLevel };
 }
 
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._\-/]{0,99}$/;
@@ -98,5 +137,10 @@ export function readLlmConfig(
       DEFAULT_DAILY_REQUEST_LIMIT
     ),
     thinkingLevel: thinking(env.GEMINI_THINKING_LEVEL),
+    // 未設定・不正な値は undefined（-1 は「不正」を表す番兵）
+    thinkingBudget:
+      nonNegativeInt(env.GEMINI_THINKING_BUDGET, -1) >= 0
+        ? nonNegativeInt(env.GEMINI_THINKING_BUDGET, -1)
+        : undefined,
   };
 }

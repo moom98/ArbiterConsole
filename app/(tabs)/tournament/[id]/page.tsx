@@ -12,12 +12,12 @@ import type {
 import { useTournamentStore } from "@/lib/stores/tournament-store";
 import { TournamentProfileForm } from "@/components/tournament/TournamentProfileForm";
 import { RoundBoards } from "@/components/tournament/RoundBoards";
+import { RoundTransitionControl } from "@/components/checklist/RoundTransitionControl";
 import {
   formatRulesetSummary,
   toProfileInput,
 } from "@/lib/domain/services/tournament-profile";
 import {
-  nextRoundStatus,
   parseBoardRange,
   ROUND_STATUS_LABEL,
 } from "@/lib/domain/services/round-planning";
@@ -32,17 +32,12 @@ function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-const STATUS_ACTION: Record<"active" | "completed", string> = {
-  active: "ラウンド開始",
-  completed: "ラウンド終了",
-};
-
 /** 大会の設定・ラウンド・ボード・プレーヤー */
 export default function TournamentDetailPage() {
   const params = useParams<{ id: string }>();
   const id = decodeURIComponent(params?.id ?? "");
   const router = useRouter();
-  const { service, active, setActive, load } = useTournamentStore();
+  const { service, checklist, active, setActive, load } = useTournamentStore();
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -220,7 +215,6 @@ export default function TournamentDetailPage() {
 
         <ul className="mt-4 space-y-2">
           {rounds.map((r) => {
-            const next = nextRoundStatus(r.status);
             return (
               <li key={r.id} className="border-t pt-2">
                 <div className="flex items-center gap-2">
@@ -239,20 +233,25 @@ export default function TournamentDetailPage() {
                       {ROUND_STATUS_LABEL[r.status]}
                     </span>
                   </button>
-                  {next && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void run(async () => {
-                          await service.changeRoundStatus(r.id, next);
-                        })
-                      }
-                      className="min-h-12 px-3 border border-blue-600 text-blue-700 rounded-lg"
-                    >
-                      {STATUS_ACTION[next as "active" | "completed"]}
-                    </button>
-                  )}
+                  <Link
+                    href={`/tournament/${encodeURIComponent(tournament.id)}/rounds/${r.roundNumber}`}
+                    aria-label={`Round ${r.roundNumber} チェックリスト`}
+                    className="inline-flex items-center min-h-12 px-3 border border-gray-300 rounded-lg text-sm"
+                  >
+                    チェックリスト
+                  </Link>
                 </div>
+                <RoundTransitionControl
+                  key={r.status}
+                  compact
+                  round={r}
+                  service={checklist}
+                  onChanged={async () => {
+                    setNotice(null);
+                    await reload();
+                    await load();
+                  }}
+                />
                 {openRound === r.roundNumber && (
                   <div className="mt-2">
                     <RoundBoards

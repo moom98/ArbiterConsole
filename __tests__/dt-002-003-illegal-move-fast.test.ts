@@ -239,7 +239,19 @@ describe("DT-003 Illegal move — Rapid A.5 / Blitz B.3 (basic rules)", () => {
 
   it("R5: an illegal move that stood notes the A.5.4 both-kings-in-check procedure", () => {
     const r = a5().evaluate({ ...A5_BASE, opponentMadeNextMove: true });
-    expect(r.decision.actions.join("\n")).toContain("両方のキング");
+    const actions = r.decision.actions;
+    expect(actions).toContain(
+      "盤上で両方のキングがチェックされている場合（A.5.4）: 次の手が完了するまで待つ。次の手の後も両キングがチェックのままなら引き分けを宣言する"
+    );
+    expect(actions).toContain(
+      "最初の手番側がチェックを外した後、チェックされたままの相手が自分の次の手を完了してもチェックが外れていなければ、その相手の違法手とする（解説）"
+    );
+    // 両キングがチェックのまま → 違法手ではなく引き分け（違法手とする記述は相手の次の手の後のみ）
+    expect(
+      actions.some((a) =>
+        a.includes("チェックを外さなかった場合は、その手番側の違法手")
+      )
+    ).toBe(false);
     expect(articles(r)).toEqual(
       expect.arrayContaining([
         "FIDE A.5.4",

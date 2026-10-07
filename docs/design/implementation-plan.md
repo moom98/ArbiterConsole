@@ -280,6 +280,9 @@ Write tests **alongside** implementation, not after.
 
 ### Milestone 5: LLM Integration (Week 8-9)
 
+> **Note (ADR-006):** The LLM provider is now **Google Gemini**, called only through the server Route Handlers `app/api/llm/*`. The API key is never sent to the browser. Claude/Anthropic references below are historical. See [ADR-006](../decisions/ADR-006-gemini-llm-via-server-route.md).
+
+
 **Goal**: LLM-based incident classification and reasoning
 
 **Why Fifth**:

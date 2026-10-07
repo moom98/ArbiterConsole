@@ -65,6 +65,9 @@ If we route all incidents to Decision Trees:
 
 ## Decision
 
+> **Note (ADR-006):** The LLM provider is now **Google Gemini**, called only through the server Route Handlers `app/api/llm/*`. The API key is never sent to the browser. Claude/Anthropic references below are historical. See [ADR-006](./ADR-006-gemini-llm-via-server-route.md).
+
+
 We adopt a **hybrid architecture** with clear separation:
 
 ### 1. Decision Tree Jurisdiction

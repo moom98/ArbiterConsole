@@ -567,6 +567,9 @@ class RulePriorityResolver {
 
 ## 7. LLM Integration
 
+> **Note (ADR-006):** The LLM provider is now **Google Gemini**, called only through the server Route Handlers `app/api/llm/*`. The API key is never sent to the browser. Claude/Anthropic references below are historical. See [ADR-006](../decisions/ADR-006-gemini-llm-via-server-route.md).
+
+
 ### 7.1 Model Selection
 
 **Primary Model**: Claude Sonnet 4.5 (claude-sonnet-4-5-20250929)

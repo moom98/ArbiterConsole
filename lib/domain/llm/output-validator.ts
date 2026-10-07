@@ -61,6 +61,8 @@ const MAX_SHORT = 500;
 const MAX_MISSING = 10;
 /** 正規化後の引用の最小文字数（"the" のような自明な一致を防ぐ） */
 const MIN_QUOTE_CHARS = 8;
+/** 省略記号で区切った各断片の最小文字数（短い断片の寄せ集めによる偶然の一致を防ぐ） */
+const MIN_FRAGMENT_CHARS = 4;
 const MAX_TIME_ADJUSTMENT_SECONDS = 3600;
 
 const COLORS: readonly PlayerColor[] = ["white", "black"];
@@ -107,6 +109,7 @@ export function quoteMatchesArticle(quote: string, content: string): boolean {
     .filter((f) => f.length > 0);
   const total = fragments.reduce((n, f) => n + f.length, 0);
   if (fragments.length === 0 || total < MIN_QUOTE_CHARS) return false;
+  if (fragments.some((f) => f.length < MIN_FRAGMENT_CHARS)) return false;
   let from = 0;
   for (const fragment of fragments) {
     const at = body.indexOf(fragment, from);

@@ -211,6 +211,10 @@ describe("validateLlmDecisionDraft", () => {
           ARTICLE_FIDE_11_3.content
         )
       ).toBe(false);
+      // 短い断片の寄せ集めは一致とみなさない
+      expect(
+        quoteMatchesArticle("D … p … a … e … v", ARTICLE_FIDE_11_3.content)
+      ).toBe(false);
     });
   });
 

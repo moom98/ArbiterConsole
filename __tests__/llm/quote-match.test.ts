@@ -100,6 +100,22 @@ describe("quoteMatchesArticle – residual inversion cases", () => {
     ).toBe(false);
   });
 
+  it.each([
+    "No player, in accordance with Article 6.5, shall be permitted to leave the playing venue without permission.",
+    "No player, e.g. a junior, shall be permitted to leave the playing venue without permission.",
+    "No player (see Art. 11.2) shall be permitted to leave the playing venue without permission.",
+  ])(
+    "article numbers and abbreviations do not hide a leading negation: %s",
+    (content) => {
+      expect(
+        quoteMatchesArticle(
+          "shall be permitted to leave the playing venue",
+          content
+        )
+      ).toBe(false);
+    }
+  );
+
   it("does not carry a negation over from the previous sentence", () => {
     const content =
       "The arbiter shall not intervene. The player may claim a draw under Article 9.2 at any time.";

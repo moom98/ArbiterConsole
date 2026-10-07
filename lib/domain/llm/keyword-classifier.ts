@@ -57,10 +57,11 @@ const RULES: KeywordRule[] = [
   {
     category: "fair-play",
     patterns: [
-      /不正|カンニング|チート|cheat/i,
+      // 「不正確」「不正解」「不正な手（違法手）」等の日常語は除く
+      /不正(?!確|解|常|規|な(?:手|指し手|着手|駒|位置|操作))|カンニング|チート|\bcheat/i,
       /(身体|ボディ|バッグ|所持品)?検査.{0,3}(拒|断)|金属探知/,
       /外部.{0,4}(情報|助言|援助)|エンジン.{0,4}(使|利用)/,
-      /\b(engine|computer|electronic|outside|external)\s*(assist|help|aid|advice|use)|fair[\s-]*play|suspicio\w*\s+of\s+(cheat|engine)|body\s*search|metal\s*detector/i,
+      /\b(engine|computer|electronic)\s*(assist\w*|help\w*|aid|advice|use[ds]?)\b|\b(outside|external)\s*(assist\w*|help\w*|aid|advice)\b|\bfair[\s-]*play\b|suspicio\w*\s+of\s+(cheat|engine)|body\s*search|metal\s*detector/i,
     ],
     weight: 2,
   },

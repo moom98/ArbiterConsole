@@ -95,7 +95,7 @@ const NEGATION_IN_GAP =
 
 /** 引用の直前にあると意味を反転させる語（英語: 語単位、日本語: 直前の接頭辞） */
 const NEGATION_BEFORE_EN =
-  /\b(no|not|never|neither|nor|cannot|can't|won't|isn't|aren't|doesn't|don't|without|except|unless)\b[^.;:]*$/;
+  /\b(no|not|never|neither|nor|cannot|can't|won't|isn't|aren't|doesn't|don't|without|except|unless)\b[^;:!?]*$/;
 const NEGATION_BEFORE_JA = /[無不非未]$/;
 
 /** 引用の直後に続くと意味を反転・限定する語 */
@@ -108,6 +108,33 @@ function minChars(fragment: string, ja: number, other: number): number {
   return CJK.test(fragment) ? ja : other;
 }
 
+/** 文末ではない「.」（"e.g." "Art." "No." 等の略語、"6." 等の番号） */
+const ABBREVIATIONS = new Set([
+  "e.g",
+  "i.e",
+  "art",
+  "arts",
+  "cf",
+  "no",
+  "vs",
+  "etc",
+  "para",
+  "p",
+  "pp",
+  "ch",
+  "sec",
+]);
+
+function isAbbreviationDot(text: string, dot: number): boolean {
+  let j = dot;
+  while (j > 0 && !/\s/.test(text[j - 1])) j--;
+  const word = text
+    .slice(j, dot)
+    .toLowerCase()
+    .replace(/^[("'\[]+/, "");
+  return ABBREVIATIONS.has(word) || /^\d+(\.\d+)*$/.test(word);
+}
+
 /** 引用の直前の、同じ文の範囲（最大 SENTENCE_LOOKBACK_CHARS 文字） */
 function sentenceBefore(text: string, start: number): string {
   const from = Math.max(0, start - SENTENCE_LOOKBACK_CHARS);
@@ -115,7 +142,11 @@ function sentenceBefore(text: string, start: number): string {
     const c = text[i];
     // 和文の句点等は常に文末。英文の . ; : ! ? は後ろが空白の場合のみ（"6.5" 等の番号は除く）
     if ("。！？".includes(c)) return text.slice(i + 1, start);
-    if (".;:!?".includes(c) && /\s/.test(text[i + 1] ?? " "))
+    if (
+      ".;:!?".includes(c) &&
+      /\s/.test(text[i + 1] ?? " ") &&
+      !(c === "." && isAbbreviationDot(text, i))
+    )
       return text.slice(i + 1, start);
   }
   return text.slice(from, start);

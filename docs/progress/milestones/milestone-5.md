@@ -86,6 +86,12 @@ The re-review returned MERGE and confirmed all earlier blockers fixed. Its shoul
 - **NIT-1:** `draw` counts as a severe penalty and forces CA escalation.
 - **NIT-4:** `GEMINI_THINKING_BUDGET` is documented in `.env.example` and the README.
 - **NIT-5:** `LlmAccessTokenField` is mounted in Settings (AI設定).
+- **Follow-up review of these fixes (FIX REQUIRED → fixed):**
+  - The English preceding-negation check no longer stops at `.` inside the sentence. `sentenceBefore` skips abbreviations (`e.g.`, `Art.`, `No.`) and article numbers.
+  - The Japanese fair-play pattern 不正 excludes 不正確, 不正解 and 不正な手 (an illegal move).
+  - The English patterns need word boundaries.
+  - The server applies `mentionsFairPlay` to the reasoning description and to the classification text.
+- **Test flake:** `vitest.setup.ts` sets the Testing Library `asyncUtilTimeout` to 5 s. Before this, `report-context` tests sometimes timed out at 1 s under full-suite load.
 - **Not changed (NIT-3):** a quote that ends exactly at the 4,000-character cut. This is rare, and the full-sentence display mitigates it.
 
 ## Env vars
@@ -123,7 +129,7 @@ Both default models are aliases listed in the SDK's model type and README.
   - store + IndexedDB integration with a fake port (including an article deleted mid-request, and offline → retry);
   - component tests;
   - the review fixes: quote-inversion cases, severe-penalty escalation, speculation in every field, fair-play skip, pending status and penalty exclusion, CSV, access token, daily cap, trusted proxy, per-route buckets, streaming body limit, deadline-bounded retry, unknown errors not retried, thinking level.
-- Full suite after the M6 merge and re-review fixes: 45 files, 657 passed.
+- Full suite after the M6 merge and re-review fixes: 45 files, 668 passed (3 consecutive full runs).
 - `tsc --noEmit` and eslint report no new findings. One existing prettier warning remains in `lib/domain/entities/game.ts`. In the nested worktree, eslint must run with `--no-eslintrc -c .eslintrc.json`.
 - `ALLOW_MISSING_MODEL=1 npm run build` succeeds. No SDK code appears in `.next/static`.
 - Not tested against the real Gemini API (no key available).

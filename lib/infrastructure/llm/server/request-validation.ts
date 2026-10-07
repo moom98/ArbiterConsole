@@ -10,7 +10,11 @@ import type {
   LlmClassificationRequest,
   LlmReasoningRequest,
 } from "@/lib/domain/llm/types";
+import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
 import { LLM_LIMITS } from "../contract";
+
+/** フェアプレーは外部に送らない（§23, ADR-007）。クライアント側の防御が破られた場合の多重防御 */
+const FAIR_PLAY_NOT_SENT = "フェアプレー関連の内容はAIへ送信できません";
 
 /**
  * /api/llm/* の入力検証（手書き。外部依存なし）。
@@ -102,6 +106,8 @@ export function validateClassificationRequest(
     };
   const c = new Checker();
   const text = c.str(body, "text", "text", LLM_LIMITS.maxClassifyTextChars);
+  if (typeof text === "string" && mentionsFairPlay(text))
+    c.errors.push(FAIR_PLAY_NOT_SENT);
   if (c.errors.length > 0) return { ok: false, errors: c.errors };
   return { ok: true, value: { text: text as string } };
 }
@@ -133,8 +139,7 @@ export function validateReasoningRequest(
     INCIDENT_CATEGORIES
   );
   // フェアプレーは外部に送らない（§23, ADR-007）。クライアント側の防御が破られた場合の多重防御
-  if (category === "fair-play")
-    c.errors.push("フェアプレー事象はAIへ送信できません");
+  if (category === "fair-play") c.errors.push(FAIR_PLAY_NOT_SENT);
   const subtype = c.str(
     inc,
     "subtype",
@@ -155,6 +160,8 @@ export function validateReasoningRequest(
     "incident.description",
     LLM_LIMITS.maxDescriptionChars
   );
+  if (typeof description === "string" && mentionsFairPlay(description))
+    c.errors.push(FAIR_PLAY_NOT_SENT);
   if (typeof inc.arbiterObserved !== "boolean") {
     c.errors.push("incident.arbiterObserved は真偽値である必要があります");
   }

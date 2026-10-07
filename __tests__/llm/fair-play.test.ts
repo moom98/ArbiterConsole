@@ -64,6 +64,19 @@ describe("fair-play incidents (§23)", () => {
     expect(mentionsFairPlay(text)).toBe(true);
   });
 
+  it.each([
+    "時計の表示が不正確だった",
+    "白が不正な手を指した",
+    "計算が不正解だった",
+    "White's phone rang during the game",
+    "player went outside used the toilet",
+    "the engine of the clock is useless",
+    "unfair playing conditions (lighting)",
+    "asked the arbiter for help",
+  ])("does not flag ordinary wording: %s", (text) => {
+    expect(mentionsFairPlay(text)).toBe(false);
+  });
+
   it("does not flag ordinary incidents", () => {
     expect(mentionsFairPlay("白のスマホが対局中に鳴った")).toBe(false);
     expect(mentionsFairPlay("Black's phone rang during the game")).toBe(false);

@@ -638,6 +638,20 @@ describe("access control and cost caps (S-H1)", () => {
       })
     );
     expect(res.status).toBe(400);
+    const res2 = await handler(
+      request({
+        ...body,
+        incident: {
+          ...(body.incident as object),
+          description: "相手がカンニングしている疑い",
+        },
+      })
+    );
+    expect(res2.status).toBe(400);
+    const classify = createLlmRouteHandler("classify", makeDeps(generate));
+    expect(
+      (await classify(request({ text: "Suspected engine assistance" }))).status
+    ).toBe(400);
     expect(generate).not.toHaveBeenCalled();
   });
 });

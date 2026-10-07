@@ -324,14 +324,33 @@ export default function ReportPage() {
       {step === "category" && (
         <div>
           <h2 className="font-semibold mb-2">よく使う判断</h2>
+          {contextErrors.length > 0 && (
+            <div
+              role="alert"
+              className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm"
+            >
+              <ul className="list-disc ml-5">
+                {contextErrors.map((e) => (
+                  <li key={e}>{e}</li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={() => setStep("context")}
+                className="mt-2 min-h-11 px-3 text-blue-600 underline"
+              >
+                対局の設定へ戻る
+              </button>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3 mb-6">
             {QUICK_REPORTS.map((q) => (
               <button
                 key={q.id}
                 type="button"
-                disabled={isProcessing}
+                disabled={isProcessing || contextErrors.length > 0}
                 onClick={() => void handleQuickReport(q)}
-                className="p-4 min-h-16 border-2 border-blue-200 bg-blue-50 rounded-lg hover:border-blue-500 text-left font-semibold"
+                className="p-4 min-h-16 border-2 border-blue-200 bg-blue-50 rounded-lg hover:border-blue-500 text-left font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {q.label}
               </button>

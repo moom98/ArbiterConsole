@@ -41,7 +41,15 @@ Two follow-ups were left open:
    derived from the tournament with `deriveRulesetFromTournament`; a missing regime or rules
    version blocks the step with an error and is never defaulted. Unknown boards can be created
    inline. The ad-hoc date-based path (ADR-004) remains the fallback when no tournament exists or
-   the arbiter explicitly chooses it.
+   the arbiter explicitly chooses it; with an active tournament this needs a confirm that warns the
+   illegal-move history will not be linked to the tournament game. A tournament load error is shown
+   with a retry instead of silently falling back to ad-hoc.
+5a. **Ruleset snapshot.** At submit time the derived ruleset (competition type, regime, rules
+   version, overrides including their source) is stored on `Incident.rulesetSnapshot` (ad-hoc
+   reports too). Follow-up re-evaluation uses the snapshot, so editing the tournament later does
+   not change existing or pending incidents. Incidents without a snapshot (created before this
+   change) derive the ruleset from the tournament with `deriveRulesetFromTournament`. The tournament
+   edit form warns when incidents exist. No schema index is needed for the snapshot.
 5. **Sourced overrides.** `Tournament.overrides` holds values the trees consume explicitly. Each
    value carries its source (`TournamentRuleReference`: document, optional article and verbatim
    quote); an override without a source document is ignored. The only override now is
@@ -66,8 +74,8 @@ Two follow-ups were left open:
 - Ad-hoc tournaments (`adhoc:*`) remain in the database for history but are hidden from the
   tournament list.
 - A tournament with recorded incidents cannot be deleted (history must stay attributable).
-  Deleting a tournament removes its rounds, players and tournament regulation sources.
-- Editing a tournament's ruleset affects later evaluations of its games (including re-evaluation of
-  pending follow-ups). Decisions already stored keep the rulesVersion they were made with.
+  Deletion is one transaction (the incident check is inside it) and removes the tournament's rounds,
+  games, players and tournament regulation sources, rules and embeddings.
+- Editing a tournament's ruleset only affects incidents reported afterwards (snapshot, 5a).
 - Further overrides (e.g. default time, draw-offer rules) must follow the same pattern: explicit,
   sourced, consumed only where a tree documents it.

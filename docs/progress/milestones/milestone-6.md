@@ -26,6 +26,12 @@
 - **6.4 Home.** Report button first, active tournament card with round status and CA-escalation
   count, switcher, quick actions 報告/検索/ログ, recent incidents of the active tournament,
   decision-support notice.
+- **Review fixes (MERGE AFTER FIXES):** ruleset snapshot on `Incident.rulesetSnapshot` used for
+  follow-up re-evaluation (M1/L4) and an edit-form warning when incidents exist; ad-hoc confirm with
+  history warning while a tournament is active (M2); load errors with retry on report and home
+  (M3); home round status from store rounds + loading/error states (L1); ≥48px targets (L2);
+  atomic tournament deletion incl. rule sources/rules/embeddings (L3); empty round in "other
+  board" is a validation error (L5). L6 left as requested.
 - **Pages:** `/tournament`, `/tournament/new`, `/tournament/[id]`.
 - **Schema:** Dexie `version(5)` (rounds, players, games `[tournamentId+round]`). v4 unused; v6
   reserved for Milestone 5.
@@ -36,8 +42,10 @@
   it; accepted only for Blitz + competition-rules.
 - Tournament game IDs contain no date → ADR-004 midnight-split follow-up resolved for tournament
   games (ad-hoc path unchanged).
-- Tournaments with recorded incidents cannot be deleted; deleting removes rounds, players and
-  tournament rule sources, keeps games.
+- Tournaments with recorded incidents cannot be deleted; deletion is one transaction removing
+  rounds, games, players and tournament rule sources/rules/embeddings.
+- The ruleset is snapshotted on each incident at submit time; tournament edits apply only to new
+  reports.
 - Uploaded tournament regulations are `RuleSource`/`Rule` rows with `tournamentId`; the
   `Tournament.regulations` array stays empty.
 
@@ -55,21 +63,21 @@
 
 ## Tests / verification
 
-- `npx tsc --noEmit`, eslint (0 warnings), `npx vitest run` (32 files, 462 tests),
+- `npx tsc --noEmit`, eslint (0 warnings), `npx vitest run` (33 files, 472 tests after review fixes),
   `ALLOW_MISSING_MODEL=1 npm run build` — all pass.
 - New tests: repository CRUD + active store + v3→v5 migration (fake-indexeddb), round/board bulk
   creation and transitions, TournamentService, profile validation, ruleset derivation (no
   defaults), B.2 override in DT-002/DT-005/engine/store, report context step (1 tap, 2 taps,
   inline board, ad-hoc fallback, incomplete ruleset), search with active tournament, settings
   upload with tournamentId, home page, profile form.
-- An independent reviewer subagent was launched but was cut off by a rate limit; no review
-  findings were received. The coordinator will run the review.
+- The coordinator's independent review returned "merge after fixes"; M1–M3 and L1–L5 are fixed
+  with tests (snapshot vs later edit, legacy fallback, ad-hoc snapshot, edit warning, ad-hoc
+  confirm, load-error retry on report/home, empty-round validation, atomic delete/refusal).
 
 ## Known issues / limitations
 
 - Migration test starts from v3 (the latest schema on the base branch); there was no v4.
 - Ad-hoc reports still use date-based IDs (midnight split remains there).
-- Changing a tournament's ruleset affects later re-evaluations of its pending incidents.
 - Not implemented from §7 / domain-model: team format, FBO, board count, default time, clock
   model, tournament status; player rating/FIDE ID editing UI (only name in the UI).
 - Home recent-incidents loads the whole incident log and filters (fine at tournament scale).

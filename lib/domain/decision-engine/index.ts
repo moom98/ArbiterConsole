@@ -31,6 +31,11 @@ import {
 } from "@/lib/domain/services/position-analysis";
 import type { LlmAssistOutcome, LlmAssistPort } from "@/lib/domain/llm/ports";
 import { buildLlmDecision } from "@/lib/domain/llm/llm-decision";
+import {
+  FAIR_PLAY_ACTIONS,
+  FAIR_PLAY_CONCLUSION,
+  FAIR_PLAY_ESCALATION_REASON,
+} from "@/lib/domain/services/fair-play";
 
 export interface DecisionEngineDeps {
   /** 同一局面の自動判定に使う局面解析（未指定なら自動判定は利用不可） */
@@ -340,6 +345,19 @@ export class DecisionEngine {
     // 決定木の対象外（例: "other" を選んだ場合）。状況の記録がなければメモを求める
     if (!incident.description.trim())
       return this.ask(incident, [QUESTIONS.situationNote], rulesVersion);
+
+    // フェアプレーは LLM に送らず、事実記録と CA への報告のみ（§23, ADR-007）
+    if (incident.category === "fair-play")
+      return this.terminal(
+        incident,
+        {
+          kind: "manual-review",
+          conclusion: FAIR_PLAY_CONCLUSION,
+          actions: [...FAIR_PLAY_ACTIONS],
+          escalationReason: FAIR_PLAY_ESCALATION_REASON,
+        },
+        rulesVersion
+      );
 
     return {
       uncovered: true,

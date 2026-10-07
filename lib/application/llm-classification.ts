@@ -39,6 +39,16 @@ export async function classifyIncidentText(
     notice,
   });
 
+  // フェアプレー（不正の疑い・申告）と思われる記述は外部へ送信せず、端末内の分類のみ（§23）
+  const local = classifyByKeywords(input);
+  if (local?.category === "fair-play") {
+    return {
+      classification: local,
+      notice:
+        "フェアプレー関連の可能性があるため、端末内のキーワード分類のみを使用しています（AIへは送信しません）",
+    };
+  }
+
   const call = deps.call ?? callLlmApi;
   const res = await call("classify", { text: input }, deps);
   if (!res.ok) {

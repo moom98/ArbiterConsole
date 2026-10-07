@@ -202,6 +202,19 @@ export interface GamePenaltyHistory {
    * Penalty.playerColor は「ペナルティが作用する側」なので違反者の推定には使わない。
    */
   unknownOffender: PenaltyHistoryItem[];
+  /**
+   * 対局結果（ドロー・フラッグフォールによる結果など）。違反ではないため、
+   * 違反者ごとの履歴にも「違反者不明」にも入れない。
+   */
+  results: PenaltyHistoryItem[];
+}
+
+/** 違反へのペナルティではなく、対局結果を表す出力か */
+export function isResultOutcome(
+  penalty: Penalty,
+  decision: Pick<Decision, "treeId">
+): boolean {
+  return penalty.type === "draw" || decision.treeId === "DT-004-flag-fall";
 }
 
 /**
@@ -216,18 +229,25 @@ export function penaltyHistoryForGame(
   gameId: string
 ): GamePenaltyHistory {
   const illegal = IncidentCounter.illegalMoveHistory(records, gameId);
-  const buckets: Record<PlayerColor | "unknown", PenaltyHistoryItem[]> = {
+  const buckets: Record<
+    PlayerColor | "unknown" | "results",
+    PenaltyHistoryItem[]
+  > = {
     white: [],
     black: [],
     unknown: [],
+    results: [],
   };
   for (const record of records) {
     const { incident } = record;
     if (incident.gameId !== gameId) continue;
     const decision = decisionOf(record);
     if (!decision) continue;
-    const bucket = buckets[incident.playerColor ?? "unknown"];
+    const offenderBucket = buckets[incident.playerColor ?? "unknown"];
     for (const penalty of decision.penalties) {
+      const bucket = isResultOutcome(penalty, decision)
+        ? buckets.results
+        : offenderBucket;
       bucket.push({
         incidentId: incident.id,
         reportedAt: incident.reportedAt,
@@ -247,6 +267,7 @@ export function penaltyHistoryForGame(
     white: build("white"),
     black: build("black"),
     unknownOffender: buckets.unknown.sort(byTime),
+    results: buckets.results.sort(byTime),
   };
 }
 

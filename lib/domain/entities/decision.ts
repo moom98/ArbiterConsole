@@ -37,8 +37,11 @@ export interface RuleCitation {
 
 export interface Penalty {
   type: PenaltyType;
-  /** ペナルティ（またはその効果）の対象となるプレーヤー */
-  playerColor: PlayerColor;
+  /**
+   * ペナルティ（またはその効果）の対象となるプレーヤー。
+   * 対局結果（type: "draw" など特定のプレーヤーに作用しない結果）では省略する。
+   */
+  playerColor?: PlayerColor;
   timeAdjustmentSeconds?: number;
   description: string;
 }

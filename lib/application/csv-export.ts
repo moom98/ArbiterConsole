@@ -89,7 +89,10 @@ function incidentRow(entry: IncidentLogEntry): string[] {
       .join("; "),
     penalties
       .filter((p) => p.timeAdjustmentSeconds !== undefined)
-      .map((p) => `${COLOR_LABELS[p.playerColor]} ${p.timeAdjustmentSeconds}`)
+      .map(
+        (p) =>
+          `${p.playerColor ? COLOR_LABELS[p.playerColor] : ""} ${p.timeAdjustmentSeconds}`
+      )
       .join("; "),
     (decision?.sources ?? [])
       .map((s) => (s.edition ? `${s.article} (${s.edition})` : s.article))

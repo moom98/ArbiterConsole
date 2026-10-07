@@ -200,7 +200,6 @@ export class FlagFallTree {
         penalties: [
           {
             type: "draw",
-            playerColor: flagged,
             description: "ドロー（相手がメイト不可能な局面）",
           },
         ],
@@ -382,7 +381,6 @@ export class FlagFallTree {
         penalties: [
           {
             type: "draw",
-            playerColor: "white",
             description: "ドロー（両フラッグ・順序不明・最終ピリオド）",
           },
         ],

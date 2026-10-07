@@ -207,13 +207,7 @@ export class RepetitionTree {
           "結果を記録する",
         ],
         intervention: "immediate",
-        penalties: [
-          {
-            type: "draw",
-            playerColor: claimant,
-            description: "ドロー（三回同一局面）",
-          },
-        ],
+        penalties: [{ type: "draw", description: "ドロー（三回同一局面）" }],
         sources: cite(
           "FIDE_9_2",
           "FIDE_9_2_3",
@@ -353,13 +347,7 @@ export class RepetitionTree {
           "結果を記録する",
         ],
         intervention: "immediate",
-        penalties: [
-          {
-            type: "draw",
-            playerColor: "white",
-            description: "ドロー（五回同一局面）",
-          },
-        ],
+        penalties: [{ type: "draw", description: "ドロー（五回同一局面）" }],
         sources: cite(
           "FIDE_9_6",
           "FIDE_9_2_3",
@@ -444,13 +432,7 @@ export class RepetitionTree {
           "結果を記録する",
         ],
         intervention: "immediate",
-        penalties: [
-          {
-            type: "draw",
-            playerColor: "white",
-            description: "ドロー（75手ルール）",
-          },
-        ],
+        penalties: [{ type: "draw", description: "ドロー（75手ルール）" }],
         sources: cite(
           "FIDE_9_6",
           "MANUAL_9_6_INTERVENE",

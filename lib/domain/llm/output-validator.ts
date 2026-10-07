@@ -59,20 +59,36 @@ const MAX_CITATIONS = 10;
 const MAX_QUOTE = 3000;
 const MAX_SHORT = 500;
 const MAX_MISSING = 10;
-/** 正規化後の引用の最小文字数（"the" のような自明な一致を防ぐ） */
-const MIN_QUOTE_CHARS = 8;
-/** 省略記号で区切った各断片の最小文字数（短い断片の寄せ集めによる偶然の一致を防ぐ） */
-const MIN_FRAGMENT_CHARS = 4;
+/**
+ * 引用の最小文字数（正規化後）。日本語を含む断片は文字あたりの情報量が多いため短めにする。
+ * - 連続した引用: 20 文字（日本語 10 文字）以上
+ * - 省略記号で2つに分けた引用: 各断片 15 文字（日本語 8 文字）以上
+ */
+const MIN_CONTIGUOUS_CHARS = 20;
+const MIN_CONTIGUOUS_CHARS_JA = 10;
+const MIN_FRAGMENT_CHARS = 15;
+const MIN_FRAGMENT_CHARS_JA = 8;
+/** 省略できる本文の最大文字数（正規化後） */
+const MAX_ELLIPSIS_GAP = 200;
+/** 引用の直後を確認する文字数（日本語の否定は述語の後ろに付くため） */
+const TRAILING_CONTEXT = 8;
 const MAX_TIME_ADJUSTMENT_SECONDS = 3600;
 
 const COLORS: readonly PlayerColor[] = ["white", "black"];
 
+/** AI 参考情報のみで確定させない重大な結果（必ず CA への確認を推奨する） */
+export const SEVERE_PENALTIES: readonly PenaltyType[] = [
+  "game-loss",
+  "both-lose",
+  "expulsion",
+];
+
 /** 推測的な表現（日本語） */
 const SPECULATIVE_JA =
-  /たぶん|多分|おそらく|恐らく|と思われ|と思い|と思う|かもしれ|可能性があ|可能性もあ|でしょう|だろう|と推測|と考えられ|一般的に|ではないか|と推定/;
+  /たぶん|多分|おそらく|恐らく|と思われ|と思い|と思う|かもしれ|可能性があ|可能性もあ|恐れがあ|おそれがあ|でしょう|だろう|と推測|と考えられ|と見られ|とみられ|ようだ|ようです|一般的に|ではないか|と推定/;
 /** 推測的な表現（英語） */
 const SPECULATIVE_EN =
-  /\b(probably|likely|unlikely|might|maybe|perhaps|possibly|presumably|apparently|seems?|seemingly|generally|usually|i think|i believe|i guess)\b/i;
+  /\b(probably|likely|unlikely|might|may|could|maybe|perhaps|possibly|presumably|apparently|appears?|seems?|seemingly|generally|usually|i think|i believe|i guess)\b/i;
 
 /** 推測的な表現を検出する（一致した語を返す） */
 export function findSpeculativeLanguage(text: string): string | null {
@@ -80,6 +96,11 @@ export function findSpeculativeLanguage(text: string): string | null {
   if (ja) return ja[0];
   const en = SPECULATIVE_EN.exec(text);
   return en ? en[0] : null;
+}
+
+/** 省略記号の表記揺れを "…" に統一する（NFKC 後の "..." / "⋯" / "．．．" 等） */
+function unifyEllipsis(text: string): string {
+  return text.normalize("NFKC").replace(/\.{3,}|⋯|…+/g, "…");
 }
 
 /**
@@ -97,26 +118,73 @@ export function normalizeForQuote(text: string): string {
     .replace(/\s+/g, "");
 }
 
+const CJK = /[぀-ヿ㐀-鿿]/;
+
 /**
- * 引用が条文本文に含まれるか。省略記号（… / ...）で区切られた断片は、
- * それぞれが本文中にこの順序で現れる必要がある。
+ * 省略した本文に含まれると意味が反転しうる語（否定・禁止・例外）。
+ * 正規化後（小文字・空白除去）の文字列に対して判定するため、英語は部分一致になる
+ * （"another" 等の誤検出は安全側＝不合格として扱う）。
+ */
+const NEGATION_IN_GAP =
+  /not|never|n't|cannot|except|unless|however|prohibit|forbid|ない|ず|ません|禁止|禁じ|除く|除き|ただし|但し|例外/;
+/** 引用の直後に続くと、引用部分の意味を反転させる日本語の否定・禁止 */
+const NEGATION_AFTER =
+  /^(?:し|せ|さ)?(?:てはならな|てはいけな|ない|ず|ません|禁止|禁じ)/;
+
+function minChars(fragment: string, ja: number, other: number): number {
+  return CJK.test(fragment) ? ja : other;
+}
+
+/**
+ * 引用が条文本文と一致するか（意味の反転を防ぐため厳格に判定する）。
+ * - 連続した引用（省略なし）: 20 文字（日本語 10 文字）以上
+ * - 省略記号は1か所まで（断片は2つまで）。各断片 15 文字（日本語 8 文字）以上、
+ *   省略した本文は 200 文字以内で、否定・禁止・例外の語を含まないこと
+ * - 引用の直後が否定・禁止で続く場合（例:「所持」→「所持してはならない」）は不一致
  */
 export function quoteMatchesArticle(quote: string, content: string): boolean {
   const body = normalizeForQuote(content);
-  const fragments = quote
-    .split(/…|⋯|\.\.\./)
+  const fragments = unifyEllipsis(quote)
+    .split("…")
     .map(normalizeForQuote)
     .filter((f) => f.length > 0);
-  const total = fragments.reduce((n, f) => n + f.length, 0);
-  if (fragments.length === 0 || total < MIN_QUOTE_CHARS) return false;
-  if (fragments.some((f) => f.length < MIN_FRAGMENT_CHARS)) return false;
-  let from = 0;
-  for (const fragment of fragments) {
-    const at = body.indexOf(fragment, from);
-    if (at < 0) return false;
-    from = at + fragment.length;
+  if (fragments.length === 0 || fragments.length > 2) return false;
+
+  if (fragments.length === 1) {
+    const [f] = fragments;
+    if (f.length < minChars(f, MIN_CONTIGUOUS_CHARS_JA, MIN_CONTIGUOUS_CHARS))
+      return false;
+  } else if (
+    fragments.some(
+      (f) => f.length < minChars(f, MIN_FRAGMENT_CHARS_JA, MIN_FRAGMENT_CHARS)
+    )
+  ) {
+    return false;
   }
-  return true;
+
+  const negatedAfter = (end: number) =>
+    NEGATION_AFTER.test(body.slice(end, end + TRAILING_CONTEXT));
+
+  // すべての出現位置を試す（最初の出現だけでは誤って不一致になる場合がある）
+  const [first, second] = fragments;
+  for (
+    let at = body.indexOf(first);
+    at >= 0;
+    at = body.indexOf(first, at + 1)
+  ) {
+    const firstEnd = at + first.length;
+    if (second === undefined) {
+      if (!negatedAfter(firstEnd)) return true;
+      continue;
+    }
+    const at2 = body.indexOf(second, firstEnd);
+    if (at2 < 0) continue;
+    const gap = body.slice(firstEnd, at2);
+    if (gap.length > MAX_ELLIPSIS_GAP || NEGATION_IN_GAP.test(gap)) continue;
+    if (negatedAfter(at2 + second.length)) continue;
+    return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -436,6 +504,8 @@ export function validateLlmDecisionDraft(
   }
 
   // 4. 推測的な表現の禁止（§14）
+  // 不確実性は confidence / escalationRecommended / missingInformation（事実の列挙）で表し、
+  // 文章中のぼかし表現は使わせない（ADR-007）。自由記述欄はすべて検査する
   const texts: Array<[string, string]> = [
     ["conclusion", draft.conclusion],
     ...draft.actions.map((a, i) => [`actions[${i}]`, a] as [string, string]),
@@ -443,6 +513,15 @@ export function validateLlmDecisionDraft(
       (p, i) =>
         [`penalties[${i}].description`, p.description] as [string, string]
     ),
+    ...draft.citations.map(
+      (c, i) => [`citations[${i}].relevance`, c.relevance] as [string, string]
+    ),
+    ...draft.missingInformation.map(
+      (m, i) => [`missingInformation[${i}]`, m] as [string, string]
+    ),
+    ...(draft.escalationReason
+      ? [["escalationReason", draft.escalationReason] as [string, string]]
+      : []),
   ];
   for (const [path, text] of texts) {
     const hit = findSpeculativeLanguage(text);
@@ -465,6 +544,19 @@ export function validateLlmDecisionDraft(
     draft.escalationReason =
       draft.escalationReason ?? "フェアプレー事象はCAの判断が必要です";
     adjustments.push("フェアプレー事象のためCAへの確認を推奨にしました");
+  }
+  // 重大な結果（負け・両者負け・除外）は AI 参考情報のみで確定させない
+  if (
+    draft.penalties.some((p) => SEVERE_PENALTIES.includes(p.type)) &&
+    !draft.escalationRecommended
+  ) {
+    draft.escalationRecommended = true;
+    draft.escalationReason =
+      draft.escalationReason ??
+      "負け・除外などの重大な結果はCAの確認が必要です";
+    adjustments.push(
+      "重大な結果（負け・除外）を含むためCAへの確認を推奨にしました"
+    );
   }
   if (draft.confidence === "low" && !draft.escalationRecommended) {
     draft.escalationRecommended = true;

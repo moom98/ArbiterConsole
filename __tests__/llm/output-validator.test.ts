@@ -198,22 +198,90 @@ describe("validateLlmDecisionDraft", () => {
       expect(normalizeForQuote(" A\nb　C ")).toBe("abc");
     });
 
-    it("accepts ellipsis fragments only in order", () => {
+    it("accepts one ellipsis with long fragments, in order, within the gap limit", () => {
       expect(
         quoteMatchesArticle(
-          "During play … in the playing venue",
+          "During play, a player is … specifically approved by the arbiter",
+          ARTICLE_FIDE_11_3.content
+        )
+      ).toBe(false); // 省略部分に "forbidden" を含む（意味の反転を防ぐ）
+      expect(
+        quoteMatchesArticle(
+          "the regulations of an event … stored in a player's bag",
+          ARTICLE_FIDE_11_3.content
+        )
+      ).toBe(true);
+      // 全角の省略記号（．．．）も正規化してから分割する
+      expect(
+        quoteMatchesArticle(
+          "the regulations of an event．．．stored in a player's bag",
           ARTICLE_FIDE_11_3.content
         )
       ).toBe(true);
       expect(
         quoteMatchesArticle(
-          "in the playing venue ... During play, a player",
+          "stored in a player's bag ... the regulations of an event",
           ARTICLE_FIDE_11_3.content
         )
       ).toBe(false);
-      // 短い断片の寄せ集めは一致とみなさない
+    });
+
+    it("rejects more than one ellipsis and short fragments", () => {
+      expect(
+        quoteMatchesArticle(
+          "the regulations of an event … stored in a player's bag … completely switched off",
+          ARTICLE_FIDE_11_3.content
+        )
+      ).toBe(false);
       expect(
         quoteMatchesArticle("D … p … a … e … v", ARTICLE_FIDE_11_3.content)
+      ).toBe(false);
+      expect(
+        quoteMatchesArticle(
+          "During play … the playing venue",
+          ARTICLE_FIDE_11_3.content
+        )
+      ).toBe(false);
+      expect(quoteMatchesArticle("electronic", ARTICLE_FIDE_11_3.content)).toBe(
+        false
+      );
+    });
+
+    it("rejects stitched quotes that invert the meaning (English negation in the gap)", () => {
+      const content =
+        "In this case the arbiter shall not declare the game lost, but shall add two minutes.";
+      expect(
+        quoteMatchesArticle(
+          "In this case the arbiter shall … declare the game lost",
+          content
+        )
+      ).toBe(false);
+      expect(
+        quoteMatchesArticle("the arbiter shall declare the game lost", content)
+      ).toBe(false);
+    });
+
+    it("rejects Japanese quotes cut before a negation / prohibition", () => {
+      const content =
+        "競技者は、対局中に会場内で電子機器を所持してはならない。ただし大会規定で認める場合を除く。";
+      expect(
+        quoteMatchesArticle("競技者は、対局中に会場内で電子機器を所持", content)
+      ).toBe(false);
+      expect(
+        quoteMatchesArticle("競技者は、対局中に…電子機器を所持…", content)
+      ).toBe(false);
+      expect(
+        quoteMatchesArticle(
+          "競技者は、対局中に会場内で電子機器を所持してはならない",
+          content
+        )
+      ).toBe(true);
+      // 省略部分に「ただし」「除く」（例外）を含む
+      expect(
+        quoteMatchesArticle(
+          "電子機器を所持してはならない。…場合を除く。",
+          content
+        )
       ).toBe(false);
     });
   });
@@ -230,6 +298,30 @@ describe("validateLlmDecisionDraft", () => {
       expect(errorsOf(validDraft(override))).toMatch(/推測的な表現/);
     });
 
+    it.each([
+      [
+        "citations[0].relevance",
+        {
+          citations: [
+            { ...validDraft().citations[0], relevance: "適用される恐れがある" },
+            validDraft().citations[1],
+          ],
+        },
+      ],
+      [
+        "missingInformation[0]",
+        { missingInformation: ["電源が入っていたようだ"] },
+      ],
+      ["escalationReason", { escalationReason: "The device could be allowed" }],
+      ["actions[0]", { actions: ["The arbiter may declare the game lost"] }],
+      ["conclusion", { conclusion: "違反と見られる。" }],
+      ["conclusion", { conclusion: "It appears the player loses." }],
+    ])("scans every free-text field: %s", (field, override) => {
+      expect(errorsOf(validDraft(override))).toContain(
+        `${field}: 推測的な表現`
+      );
+    });
+
     it("rejects speculative wording in a penalty description", () => {
       const draft = validDraft();
       (draft.penalties as Array<Record<string, unknown>>)[0].description =
@@ -243,6 +335,8 @@ describe("validateLlmDecisionDraft", () => {
         findSpeculativeLanguage("The arbiter shall stop the clocks")
       ).toBeNull();
       expect(findSpeculativeLanguage("Mighty")).toBeNull();
+      expect(findSpeculativeLanguage("The mayor arrived")).toBeNull();
+      expect(findSpeculativeLanguage("couldron")).toBeNull();
     });
   });
 
@@ -254,6 +348,28 @@ describe("validateLlmDecisionDraft", () => {
         expect(r.draft.confidence).toBe("medium");
         expect(r.adjustments.join()).toMatch(/medium/);
       }
+    });
+
+    it.each(["game-loss", "both-lose", "expulsion"])(
+      "forces CA escalation for a severe penalty (%s)",
+      (type) => {
+        const draft = validDraft();
+        (draft.penalties as Array<Record<string, unknown>>)[0].type = type;
+        const r = validate(draft);
+        expect(r.valid).toBe(true);
+        if (r.valid) {
+          expect(r.draft.escalationRecommended).toBe(true);
+          expect(r.draft.intervention).toBe("consult-ca");
+          expect(r.adjustments.join()).toMatch(/重大な結果/);
+        }
+      }
+    );
+
+    it("does not force escalation for a warning", () => {
+      const draft = validDraft();
+      (draft.penalties as Array<Record<string, unknown>>)[0].type = "warning";
+      const r = validate(draft);
+      expect(r.valid && r.draft.escalationRecommended).toBe(false);
     });
 
     it("forces escalation and consult-ca for low confidence", () => {

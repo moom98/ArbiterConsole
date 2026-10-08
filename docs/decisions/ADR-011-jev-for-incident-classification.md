@@ -1,6 +1,6 @@
 # ADR-011: TypeSafe AI Jev for Incident Classification (provider-switchable)
 
-**Status:** Accepted (the direction). The user answered Q1–Q3 on 2026-10-08. The catalogue content (Q4) is under the user's review. Not implemented.
+**Status:** Accepted (the direction). The user answered Q1–Q3 and Q5, and reviewed the catalogue, on 2026-10-08. The revised catalogue is under re-review. Not implemented.
 
 **Date:** 2026-10-08
 
@@ -59,6 +59,17 @@
    - Decision Trees take priority;
    - the client falls back to keywords on any failure;
    - the access token, rate limits and daily cap apply.
+
+### Superseded and extended (2026-10-08, after the user's review)
+
+- **Data protection** (item 6 above) now applies to every external AI route, Gemini included. See [ADR-012](./ADR-012-external-ai-data-protection.md). Its main points:
+  - a three-state, multi-layer Sensitive Gate, separate from PII redaction;
+  - the server rejects instead of rewriting;
+  - false negatives are measured first.
+- **Missing information** (item 5 above) is replaced by the **fact model** in [ADR-013](./ADR-013-fact-model.md).
+  - The Decision Tree decides the required facts, and Jev only checks "explicitly stated?".
+  - Presence never fills an answer.
+- **Thresholds** (item 4 above) are **calibrated per model** from evaluation data. A model without calibration runs in uncalibrated mode: low confidence, no prefill, all facts missing.
 
 ## Consequences
 

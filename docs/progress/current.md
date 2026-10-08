@@ -168,15 +168,24 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 ## Unresolved questions
 
-- **Jev (TypeSafe AI) for classification (2026-10-08, design only):**
-  - See `docs/design/jev-classifier-design.md` and ADR-011 (Accepted direction).
-  - Q1–Q3 were answered:
-    - classification only;
-    - an API key exists;
-    - send only a de-identified semantic state and never sensitive reports, without relying on ZDR (§4.4).
+- **Jev (TypeSafe AI) for classification, and external-AI data protection (2026-10-08, design only).**
+  - **Design and ADRs:**
+    - `docs/design/jev-classifier-design.md` (ADR-011)
+    - `docs/design/external-ai-data-protection.md` (ADR-012): Sensitive Gate and PII redaction for **all** external AI, Gemini included
+    - `docs/design/fact-model.md` (ADR-013): the Decision Tree decides the required facts, Jev only checks "explicitly stated?", unknown answers, calibrated thresholds
+    - catalogue: `docs/design/jev-missing-info-catalog.md`
+  - **User decisions:**
+    - Q1: classification only;
+    - Q2: an API key exists;
+    - Q3: de-identified minimal state, no sensitive data, no ZDR;
+    - Q5: de-identify Gemini too;
+    - the catalogue review: 12 points, all reflected.
   - **Still open:**
-    - Q4: the user is reviewing `docs/design/jev-missing-info-catalog.md` (the catalogue and the sensitive terms);
-    - Q5: whether to de-identify the reasoning route too.
+    - the catalogue re-review (the 要確認 items, the DT question rewording, the B/C/O levels);
+    - Q-DP1: no AI reasoning for sensitive incidents?
+    - Q-DP2: the review of the doubtful vocabulary;
+    - Q-F1: value suggestion (not planned);
+    - Q-F2: the 0.97 precision target.
   - No code has been changed yet.
   - The key must never go into `.env*` (`cf:deploy` refuses to run). Keep it in `~/.config/arbiter-console/typesafe.key` for J0 and J3.
 
@@ -200,9 +209,11 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 2. **Follow-ups found during deployment prep:**
    - Semantic search: done with ADR-010. Next, tune `vectorMinSimilarity` on real PDFs.
    - Upgrade to Next.js 15.5+/16 and the current OpenNext adapter. Next 14 is EOL.
-3. **Jev classifier (ADR-011):** after the Q4 review, implement the steps in design §10 in order:
+3. **Jev classifier and data protection (ADR-011/012/013):** after the catalogue re-review, implement the steps in jev-classifier-design §10 in order (J0, J1a data protection, J1b fact model, J1c Jev, J2, J3):
    - J0: check the official API with a real key;
-   - J1: port, adapter and domain thresholds, with the default provider kept on `gemini`;
+   - J1a: data protection for all routes;
+   - J1b: the fact model, with `unknown` in every DT and `resolveUnknown`;
+   - J1c: the Jev port, adapter, calibrated parser and `/api/llm/facts`, with the default provider kept on `gemini`;
    - J2: UI;
    - J3: Japanese evaluation, then the production switch by env.
 4. Later, if the user wants:

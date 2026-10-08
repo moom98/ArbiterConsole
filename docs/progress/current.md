@@ -1,6 +1,6 @@
 # Current Progress
 
-**Last updated:** 2026-10-08 (J1b-6)
+**Last updated:** 2026-10-08 (J1b-7)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
@@ -79,13 +79,17 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 - **ADR-007:** Gemini via server route, plus its access control, rate limit, daily cap, deadline and fair-play rules.
 - **ADR-008:** the round checklist.
   - Templates are code, and customisation stores references to them.
-  - Dexie v7. v6 is unused, and future schema versions must be ≥ 8.
+  - Dexie v7. v6 is unused. v8 (J1b-7) converts `tournaments.timeControl` to periods. Future schema versions must be ≥ 9.
 - **ADR-014 §1/§2 (J1b-5):** DT-005 Draw Claim (threefold + 50 moves, id kept as `DT-005-repetition`), DT-006 Automatic Draw (`DT-006-automatic-draw`); the side to move from `lastMover` or the confirmed history, never the clock.
 - **ADR-014 §6 (J1b-6):** DT-007 Touch Move (`DT-007-touch-move`).
   - Subtype `touch-move` in the illegal-move category, routed before DT-001/002/003.
   - Decides which piece must be moved or captured: 4.3 / 4.4 / 4.5, with the FEN through the port's `legalMoves`, otherwise steps to check on the board.
   - Never sets a penalty (12.9 discretion).
   - Violations (`Decision.touchMoveViolation`) are counted apart from 7.5 illegal moves (`IncidentCounter.touchMoveViolationsByColor`).
+- **ADR-014 §7 (J1b-7):** `TimeControl.periods` (`lib/domain/services/time-control.ts`), Dexie v8, `RulesetSnapshot.timeControl`.
+  - Every legacy `{ initialMinutes, incrementSeconds }` is `periodsIncomplete` until the arbiter confirms the periods in the profile form (the old form could not hold a second period).
+  - DT-004 `lastPeriod`: an explicit answer wins; the setting only fills unanswered or unknown, and only for a confirmed single period.
+  - FIDE 8.4 in `assessRecordingObligation`: three-valued; a delay never confirms the exemption.
 - **ADR-015:** mate-possibility search in infrastructure (own 0x88 generator + best-first portfolio, Web Worker, 1.5 s), result stored on the incident and re-verified by the domain through `ChessPositionPort` every time. A search bug can only cause "unknown".
 - **ADR-009:** Cloudflare Workers through OpenNext.
   - Next.js 14.2.35 with `@opennextjs/cloudflare@~1.15.1`. Do not bump to 1.16+ without moving to Next 15.5+/16.
@@ -102,7 +106,7 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `lib/domain/decision-engine/index.ts`
   - `lib/domain/decision-trees/` (draw: `draw-shared.ts`, `dt-005-draw-claim.ts`, `dt-006-automatic-draw.ts`; touch move: `dt-007-touch-move.ts`)
   - `lib/domain/llm/` (output validator, quote match, keyword classifier, ports)
-  - `lib/domain/services/` (incident-counter, touch-move, mate-material, mate-possibility, game-history, position-analysis, fair-play, round-checklist, round-planning, game-context, …)
+  - `lib/domain/services/` (incident-counter, touch-move, mate-material, mate-possibility, game-history, time-control, position-analysis, fair-play, round-checklist, round-planning, game-context, …)
   - `lib/domain/rules/citations.ts`
 - **Application:** `lib/application/` (rule-ingestion, rule-library, csv-export, llm-classification, round-checklist, tournament-management)
 - **Infrastructure:**
@@ -124,6 +128,15 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `scripts/check-cf-env.mjs` (`cf:build` env-file guard)
 
 ## Tests and verification performed
+
+**J1b-7 time control periods (2026-10-08, `feature/fact-catalog`):**
+
+- tsc is clean.
+- eslint reports 0 problems.
+- 64 files / 1146 tests pass, including the new `__tests__/time-control.test.ts` (it migrates a real v7 Dexie DB to v8).
+- `npm run build` succeeds.
+- FIDE 8.1.1 and 8.4 citations were checked verbatim against the PDF (printed p.29).
+- Review: FIX REQUIRED (1 must-fix: legacy "90+30" became a single last period and could give a wrong III.3.1.2 draw; 6 should-fix) → fixed → re-review MERGE. See `milestones/j1b-7-time-control-periods.md`.
 
 **J1b-6 touch move (2026-10-08, `feature/fact-catalog`):**
 
@@ -197,6 +210,10 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 ## Known issues
 
+- **J1b-7:**
+  - The move number is not wired in, so multi-period DT-004 still asks `lastPeriod`.
+  - The 8.4 service (`assessRecordingObligation`) and `deriveTimeControlFacts` have no caller yet (J1c/J2).
+  - Existing tournaments show a "confirm periods" banner in the profile form until the arbiter confirms them.
 - **J1b-6:**
   - Switching the subtype away from touch-move leaves stale `touchMoveFacts` on the Incident (ignored by decisions, still stored).
   - These unknown answers give manual review, because the other branch needs an unanswered question (the J1b-2 limitation):
@@ -316,7 +333,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
      - J1b-6: DT-007 touch move and counting. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-6-touch-move.md`.
        - Quick report "タッチムーブ（触れた駒）" and the 7.5 `subtype` option 「触れた駒の規則（タッチムーブ）」 (not enumerated on unknown).
        - Catalogue: `tch.touched` and `tch.claimed-by-opponent` became conditional; new `tch.changed-after`.
-     - J1b-7: `TimeControl` periods;
+     - J1b-7: `TimeControl` periods. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-7-time-control-periods.md`.
    - J1c: the Jev port, adapter, calibrated parser and `/api/llm/facts`, with the default provider kept on `gemini`;
    - J2: UI;
    - J3: Japanese evaluation, then the production switch by env.
@@ -329,8 +346,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 1. Read `CLAUDE.md`, this file, `docs/progress/milestones/*`, then the design docs and ADRs for the next task.
 2. The current work branch is `feature/fact-catalog` (pushed to `origin`, latest J1b-6; `main` has the deployed app). Check `git log --oneline -15` on it, and `git worktree list`.
-   - **In progress:** J1b-7, `TimeControl` periods (ADR-014 §7, fact-model §3.6). Code and tests are committed on `feature/fact-catalog` (WIP commits `fd38586`, `a9cfed7`): `lib/domain/services/time-control.ts`, Dexie v8, `RulesetSnapshot.timeControl`, DT-004 `lastPeriod` from a single period, the profile form. **Remaining:** the separate reviewer pass (+ fixes, re-review), `milestones/j1b-7-time-control-periods.md`, ADR-014 status, fact-model §3.6 "Implementation (J1b-7)", and this file.
-   - **Then:** ADR-014 §3 (`game.end-event`), then J1c.
+   - **Next task:** ADR-014 §3, `game.end-event` and `game.record-state`: derive `gameEnded` (DT-001…003) and `gameEndedBeforeFlag` (DT-004) from the observed end event; a handshake alone never ends the game. Then J1c (Jev port, adapter, `/api/llm/facts`). J1c should also wire `deriveTimeControlFacts` and `assessRecordingObligation`.
    - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/j1b-N-*.md` and update this file.
    - In a nested worktree, run eslint as `npx eslint --no-eslintrc -c .eslintrc.json --ext .ts,.tsx app components lib __tests__`.
 3. Do not edit `docs/requirements/product-requirements.md` for implementation convenience.

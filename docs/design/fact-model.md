@@ -298,6 +298,26 @@ See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §4.
 - The current period is derived from the move number: from `game.history`, or the fact `ss.move-number`.
 - The current increment decides whether 8.4 applies. The remaining time is compared with the 5-minute limit in code.
 
+**Implementation (J1b-7, 2026-10-08):**
+
+- **Type:** `TimeControl = { periods: { moves?, minutes, incrementSeconds }[], delaySeconds?, periodsIncomplete?, additionalTimeAfterMove? (deprecated) }`. Only the last period has no `moves`. At most 5 periods.
+- **Service** `lib/domain/services/time-control.ts` (pure):
+  - `validateTimeControl`, `buildTimeControl`, `normalizeTimeControl` (legacy → current, used by Dexie v8 and at every read);
+  - `currentPeriod(tc, moveNumber)`: move N belongs to period k while N ≤ the sum of the earlier periods' moves (move 40 is still period 1 of "40 moves / 90 min"); a single period needs no move number;
+  - `deriveTimeControlFacts` → `ss.current-period`, `ss.increment`, `ct.last-period` for `FactContext.derivedValues`;
+  - `assessRecordingObligation` (8.4, three-valued: exempt / required / unknown, plus not-assessed outside Standard).
+- **8.4 decisions:**
+  - exactly 5:00 is not "less than five minutes";
+  - an increment of exactly 30 s means recording is required;
+  - "below five in the period" keeps the exemption after the clock goes back above 5:00;
+  - **a delay never confirms the exemption** (8.4 speaks only of added time): the result is unknown with `delayTreatment`.
+- **Legacy data (review M1):** the old form had no field for a second period, so "40/90 → 30" events were stored as "90+30". **Every legacy value is `periodsIncomplete`** until the arbiter confirms the periods in the profile form. Until then `lastPeriod` is asked.
+- **DT-004 `lastPeriod`:** an explicit answer wins. The setting is used only when the question is unanswered or answered "unknown", and only for a confirmed single period. Multi-period controls still ask, because the move number is not wired into the flag-fall flow.
+- **Snapshot:** `RulesetSnapshot.timeControl` (normalized copy). Older snapshots have none, so they ask.
+- **Not wired yet (J1c/J2):**
+  - `deriveTimeControlFacts` with a move number from `game.history` or `ss.move-number`;
+  - `assessRecordingObligation` (the scoresheet category has no tree; it will feed the fact plan / reasoning request).
+
 ### 3.7 Mate possibility (FIDE 6.9)
 
 See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §5.

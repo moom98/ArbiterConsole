@@ -1,6 +1,6 @@
 # Current Progress
 
-**Last updated:** 2026-10-08 (J1b-7)
+**Last updated:** 2026-10-08 (J1b-8)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
@@ -90,6 +90,11 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - Every legacy `{ initialMinutes, incrementSeconds }` is `periodsIncomplete` until the arbiter confirms the periods in the profile form (the old form could not hold a second period).
   - DT-004 `lastPeriod`: an explicit answer wins; the setting only fills unanswered or unknown, and only for a confirmed single period.
   - FIDE 8.4 in `assessRecordingObligation`: three-valued; a delay never confirms the exemption.
+- **ADR-014 §3 (J1b-8):** game end from the observed event.
+  - Questions `gameEndEvent` (DT-001…003) and `endedBeforeFlag` (DT-004) replace the yes/no `gameEnded` / `gameEndedBeforeFlag`; the booleans are derived in `lib/domain/services/game-end.ts`. No handshake option.
+  - Stored legacy booleans are stripped by the engine and asked again.
+  - Optional record-only `gameRecordState`; it never changes the ruling.
+  - Checkmate/stalemate "result stands" asks whether the producing move was legal (FIDE 5.1.1 / 5.2.1), confidence medium.
 - **ADR-015:** mate-possibility search in infrastructure (own 0x88 generator + best-first portfolio, Web Worker, 1.5 s), result stored on the incident and re-verified by the domain through `ChessPositionPort` every time. A search bug can only cause "unknown".
 - **ADR-009:** Cloudflare Workers through OpenNext.
   - Next.js 14.2.35 with `@opennextjs/cloudflare@~1.15.1`. Do not bump to 1.16+ without moving to Next 15.5+/16.
@@ -128,6 +133,15 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `scripts/check-cf-env.mjs` (`cf:build` env-file guard)
 
 ## Tests and verification performed
+
+**J1b-8 game end (2026-10-08, `feature/fact-catalog`):**
+
+- tsc is clean.
+- eslint reports 0 errors.
+- 66 files / 1184 tests pass, including the new `__tests__/game-end.test.ts` and `game-end.component.test.tsx`.
+- `npm run build` succeeds.
+- FIDE 5.1.1 and 5.2.1 citations were checked verbatim against the PDF (printed p.19).
+- Review: MERGE with 3 should-fix (illegal mating move answered as checkmate, UI test, stale doc) → fixed → re-review. See `milestones/j1b-8-game-end.md`.
 
 **J1b-7 time control periods (2026-10-08, `feature/fact-catalog`):**
 
@@ -210,6 +224,9 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 ## Known issues
 
+- **J1b-8:**
+  - Whether the mating/stalemating move was legal is the arbiter's check; there is no automatic check from `game.history` yet (J2).
+  - `game.record-state` is `conditional` in the catalogue while the DT question is optional; J1c must treat it as a non-blocking record fact.
 - **J1b-7:**
   - The move number is not wired in, so multi-period DT-004 still asks `lastPeriod`.
   - The 8.4 service (`assessRecordingObligation`) and `deriveTimeControlFacts` have no caller yet (J1c/J2).
@@ -329,7 +346,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
        - DT-005 Draw Claim: threefold (9.2) and the new 50-move claim (9.3, ≥ 100 plies at the target position); DT-006 Automatic Draw: fivefold and 75 moves.
        - `claimantHasMove` (clock) replaced by `lastMover`; `lastMoveCheckmate` folded into the 75-move result (`met-checkmate`).
        - Draw subtypes: the 8 kinds of ADR-014 §1. Changing the kind clears the stored check.
-     - ADR-014 §3 (`game.end-event` for `gameEnded` / `gameEndedBeforeFlag`) has no slice yet; do it before J1c or with J2;
+     - J1b-8: ADR-014 §3 game end (`game.end-event`, `ct.ended-before-flag`, `game.record-state`). **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-8-game-end.md`. ADR-014 is now fully implemented;
      - J1b-6: DT-007 touch move and counting. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-6-touch-move.md`.
        - Quick report "タッチムーブ（触れた駒）" and the 7.5 `subtype` option 「触れた駒の規則（タッチムーブ）」 (not enumerated on unknown).
        - Catalogue: `tch.touched` and `tch.claimed-by-opponent` became conditional; new `tch.changed-after`.
@@ -345,8 +362,8 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 ## Information a fresh Claude session needs to continue
 
 1. Read `CLAUDE.md`, this file, `docs/progress/milestones/*`, then the design docs and ADRs for the next task.
-2. The current work branch is `feature/fact-catalog` (pushed to `origin`, latest J1b-6; `main` has the deployed app). Check `git log --oneline -15` on it, and `git worktree list`.
-   - **Next task:** ADR-014 §3, `game.end-event` and `game.record-state`: derive `gameEnded` (DT-001…003) and `gameEndedBeforeFlag` (DT-004) from the observed end event; a handshake alone never ends the game. Then J1c (Jev port, adapter, `/api/llm/facts`). J1c should also wire `deriveTimeControlFacts` and `assessRecordingObligation`.
+2. The current work branch is `feature/fact-catalog` (pushed to `origin`, latest J1b-8; `main` has the deployed app). Check `git log --oneline -15` on it, and `git worktree list`.
+   - **Next task:** J1c (jev-classifier-design §10): the Jev port, adapter, calibrated parser and `/api/llm/facts`, with the default provider kept on `gemini`. J1c should also wire `deriveTimeControlFacts` and `assessRecordingObligation`, and treat `game.record-state` as a non-blocking record fact. J1a (data protection for all routes) is also still open; check jev-classifier-design §10 for the order.
    - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/j1b-N-*.md` and update this file.
    - In a nested worktree, run eslint as `npx eslint --no-eslintrc -c .eslintrc.json --ext .ts,.tsx app components lib __tests__`.
 3. Do not edit `docs/requirements/product-requirements.md` for implementation convenience.

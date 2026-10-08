@@ -43,10 +43,10 @@ describe("LLM incident flow (store + engine + port + IndexedDB)", () => {
   let apiResult: unknown;
   let call: ReturnType<typeof vi.fn>;
 
-  function makeStore(llm?: LlmAssistPort) {
+  function makeStore(llm?: LlmAssistPort, idPrefix = `llm${dbCounter}`) {
     return createIncidentStore({
       db,
-      providers: fixedProviders(`llm${dbCounter}`),
+      providers: fixedProviders(idPrefix),
       llm,
     });
   }
@@ -231,6 +231,63 @@ describe("LLM incident flow (store + engine + port + IndexedDB)", () => {
     await store.getState().retryEvaluation();
     expect(call).toHaveBeenCalledTimes(2);
     expect(store.getState().currentDecision?.generatedBy).toBe("llm");
+  });
+
+  it("retryIncident: an incident left awaiting confirmation is confirmed from the log in a later session", async () => {
+    const reporting = makeStore(makePort());
+    await reporting.getState().submitIncident({
+      context: CTX,
+      category: "player-behavior",
+      description: "黒のスマホが鳴った",
+      arbiterObserved: true,
+    });
+    const incidentId = reporting.getState().currentIncident!.id;
+    const awaiting = reporting.getState().currentDecision!;
+    expect(awaiting.llm?.status).toBe("awaiting-confirmation");
+
+    // 別のストア（アプリを開き直した状態）。確認するまで送らない
+    const log = makeStore(makePort(), `log${dbCounter}`);
+    const first = await log.getState().retryIncident(incidentId);
+    expect(first.ok).toBe(true);
+    expect(call).not.toHaveBeenCalled();
+    expect(log.getState().currentIncident?.id).toBe(incidentId);
+    expect(log.getState().externalAiConfirmation).not.toBeNull();
+
+    const sent = await log.getState().confirmExternalAiSend();
+    expect(sent.ok).toBe(true);
+    expect(call).toHaveBeenCalledTimes(1);
+    const d = log.getState().currentDecision!;
+    expect(d.generatedBy).toBe("llm");
+    expect((await db.incidents.get(incidentId))?.decisionId).toBe(d.id);
+  });
+
+  it("retryIncident: switching to another incident drops the pending confirmation; unknown ids fail", async () => {
+    const store = makeStore(makePort());
+    const ids: string[] = [];
+    for (const description of ["黒のスマホが鳴った", "白の時計が止まった"]) {
+      await store.getState().submitIncident({
+        context: CTX,
+        category: "player-behavior",
+        description,
+        arbiterObserved: true,
+      });
+      ids.push(store.getState().currentIncident!.id);
+    }
+    await store.getState().retryIncident(ids[0]);
+    expect(store.getState().externalAiConfirmation).not.toBeNull();
+    const pendingFirst = store.getState().externalAiConfirmation!;
+
+    await store.getState().retryIncident(ids[1]);
+    expect(store.getState().currentIncident?.id).toBe(ids[1]);
+    expect(store.getState().externalAiConfirmation?.approvalKey).not.toBe(
+      pendingFirst.approvalKey
+    );
+
+    const missing = await store.getState().retryIncident("no-such-incident");
+    expect(missing.ok).toBe(false);
+    expect(store.getState().currentIncident).toBeNull();
+    expect(store.getState().externalAiConfirmation).toBeNull();
+    expect(call).not.toHaveBeenCalled();
   });
 
   it("an approval is scoped to the incident and payload: follow-up answers and other incidents ask again", async () => {

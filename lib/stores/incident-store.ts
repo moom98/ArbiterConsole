@@ -95,6 +95,11 @@ export interface IncidentStore {
    * この Incident でアービターが確認済みの送信内容と同じなら、もう一度確認を求めずに送る
    */
   retryEvaluation: () => Promise<SubmitResult>;
+  /**
+   * 保存済みの Incident（例: インシデント履歴で選んだもの）を現在の Incident にして再評価する。
+   * 確認・再送の扱いは retryEvaluation と同じ（確認していない内容は送らず、確認を求める）
+   */
+  retryIncident: (incidentId: string) => Promise<SubmitResult>;
   /** アービターが確認した内容（externalAiConfirmation）で AI 参考情報を取得する（D13） */
   confirmExternalAiSend: () => Promise<SubmitResult>;
   reset: () => void;
@@ -278,6 +283,19 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
     /** アービターが確認した送信内容（Incident ごと。メモリ内だけ） */
     let approved: { incidentId: string; approvalKey: string } | null = null;
     setMateSearchPending = (pending) => set({ mateSearchPending: pending });
+    /** 確認済みの送信内容（同じ Incident のみ）を付けて再評価する */
+    async function reevaluate(
+      stored: Incident
+    ): Promise<{ incident: Incident; result: DecisionEngineResult }> {
+      const result = await evaluate(stored, {
+        approvalKey:
+          approved?.incidentId === stored.id ? approved.approvalKey : undefined,
+      });
+      return {
+        incident: (await db.incidents.get(stored.id)) ?? stored,
+        result,
+      };
+    }
     async function run(
       fn: () => Promise<{ incident: Incident; result: DecisionEngineResult }>,
       options: { clearPrevious: boolean }
@@ -393,19 +411,20 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
           async () => {
             const current = get().currentIncident;
             if (!current) throw new Error("再評価するIncidentがありません");
-            const stored = (await db.incidents.get(current.id)) ?? current;
-            const result = await evaluate(stored, {
-              approvalKey:
-                approved?.incidentId === stored.id
-                  ? approved.approvalKey
-                  : undefined,
-            });
-            return {
-              incident: (await db.incidents.get(stored.id)) ?? stored,
-              result,
-            };
+            return reevaluate((await db.incidents.get(current.id)) ?? current);
           },
           { clearPrevious: false }
+        ),
+
+      retryIncident: (incidentId) =>
+        run(
+          async () => {
+            const stored = await db.incidents.get(incidentId);
+            if (!stored) throw new Error("Incidentが見つかりません");
+            return reevaluate(stored);
+          },
+          // 別の Incident の判断・確認待ちの内容を残さない
+          { clearPrevious: get().currentIncident?.id !== incidentId }
         ),
 
       confirmExternalAiSend: () =>

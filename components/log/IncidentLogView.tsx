@@ -22,6 +22,10 @@ import {
 import { gameLabel } from "@/lib/application/incident-labels";
 import { db as defaultDb, type ArbiterDatabase } from "@/lib/infrastructure/db";
 import { loadIncidentLog } from "@/lib/infrastructure/db/incident-repository";
+import {
+  useIncidentStore,
+  type createIncidentStore,
+} from "@/lib/stores/incident-store";
 import { Dialog } from "@/components/ui/Dialog";
 import { IncidentLogFilters } from "./IncidentLogFilters";
 import { IncidentRow } from "./IncidentRow";
@@ -32,10 +36,15 @@ import { downloadTextFile } from "./download";
 
 interface IncidentLogViewProps {
   db?: ArbiterDatabase;
+  /** AI 参考情報の再取得・送信確認に使うストア（テスト用に差し替え可能） */
+  incidentStore?: ReturnType<typeof createIncidentStore>;
 }
 
 /** Incident Log 画面（実装計画 §3.1 / §3.3、要件 §24 / §25） */
-export function IncidentLogView({ db = defaultDb }: IncidentLogViewProps) {
+export function IncidentLogView({
+  db = defaultDb,
+  incidentStore = useIncidentStore,
+}: IncidentLogViewProps) {
   const [entries, setEntries] = useState<IncidentLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,11 +54,35 @@ export function IncidentLogView({ db = defaultDb }: IncidentLogViewProps) {
   // ダイアログを閉じたときにフォーカスを戻す行（Safari ではタップでボタンにフォーカスが移らないため）
   const triggerIdRef = useRef<string | null>(null);
 
+  const {
+    currentIncident,
+    externalAiConfirmation,
+    isProcessing: aiBusy,
+    error: aiError,
+    retryIncident,
+    confirmExternalAiSend,
+    reset: resetAi,
+  } = incidentStore();
+  // 最後に AI 参考情報の操作をした Incident（その Incident の詳細にだけ結果を出す）
+  const [aiTargetId, setAiTargetId] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const openIncident = useCallback((incidentId: string) => {
     triggerIdRef.current = incidentId;
     setSelectedId(incidentId);
   }, []);
-  const closeIncident = useCallback(() => setSelectedId(null), []);
+  const closeIncident = useCallback(() => {
+    setSelectedId(null);
+    setAiTargetId(null);
+    // 確認待ちの送信内容は閉じたら破棄する（開き直したら確認からやり直す）
+    resetAi();
+  }, [resetAi]);
   const findTrigger = useCallback((): HTMLElement | null => {
     const id = triggerIdRef.current;
     if (!id || !listRef.current) return null;
@@ -78,6 +111,26 @@ export function IncidentLogView({ db = defaultDb }: IncidentLogViewProps) {
       cancelled = true;
     };
   }, [db]);
+
+  /** 再評価で判断が置き換わったので、履歴を読み込み直す */
+  const reload = useCallback(async () => {
+    try {
+      const loaded = await loadIncidentLog(db);
+      if (mountedRef.current) setEntries(sortByReportedAtDesc(loaded));
+    } catch (e: unknown) {
+      console.error("Failed to reload incidents:", e);
+      if (mountedRef.current)
+        setError("インシデント履歴を読み込めませんでした");
+    }
+  }, [db]);
+  const runAi = useCallback(
+    async (incidentId: string, action: () => Promise<unknown>) => {
+      setAiTargetId(incidentId);
+      await action();
+      await reload();
+    },
+    [reload]
+  );
 
   const games = useMemo(() => listGames(entries), [entries]);
   const filtered = useMemo(
@@ -223,6 +276,21 @@ export function IncidentLogView({ db = defaultDb }: IncidentLogViewProps) {
             entry={selected}
             gameHistory={selectedHistory}
             onClose={closeIncident}
+            ai={{
+              confirmation:
+                aiTargetId === selected.incident.id &&
+                currentIncident?.id === selected.incident.id
+                  ? (externalAiConfirmation?.preview ?? null)
+                  : null,
+              busy: aiTargetId === selected.incident.id && aiBusy,
+              error: aiTargetId === selected.incident.id ? aiError : null,
+              onRetry: () =>
+                void runAi(selected.incident.id, () =>
+                  retryIncident(selected.incident.id)
+                ),
+              onConfirm: () =>
+                void runAi(selected.incident.id, confirmExternalAiSend),
+            }}
           />
         </Dialog>
       )}

@@ -100,9 +100,11 @@ export function buildTimeControl(tc: TimeControlInput): TimeControl {
 /**
  * 保存されている持ち時間を現在の形式へ変換する（Dexie v8 の upgrade と、読み込み時の保険）。
  * - periods がある: そのまま（複製）。
- * - 旧形式 { initialMinutes, incrementSeconds }: 1つのピリオド。
- * - 旧形式の additionalTimeAfterMove: 何手目の後に加わるかが分からないため値を保持し、
- *   periodsIncomplete とする（現在のピリオド・最終ピリオドは質問する）。
+ * - 旧形式 { initialMinutes, incrementSeconds }: 1つのピリオドにするが、**常に periodsIncomplete** とする。
+ *   旧フォームには2つ目以降のピリオドを入力する欄がなく、"40手90分 → 30分" の大会も
+ *   "90分+30秒" として保存されているため、単一ピリオド（= 常に最終ピリオド）とは限らない。
+ *   アービターがプロフィール画面でピリオドを確認するまで、現在のピリオド・最終ピリオドは質問する。
+ * - 旧形式の additionalTimeAfterMove: 何手目の後に加わるかが分からないため値を保持する。
  * 解釈できない値は undefined（持ち時間未設定として扱い、質問する）。
  */
 export function normalizeTimeControl(raw: unknown): TimeControl | undefined {
@@ -138,6 +140,7 @@ export function normalizeTimeControl(raw: unknown): TimeControl | undefined {
       ],
       ...delay,
       ...legacyExtra,
+      periodsIncomplete: true,
     };
   }
   return undefined;
@@ -168,8 +171,9 @@ export function currentPeriod(
   let end = 0;
   for (let i = 0; i < last; i++) {
     const p = tc.periods[i];
-    if (p.moves === undefined || i === last - 1)
-      return { number: i + 1, period: p, isLast: i === last - 1 };
+    if (i === last - 1) return { number: i + 1, period: p, isLast: true };
+    // 検証済みのデータでは起きない（最後以外のピリオドに手数がない）。判断しない
+    if (!isPositiveInteger(p.moves)) return undefined;
     end += p.moves;
     if (moveNumber <= end) return { number: i + 1, period: p, isLast: false };
   }
@@ -213,10 +217,19 @@ export interface RecordingObligationInput {
   belowFiveInPeriod?: boolean;
   /** 現在のピリオドの1手ごとの加算（秒。ss.increment。設定から求めたもの、または回答） */
   incrementSeconds?: number;
+  /**
+   * 遅延（Delay）秒数。8.4 は「1手ごとに加算される時間」とだけ定めており、遅延を加算と同じに
+   * 扱うかは原典から確定できない。遅延がある場合は免除を確定せず、CAへの確認を求める。
+   */
+  delaySeconds?: number;
 }
 
 export type RecordingObligationMissing =
-  "remainingTime" | "belowFiveInPeriod" | "increment";
+  | "remainingTime"
+  | "belowFiveInPeriod"
+  | "increment"
+  /** 遅延がある持ち時間（8.4 の扱いを原典から確定できない） */
+  | "delayTreatment";
 
 export type RecordingObligation =
   /** 8.4 により、このピリオドの残りは 8.1.1 の記録義務がない */
@@ -287,6 +300,16 @@ export function assessRecordingObligation(
       status: "required",
       explanation:
         "このピリオドで残り時間が5分を下回っていないため、8.4 の免除はありません。8.1.1 により記録が必要です。",
+      sources,
+    };
+  }
+  const hasDelay =
+    typeof input.delaySeconds === "number" && input.delaySeconds > 0;
+  if (lowInPeriod === true && inc !== undefined && hasDelay) {
+    return {
+      status: "unknown",
+      missing: ["delayTreatment"],
+      explanation: `遅延（${input.delaySeconds}秒）のある持ち時間です。8.4 は1手ごとの加算についてだけ定めており、遅延の扱いを原典から確定できないため、CAへ確認してください。`,
       sources,
     };
   }

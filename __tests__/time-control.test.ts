@@ -123,10 +123,17 @@ describe("validateTimeControl", () => {
 });
 
 describe("normalizeTimeControl (legacy migration)", () => {
-  it("turns the legacy single control into one period", () => {
-    expect(
-      normalizeTimeControl({ initialMinutes: 3, incrementSeconds: 2 })
-    ).toEqual({ periods: [{ minutes: 3, incrementSeconds: 2 }] });
+  it("turns the legacy single control into one period, marked incomplete (review M1)", () => {
+    // 旧フォームには2つ目以降のピリオドの欄がなかったため、"40手90分 → 30分" も "90分+30秒" で保存されている
+    const legacy = normalizeTimeControl({
+      initialMinutes: 3,
+      incrementSeconds: 2,
+    });
+    expect(legacy).toEqual({
+      periods: [{ minutes: 3, incrementSeconds: 2 }],
+      periodsIncomplete: true,
+    });
+    expect(lastPeriodFromTimeControl(legacy)).toBeUndefined();
     expect(
       normalizeTimeControl({
         initialMinutes: 15,
@@ -136,6 +143,7 @@ describe("normalizeTimeControl (legacy migration)", () => {
     ).toEqual({
       periods: [{ minutes: 15, incrementSeconds: 0 }],
       delaySeconds: 5,
+      periodsIncomplete: true,
     });
   });
 
@@ -224,6 +232,16 @@ describe("currentPeriod / derived facts", () => {
       "ss.increment": { value: 0 },
       "ct.last-period": { value: "false" },
     });
+  });
+
+  it("un-normalized data without moves on a non-final period derives nothing (review S6)", () => {
+    const bad = {
+      periods: [
+        { minutes: 90, incrementSeconds: 30 },
+        { minutes: 30, incrementSeconds: 30 },
+      ],
+    } as TimeControl;
+    expect(currentPeriod(bad, 10)).toBeUndefined();
   });
 
   it("no time control derives nothing", () => {
@@ -337,6 +355,25 @@ describe("assessRecordingObligation (FIDE 8.4)", () => {
     ).toBe("required");
   });
 
+  it("a delay never confirms the exemption (8.4 speaks only of added time; review S3)", () => {
+    const r = assessRecordingObligation({
+      ...std,
+      remainingSeconds: 100,
+      incrementSeconds: 0,
+      delaySeconds: 30,
+    });
+    expect(r).toMatchObject({ status: "unknown", missing: ["delayTreatment"] });
+    // 義務ありの判定は遅延に関係しない
+    expect(
+      assessRecordingObligation({
+        ...std,
+        remainingSeconds: 400,
+        belowFiveInPeriod: false,
+        delaySeconds: 30,
+      }).status
+    ).toBe("required");
+  });
+
   it("Rapid and Blitz are not assessed", () => {
     for (const competitionType of ["rapid", "blitz"] as const) {
       expect(
@@ -418,6 +455,7 @@ describe("tournament profile with periods", () => {
     const r = deriveRulesetFromTournament(t);
     expect(r.ok && r.ruleset.timeControl).toEqual({
       periods: [{ minutes: 3, incrementSeconds: 2 }],
+      periodsIncomplete: true,
     });
     const t2 = buildTournament(base, providers);
     const r2 = deriveRulesetFromTournament(t2);
@@ -490,6 +528,25 @@ describe("DT-004 lastPeriod from the time control (ADR-014 §7)", () => {
     }
   });
 
+  it("an explicit answer wins over the setting: no draw against 'not last period' (review M1/S1)", () => {
+    const r = evaluate({ ...BOTH, lastPeriod: "false" }, SINGLE);
+    expect(r.requiresFollowUp).toBe(false);
+    expect(r.decision.penalties).toEqual([]);
+    expect(r.decision.conclusion).not.toContain("ドローです");
+  });
+
+  it("a migrated legacy tournament (e.g. stored 90+30 for 40/90 → 30) asks lastPeriod", () => {
+    const migrated = normalizeTimeControl({
+      initialMinutes: 90,
+      incrementSeconds: 30,
+    });
+    const r = evaluate(BOTH, migrated);
+    expect(r.requiresFollowUp).toBe(true);
+    expect(r.followUpQuestions.map((q) => q.id)).toContain(
+      QUESTIONS.lastPeriod.id
+    );
+  });
+
   it("multi-period with an answer uses the answer", () => {
     const r = evaluate({ ...BOTH, lastPeriod: "false" }, CLASSICAL);
     expect(r.requiresFollowUp).toBe(false);
@@ -543,7 +600,10 @@ describe("Dexie v8 migration", () => {
     try {
       const all = (await db.tournaments.toArray()) as Tournament[];
       const by = Object.fromEntries(all.map((t) => [t.id, t.timeControl]));
-      expect(by.a).toEqual({ periods: [{ minutes: 3, incrementSeconds: 2 }] });
+      expect(by.a).toEqual({
+        periods: [{ minutes: 3, incrementSeconds: 2 }],
+        periodsIncomplete: true,
+      });
       expect(by.b).toEqual({
         periods: [{ minutes: 90, incrementSeconds: 30 }],
         periodsIncomplete: true,

@@ -430,11 +430,12 @@ export class DecisionEngine {
           incident,
           tree.evaluate({
             ...incident.flagFallFacts,
-            // 最終ピリオドは設定から求められれば設定を優先する（ピリオドが1つなら常に最終。
-            // 複数ピリオドでは手数が分からないため質問する。ADR-014 §7）
+            // 最終ピリオド: アービターの明示的な回答を優先し、未回答・「わからない」の場合だけ
+            // 設定から求める（確認済みの単一ピリオドなら常に最終。複数ピリオド・未確認の
+            // 旧形式は質問する。ADR-014 §7）。設定が不完全でも、回答に反してドローにしない
             lastPeriod:
-              lastPeriodFromTimeControl(ruleset.timeControl) ??
-              incident.flagFallFacts?.lastPeriod,
+              incident.flagFallFacts?.lastPeriod ??
+              lastPeriodFromTimeControl(ruleset.timeControl),
             competitionType,
             supervisionRegime: regime,
             mate: this.mateFor(incident),

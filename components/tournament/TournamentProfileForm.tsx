@@ -329,6 +329,7 @@ export function TournamentProfileForm(props: TournamentProfileFormProps) {
                   </span>
                   <button
                     type="button"
+                    aria-label={`第${i + 1}ピリオドを削除`}
                     onClick={() =>
                       set({ periods: f.periods.filter((_, j) => j !== i) })
                     }
@@ -399,15 +400,16 @@ export function TournamentProfileForm(props: TournamentProfileFormProps) {
         </p>
         {f.legacyIncomplete && (
           <div
-            role="alert"
+            role="status"
             className="p-3 border border-yellow-300 bg-yellow-50 rounded-lg text-sm space-y-2"
           >
             <p>
-              旧形式の追加時間
+              この持ち時間は以前の形式で保存されており、2つ目以降のピリオド（例:
+              40手の後の追加時間）があるかどうかが分かりません。
               {f.legacyAdditionalMinutes !== undefined
-                ? `（${f.legacyAdditionalMinutes}）`
+                ? `旧形式の追加時間の値（単位・何手目の後かは不明）: ${f.legacyAdditionalMinutes}。`
                 : ""}
-              が保存されていますが、何手目の後に加わるかが分かりません。ピリオドとして入力し直し、確認してください。確認するまで、最終ピリオドかどうかは毎回質問します。
+              大会要項を見てピリオドを入力し直し、確認してください。確認するまで、最終ピリオドかどうかは毎回質問します。
             </p>
             <label className="flex items-center gap-2 min-h-12 font-semibold">
               <input
@@ -416,7 +418,7 @@ export function TournamentProfileForm(props: TournamentProfileFormProps) {
                 checked={f.periodsConfirmed}
                 onChange={(e) => set({ periodsConfirmed: e.target.checked })}
               />
-              ピリオドを確認して入力した
+              大会要項でピリオドを確認して入力した（ピリオドが1つだけなら、全ての手をこの持ち時間で指す）
             </label>
           </div>
         )}

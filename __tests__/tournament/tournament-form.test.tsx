@@ -137,7 +137,7 @@ describe("TournamentProfileForm", () => {
         onSubmit={onSubmit}
       />
     );
-    expect(screen.getByText(/何手目の後に加わるかが分かりません/)).toBeTruthy();
+    expect(screen.getByText(/2つ目以降のピリオド/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit.mock.calls[0][0].timeControl).toMatchObject({
@@ -153,7 +153,9 @@ describe("TournamentProfileForm", () => {
         onSubmit={onSubmit}
       />
     );
-    fireEvent.click(screen.getByLabelText("ピリオドを確認して入力した"));
+    fireEvent.click(
+      screen.getByLabelText(/大会要項でピリオドを確認して入力した/)
+    );
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
     const tc = onSubmit.mock.calls[1][0].timeControl;

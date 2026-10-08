@@ -83,6 +83,27 @@ describe("IncidentTextClassifier", () => {
     );
   });
 
+  it("drops a response that arrives after the text was edited (no stale suggestion for new text)", async () => {
+    let release: () => void = () => {};
+    send.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve(LLM_RESULT);
+        })
+    );
+    const { onApply } = renderClassifier();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "確認してAIで分類" })
+    );
+    fireEvent.change(screen.getByLabelText("状況を入力して分類（任意）"), {
+      target: { value: "白のフラッグが落ちた" },
+    });
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText("AI分類（提案）")).toBeNull();
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
   it("declining sends nothing", async () => {
     renderClassifier();
     fireEvent.click(await screen.findByRole("button", { name: "送らない" }));

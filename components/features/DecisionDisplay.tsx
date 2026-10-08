@@ -23,8 +23,7 @@ const LLM_UNAVAILABLE_LABELS: Partial<Record<LlmAssistStatus, string>> = {
   "no-articles": "登録済みの規則に関連する条文が見つかりませんでした",
   "awaiting-confirmation":
     "AI参考情報はまだ取得していません（外部AIへ送る内容の確認が必要です）",
-  "not-sent":
-    "機微な内容の可能性があるため、外部AIには送信していません（端末内で処理）",
+  "not-sent": "外部AIには送信していません（端末内で処理）",
 };
 
 const PENALTY_LABELS: Record<PenaltyType, string> = {
@@ -82,7 +81,10 @@ export function DecisionDisplay({
     : undefined;
   const canRetry =
     onRetry !== undefined &&
-    (llmStatus === "offline" || llmStatus === "unavailable");
+    (llmStatus === "offline" ||
+      llmStatus === "unavailable" ||
+      // 確認画面を閉じた（画面を離れた）後でも、送る内容の確認からやり直せる
+      llmStatus === "awaiting-confirmation");
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
@@ -170,7 +172,11 @@ export function DecisionDisplay({
               disabled={retrying}
               className="mt-2 w-full min-h-12 px-4 bg-gray-800 text-white rounded-lg font-semibold disabled:bg-gray-300"
             >
-              {retrying ? "取得中..." : "AI参考情報を再取得"}
+              {retrying
+                ? "取得中..."
+                : llmStatus === "awaiting-confirmation"
+                  ? "AIに送る内容を確認する"
+                  : "AI参考情報を再取得"}
             </button>
           )}
         </div>

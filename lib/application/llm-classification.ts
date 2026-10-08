@@ -117,7 +117,15 @@ export async function prepareIncidentClassification(
           "AIの分類結果を解釈できないため、キーワード分類を表示しています"
         );
       }
-      return { classification: parsed };
+      // 確認ポイント・不足情報のプレースホルダーを端末内で元の表記に戻す（表示用）
+      const back = (t: string) => guarded.reidentify(t).text;
+      return {
+        classification: {
+          ...parsed,
+          followUpQuestions: parsed.followUpQuestions.map(back),
+          missingInformation: parsed.missingInformation.map(back),
+        },
+      };
     },
   };
 }

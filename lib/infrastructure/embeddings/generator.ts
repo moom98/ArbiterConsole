@@ -32,12 +32,7 @@ export class EmbeddingUnavailableError extends Error {
   partialVectors: number[][] = [];
 
   constructor(
-    readonly code:
-      | LlmApiErrorCode
-      | "fair-play"
-      | "invalid-response"
-      /** 外部AIガードが送らなかった（機微な内容の可能性・未確認） */
-      | "not-sent",
+    readonly code: LlmApiErrorCode | "fair-play" | "invalid-response",
     message: string
   ) {
     super(message);

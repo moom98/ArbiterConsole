@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   prepareIncidentClassification,
   type ClassificationStep,
@@ -59,7 +59,10 @@ export function IncidentTextClassifier({
     { status: "needs-confirmation" }
   > | null>(null);
 
+  /** 入力の変更・新しい分類で古い応答を捨てるための番号 */
+  const requestIdRef = useRef(0);
   const clear = () => {
+    requestIdRef.current++;
     setResult(null);
     setPending(null);
   };
@@ -67,8 +70,10 @@ export function IncidentTextClassifier({
   const handleClassify = async () => {
     setLoading(true);
     clear();
+    const id = requestIdRef.current;
     try {
       const step = await prepareIncidentClassification(text, { doNotSend });
+      if (id !== requestIdRef.current) return;
       if (step.status === "done") setResult(step.result);
       else setPending(step);
     } finally {
@@ -79,8 +84,11 @@ export function IncidentTextClassifier({
   const handleSend = async () => {
     if (!pending) return;
     setLoading(true);
+    const id = requestIdRef.current;
     try {
       const r = await pending.send();
+      // 送信中に記述が変わった場合、古い記述の分類は表示しない（新しい記述に適用されないように）
+      if (id !== requestIdRef.current) return;
       setPending(null);
       setResult(r);
     } finally {

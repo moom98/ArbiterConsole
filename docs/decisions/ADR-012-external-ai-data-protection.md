@@ -1,6 +1,6 @@
 # ADR-012: Sensitive Gate and PII Redaction for Every External AI Send
 
-**Status:** Accepted. The user decided it on 2026-10-08, and answered Q-DP1 and Q-DP2 the same day. Partly implemented: the pure privacy package and its evaluation (J1a-1, design §10). The guard on every route (J1a-2) and the server re-check (J1a-3) are not implemented yet.
+**Status:** Accepted. The user decided it on 2026-10-08, and answered Q-DP1 and Q-DP2 the same day. Partly implemented: the pure privacy package and its evaluation (J1a-1, design §10) and the guard on every client route with the mandatory confirmation (J1a-2, design §11). The server re-check (J1a-3) is not implemented yet.
 
 **Date:** 2026-10-08
 
@@ -68,6 +68,16 @@ Today the incident description, the article text and search queries go to Gemini
 - **The arbiter confirms every external send** (step F becomes mandatory): the de-identified payload is shown, and nothing is sent until the arbiter confirms it contains nothing sensitive.
 - **Why:** 117 of 270 new, independently written sensitive phrases passed the known-vocabulary gate. Free text about people's actions can be written with ordinary chess words, so no lexical gate guarantees 0 false negatives.
 - **Release condition:** the gate's false-negative rate on held-out sets is measured, reported and minimized; 0 false negatives is still required on the regression sets. The human confirmation is the final defense.
+
+## Implementation notes (J1a-2, 2026-10-09)
+
+How Amendment 2 is applied per route (design §11.2):
+
+- **Reasoning:** the port returns "needs confirmation" with the de-identified preview before any search or send; the engine stores a manual-review decision meanwhile, and the arbiter's tap re-runs the evaluation with an approval key that must equal the freshly prepared payload.
+- **Classification:** preview with 「確認してAIで分類」 / 「送らない」.
+- **Rule search screen:** keyword results are shown at once and nothing is sent; semantic search runs only after the arbiter confirms the de-identified query. This was the open UX point of the J1a-2 plan; it was decided this way because D13 says every send is confirmed and the keyword path stays as fast as before.
+- **Document embeddings** carry no incident data and need no confirmation; tournament regulations are de-identified.
+- **Exception to "the arbiter sees the payload":** tournament regulation articles attached to a reasoning request are chosen after the confirmation, so the preview only states that they are sent with the narrow redaction (§5.5) and does not show their text. They are rule text, not incident data. Residual risk: an unregistered name without an honorific inside a regulation is sent.
 
 ## Consequences
 

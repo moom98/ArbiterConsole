@@ -1,6 +1,6 @@
 # Design: Data Protection for External AI (Gemini and TypeSafe)
 
-**Status:** Accepted design, based on the user's decisions of 2026-10-08. Partly implemented: the pure package `lib/domain/privacy/` and the evaluation fixtures in J1a-1 (§10). The guard on every route (J1a-2) and the server re-check (J1a-3) are not implemented yet. Decision record: [ADR-012](../decisions/ADR-012-external-ai-data-protection.md).
+**Status:** Accepted design, based on the user's decisions of 2026-10-08. Partly implemented: the pure package `lib/domain/privacy/` and the evaluation fixtures in J1a-1 (§10); the guard on every client route with the mandatory confirmation in J1a-2 (§11). The server re-check (J1a-3) is not implemented yet. Decision record: [ADR-012](../decisions/ADR-012-external-ai-data-protection.md).
 
 **Date:** 2026-10-08
 
@@ -58,11 +58,11 @@ From 2026-10-08:
 | `/api/llm/classify` | Gemini or Jev (ADR-011) | the report text | gate, then a de-identified narrative (§5) |
 | `/api/llm/facts` (new, [fact-model.md](./fact-model.md)) | Jev | (new) | gate, then the de-identified narrative and the IDs of the required facts |
 | `/api/llm/reason` | Gemini | description (with `situationNote` appended by `applyIncidentAnswers`), category and subtype, context with `tournamentId`, up to 6 articles (with `tournamentId`) | gate, then the de-identified description and the coded observations; no `tournamentId` anywhere; tournament article text de-identified with a narrower rule set (§5.5, §6) |
-| `/api/llm/embed` (query) | Gemini | (a) the search text the arbiter typed on the rule search screen; (b) **the incident description**, because `llm-assist-port` calls `hybridSearch(incident.description)`, which calls `generateQueryEmbedding` | gate, then the de-identified query, for both (a) and (b) (§6) |
+| `/api/llm/embed` (query) | Gemini | (a) the search text the arbiter typed on the rule search screen; (b) **the incident description**, because the reasoning port searched with `hybridSearch(incident.description)`, which called `generateQueryEmbedding` (before J1a-2) | gate, then the de-identified query, for both (a) and (b) (§6) |
 | `/api/llm/embed` (document) | Gemini | rule text, including tournament regulations | FIDE and JCF text unchanged (public, no PII); tournament regulations de-identified with the narrower rule set (§5.5) |
 | (J4, optional) Jev reasoning check | Jev | (not built) | gate and de-identification required before it can be built |
 
-**Rule:** every call through `callLlmApi` goes through `ExternalAiGuard` (§3). It is the only way to reach `/api/llm/*`. A unit test enforces this: no module except the guard imports `callLlmApi`. `lib/infrastructure/embeddings/generator.ts` and `llm-assist-port.ts` call the guard, not `callLlmApi`.
+**Rule:** every call through `callLlmApi` goes through `ExternalAiGuard` (§3). It is the only way to reach `/api/llm/*`. A unit test enforces this: no module except the guard imports `callLlmApi`. `lib/infrastructure/embeddings/generator.ts` receives its `call` from the guard, and the reasoning port (`lib/application/llm-assist.ts`) uses the guard, not `callLlmApi` (§11).
 
 **Which fields the gate and checks apply to.**
 
@@ -429,6 +429,62 @@ The pure package exists and is tested; nothing calls it yet (J1a-2 wires it into
   - A second pass of the same reviewer confirmed those holes closed and found two more, fixed: a body-part compound in the contact rule (手元, 指先) and playing in another player's place (の代わりに出場); 代わり is now allowed only as 代わりの時計 / 電池 / 駒.
 - **Held-out false-negative rates so far** (each measured before the fixes that followed): list-based gate ~76% (115/151); known vocabulary ~43% (117/270); after review-2 fixes 10.1% gate / 16.8% pipeline (208); after review-3 fixes 0.47% on natural phrasing (1/211), but 29/41 on phrases deliberately composed from vocabulary words. The arbiter's confirmation (D13) remains the final defense.
 - **Tests:** `__tests__/privacy/{sensitive-gate,gate-evaluation,pii-redaction,protect}.test.ts`. `gate-evaluation` also runs every sensitive set through `protectIncidentText`.
+
+## 11. Implementation (J1a-2, 2026-10-09): the guard on every client route
+
+The pure package is now used by every client path that reaches `/api/llm/*`. The server still accepts what the client sends after only shape checks; the L5 re-check and the rejection of old shapes are J1a-3.
+
+### 11.1 Files
+
+- `lib/application/external-ai-guard.ts` — **the only module that uses `callLlmApi`** (`__tests__/privacy/external-ai-guard.test.ts` scans `lib`, `app` and `components`, comments excluded; a second check finds no other `/api/llm/` literal outside the server and the contract). It loads the identifiers (`loadKnownIdentifiers`, injectable), creates one `PlaceholderMap` per request, and offers:
+  - `prepareClassification(text, { category, doNotSend })` → `local` (reason codes) or `needs-confirmation` with `preview` and `send()`; the body is `{ narrative }`.
+  - `prepareEmbeddingQuery(query, …)` → `local` or `needs-confirmation` with the de-identified `query`, `preview` and `send()` (returns the vector).
+  - `prepareReasoning({ incident, context, doNotSend })` → `local` or `needs-confirmation` with `preview`, `approvalKey`, `queryEmbedding` (absent when only the query is held back), `toSentArticles()`, `send(articles)` and `reidentify()`. The description (`reason-description`) and the search query (`embed-query`) share the request's map.
+  - `embedRuleDocuments(documents)` — tournament regulations through `redactPii(…, "regulation")`, other sources unchanged; no gate and no confirmation (§2: rule text is not incident data).
+  - Identifier loading failure → `local` with reason `residual` (fail closed).
+- `lib/application/llm-assist.ts` — the `LlmAssistPort` (moved from `lib/infrastructure/llm/llm-assist-port.ts`, because it now depends on the application guard).
+- `lib/application/llm-classification.ts` — `prepareIncidentClassification` → `done` (keyword result and notice) or `needs-confirmation` with `send()` / `decline()`.
+- `lib/domain/llm/external-ai.ts` — reason-code labels and the notice 「外部AIには送信していません（理由: …）」.
+- UI: `components/features/ExternalAiSendConfirmation.tsx` (the preview and the confirm button), `ExternalAiOptOutSwitch.tsx` (§4.4), used by `IncidentTextClassifier`, the report page and the rule search page.
+
+### 11.2 How the confirmation (D13) works per route
+
+- **Classification:** 「カテゴリを提案」 prepares; a clear text shows the preview with 「確認してAIで分類」 and 「送らない」 (keyword result). Held-back text and offline show the keyword result with the notice, without a preview.
+- **Reasoning (AI 参考情報):**
+  1. `DecisionEngine.evaluate` calls the port without an approval. The port runs the guard and returns `not-sent` (gate), `offline`, or `needs-confirmation` with the preview and an `approvalKey` — **before any search or send**.
+  2. The engine turns `needs-confirmation` into a stored manual-review decision (`llm.status: "awaiting-confirmation"`, "CAへ確認") and returns `externalAiConfirmation` beside it. The arbiter therefore sees the local result at once; the decision-tree path is unchanged.
+  3. The store keeps the confirmation in memory; 「確認してAI参考情報を取得」 calls `confirmExternalAiSend()`, which re-evaluates with the key. The port prepares the payload again and sends only if the key is identical (`approvalKey` is the JSON of the de-identified incident fields, codes and query). Otherwise it asks again with the new preview (for example after a name was registered in between).
+  4. The AI decision supersedes the interim one (`supersededBy`), as with the offline retry.
+  - If the confirmation panel is gone while the interim decision is still shown, the decision card offers 「AIに送る内容を確認する」 (`retryEvaluation`), which shows the preview again.
+  - **Tournament regulation text is not in the preview.** The articles are chosen by the search, which runs only after the confirmation. The preview therefore says that regulations are sent with the narrow redaction of §5.5 and that their text is not shown. This is the one part of a reasoning request that the arbiter does not see. It is rule text, not incident data (§2), and the same text is already sent for document embeddings without a confirmation. Accepted residual risk (J1a-2 review): an unregistered name without an honorific inside a regulation is sent.
+  - `retryEvaluation` (after an error, or after entering the access token) reuses the approval of the same incident, so an identical payload is not confirmed twice. A changed payload, another incident, or a reset needs a new confirmation.
+- **Rule search screen (the open point of the J1a-2 plan, decided here):** the search shows the **keyword results immediately** and sends nothing. If semantic-search data exists, the de-identified query is shown with 「確認して意味検索も行う」; only then is the query embedded and the search repeated with vectors. A held-back query shows the notice and stays keyword-only. This follows D13 literally (every send is confirmed) without slowing the keyword path. `hybridSearch` runs the vector side only when the caller passes `queryEmbedding`.
+- **Reasoning search:** the keyword search uses the raw description **on the device**; the semantic side uses only the confirmed, de-identified query.
+- **Document embeddings** (PDF import, 「意味検索用データを作成」): no confirmation, because no incident data is sent; tournament regulations are de-identified (§5.5).
+
+### 11.3 What the reasoning request contains
+
+- `incident`: category, subtype, playerColor, the de-identified description (≤ 1,000), arbiterObserved. Fact answers are not sent yet (sending less than §5.3 allows).
+- `context`: competitionType, supervisionRegime, rulesVersion. **No `tournamentId`** (the engine passes it beside the request, for the local search only).
+- `articles`: as §5.3; tournament articles have their article number, title and content redacted with the request's map, `sourceName: "大会規定"` and no `sourceVersion`. Redaction runs before truncation to 4,000 characters, so the quote check works on exactly what was sent.
+- The prompt tells the model that `〈…〉` are placeholders to be kept as they are.
+- Article number, title and content are cut with `truncate` from `minimization.ts`, so a placeholder is never cut in half.
+
+### 11.4 Re-identification and display
+
+- `buildLlmDecision` validates and matches quotes on the sent articles, extracts the quote context there, and then applies `reidentify` to the conclusion, actions (including the missing-information line), penalty descriptions, the escalation reason, and each citation's article label, quote and quote context.
+- A placeholder the map does not know is shown as it is; the decision gets `llm.needsReview: true`, an escalation to the CA and a message listing the placeholders. The display shows 「要確認」.
+- Citations show the **local** source name and version (`localSourceLabels`, never sent), so a tournament regulation keeps its real name on the device.
+- The classification's follow-up questions and missing information are also re-identified, with the classification request's map.
+- There is no stored `llmRaw` field in the app; the stored decision holds the re-identified display fields only, which stay on the device.
+
+### 11.5 Other changes
+
+- `Incident.externalAiOptOut` (not indexed, no Dexie version change) stores the switch; the engine passes it as `doNotSend` (L1). The switch sits under both free-text fields of the report screen and is shared by them.
+- `Decision.llm.status` has two new values: `awaiting-confirmation` and `not-sent` (with `gateReasons`, codes only).
+- `EMBEDDING_MODEL.key` is `gemini-embedding-001@768+deid1`. The server echoes it, the backfill deletes other keys, so 「意味検索用データを作成」 rebuilds every vector once (§6.3).
+- The classifier drops a response that arrives after the text was edited, so an old suggestion is never applied to new text.
+- Server shapes (minimum for J1a-2): classify accepts `{ narrative }` (≤ 500); the reasoning validator no longer reads `tournamentId`. J1a-3 adds the L5 re-check, the pattern re-check, and 400 for unknown fields and `{ text }`.
 
 ## Appendix A. Sensitive terms (for review)
 

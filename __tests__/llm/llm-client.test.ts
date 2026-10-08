@@ -366,6 +366,31 @@ describe("prepareIncidentClassification", () => {
     ]);
   });
 
+  it("re-identifies placeholders in the follow-up questions and missing information", async () => {
+    const r = await classifyConfirmed("田中太郎のスマホが鳴った", {
+      identifiers: async () => ({
+        ...NO_IDENTIFIERS,
+        players: [{ name: "田中 太郎" }],
+      }),
+      isOnline: () => true,
+      call: (async () => ({
+        ok: true,
+        result: {
+          category: "player-behavior",
+          missingInformation: ["〈選手A〉の手番"],
+          followUpQuestions: ["〈選手A〉の電源は切れていましたか？"],
+          needsTournamentRules: false,
+          confidence: "medium",
+        },
+        model: "m",
+      })) as never,
+    });
+    expect(r.classification?.followUpQuestions).toEqual([
+      "田中 太郎の電源は切れていましたか？",
+    ]);
+    expect(r.classification?.missingInformation).toEqual(["田中 太郎の手番"]);
+  });
+
   it("declining sends nothing and shows the keyword classification", async () => {
     const call = vi.fn();
     const step = await prepareIncidentClassification(

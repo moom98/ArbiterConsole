@@ -233,6 +233,38 @@ describe("LLM incident flow (store + engine + port + IndexedDB)", () => {
     expect(store.getState().currentDecision?.generatedBy).toBe("llm");
   });
 
+  it("an approval is scoped to the incident and payload: follow-up answers and other incidents ask again", async () => {
+    const store = makeStore(makePort());
+    call.mockImplementation(async () => ({
+      ok: false,
+      error: { code: "upstream-timeout", message: "timeout" },
+    }));
+    await submitAndConfirm(store);
+    expect(call).toHaveBeenCalledTimes(1);
+
+    // 追加回答の後の評価は承認を使わない（内容が変わりうる）
+    await store.getState().answerFollowUp({});
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(store.getState().currentDecision?.llm?.status).toBe(
+      "awaiting-confirmation"
+    );
+
+    // 別の Incident（同じ記述）の再取得には、前の Incident の承認を使わない
+    await store.getState().submitIncident({
+      context: CTX,
+      category: "player-behavior",
+      description: "黒のスマホが鳴った",
+      arbiterObserved: true,
+    });
+    await store.getState().retryEvaluation();
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(store.getState().externalAiConfirmation).not.toBeNull();
+
+    // reset で確認待ちも消える
+    store.getState().reset();
+    expect(store.getState().externalAiConfirmation).toBeNull();
+  });
+
   it("sends placeholders for registered names, no tournament id, and re-identifies the output on the device", async () => {
     await db.players.add({
       id: "p1",

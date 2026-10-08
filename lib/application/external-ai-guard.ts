@@ -23,6 +23,7 @@ import {
   protectIncidentText,
   redactPii,
   reidentify,
+  truncate,
   type GateReasonCode,
   type KnownIdentifiers,
   type ProtectResult,
@@ -120,16 +121,23 @@ export async function prepareClassification(
   text: string,
   options: IncidentTextOptions = {},
   deps: ExternalAiGuardDeps = {}
-): Promise<NotSent | PendingSend<LlmApiResponse>> {
+): Promise<
+  | NotSent
+  | (PendingSend<LlmApiResponse> & {
+      /** 応答のプレースホルダーを元の表記へ戻す（このリクエストの対応表） */
+      reidentify(text: string): ReidentifyResult;
+    })
+> {
   const ids = await identifiersOrNull(deps);
   if (!ids) return IDENTIFIERS_UNAVAILABLE;
+  const map = new PlaceholderMap();
   const protectedText = protectIncidentText({
     route: "classify",
     text,
     category: options.category,
     doNotSend: options.doNotSend,
     identifiers: ids,
-    map: new PlaceholderMap(),
+    map,
   });
   if (!protectedText.ok) return notSent(protectedText);
   const narrative = protectedText.text;
@@ -143,6 +151,7 @@ export async function prepareClassification(
       notes: [],
     },
     send: () => callOf(deps)("classify", { narrative }, deps),
+    reidentify: (text) => reidentify(text, map),
   };
 }
 
@@ -333,7 +342,7 @@ export async function prepareReasoning(
   }
   fields.push({ label: "送るコード", text: codes.join(" / ") });
   notes.push(
-    `端末に登録済みの規則から関連する条文を最大${LLM_LIMITS.maxArticles}件添えます。FIDE・JCFは原文のまま、大会規定は名前・連絡先などを置き換えて送ります。大会名・大会IDは送りません。`
+    `端末に登録済みの規則から関連する条文を最大${LLM_LIMITS.maxArticles}件添えます。FIDE・JCFは原文のまま送ります。大会規定は、登録済みの名前・連絡先・会員番号・敬称付きの名前を置き換えて送りますが、本文はこの画面に表示されません（規定に登録されていない名前を書かないでください）。大会名・大会IDは送りません。`
   );
 
   const call = callOf(deps);
@@ -377,10 +386,11 @@ function toSentArticle(
     tournament ? redactPii(text, ids, map, "regulation").text : text;
   return {
     id: a.id,
-    article: redact(a.article).slice(0, LLM_LIMITS.maxArticleNumberChars),
-    title: redact(a.title).slice(0, LLM_LIMITS.maxArticleTitleChars),
+    article: truncate(redact(a.article), LLM_LIMITS.maxArticleNumberChars),
+    title: truncate(redact(a.title), LLM_LIMITS.maxArticleTitleChars),
     // 長い条文は先頭のみ送る（検証も送った本文で行うため、引用は送った範囲に限られる）
-    content: redact(a.content).slice(0, LLM_LIMITS.maxArticleContentChars),
+    // プレースホルダーを途中で切らない（minimization の truncate）
+    content: truncate(redact(a.content), LLM_LIMITS.maxArticleContentChars),
     source: a.source,
     sourceName: tournament
       ? "大会規定"

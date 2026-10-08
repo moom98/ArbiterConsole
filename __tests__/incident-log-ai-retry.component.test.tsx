@@ -165,4 +165,60 @@ describe("IncidentLogView: AI reference from the incident log (D13)", () => {
       )
     ).toBe(true);
   });
+  it("an offline decision: retry shows the payload first and sends nothing", async () => {
+    // 報告時はオフラインだった
+    await db.decisions.toCollection().modify((d) => {
+      d.llm = { status: "offline" };
+    });
+    const dialog = await openDetail();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "AI参考情報を再取得" })
+    );
+    const confirmation = await within(dialog).findByRole("region", {
+      name: "外部AIへ送る内容の確認",
+    });
+    expect(within(confirmation).getByText(PREVIEW_TEXT)).toBeTruthy();
+    expect(assist).toHaveBeenCalledTimes(1);
+    expect(assist.mock.calls[0][1]?.approvalKey).toBeUndefined();
+  });
+
+  it("disables the action while preparing, and shows an error when the incident is gone", async () => {
+    let releasePreview!: () => void;
+    const original = assist.getMockImplementation() as (
+      ...args: unknown[]
+    ) => Promise<LlmAssistOutcome>;
+    assist.mockImplementationOnce(async (...args: unknown[]) => {
+      await new Promise<void>((r) => (releasePreview = r));
+      return original(...args);
+    });
+    const dialog = await openDetail();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "外部AIへ送る内容を確認する" })
+    );
+    const busy = await within(dialog).findByRole("button", {
+      name: "準備中...",
+    });
+    expect((busy as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(assist).toHaveBeenCalledTimes(1));
+    releasePreview();
+    await within(dialog).findByRole("region", {
+      name: "外部AIへ送る内容の確認",
+    });
+
+    // 別の端末操作などで Incident が消えた → 再評価できない旨を示す
+    await db.incidents.clear();
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const list = screen.getByRole("list", { name: "インシデント一覧" });
+    fireEvent.click(within(list).getAllByRole("button")[0]);
+    const reopened = screen.getByRole("dialog");
+    fireEvent.click(
+      within(reopened).getByRole("button", {
+        name: "外部AIへ送る内容を確認する",
+      })
+    );
+    expect((await within(reopened).findByRole("alert")).textContent).toContain(
+      "Incidentが見つかりません"
+    );
+  });
 });

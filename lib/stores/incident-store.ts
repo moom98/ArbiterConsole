@@ -97,7 +97,11 @@ export interface IncidentStore {
   retryEvaluation: () => Promise<SubmitResult>;
   /**
    * 保存済みの Incident（例: インシデント履歴で選んだもの）を現在の Incident にして再評価する。
-   * 確認・再送の扱いは retryEvaluation と同じ（確認していない内容は送らず、確認を求める）
+   * 確認・再送の扱いは retryEvaluation と同じ（確認していない内容は送らず、確認を求める）。
+   *
+   * 注意: 違法手・タッチムーブの回数は、この Incident を除く対局の全記録から数える
+   * （後から報告された Incident も含む）。現在これを呼ぶのは AI 参考情報の判断の再取得だけで、
+   * 回数を使う決定木には届かない。回数を使う判断の再評価に広げる場合は、報告時刻より前の記録に絞ること
    */
   retryIncident: (incidentId: string) => Promise<SubmitResult>;
   /** アービターが確認した内容（externalAiConfirmation）で AI 参考情報を取得する（D13） */
@@ -116,6 +120,9 @@ export interface IncidentStoreDeps {
    */
   mateSearch?: HelpmateSearchPort;
 }
+
+/** 後の操作・reset に置き換えられ、画面に反映しなかった操作の結果 */
+export const SUPERSEDED = "別の操作に置き換えられました";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -296,10 +303,18 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
         result,
       };
     }
+    /**
+     * 画面に反映してよい最新の操作の番号。reset と新しい操作で進める。
+     * 古い操作（例: 履歴で閉じた Incident の送信）が後から完了しても、
+     * 別の Incident の表示・確認待ちの内容を上書きしない（保存済みの判断はそのまま残る）
+     */
+    let epoch = 0;
     async function run(
       fn: () => Promise<{ incident: Incident; result: DecisionEngineResult }>,
       options: { clearPrevious: boolean }
     ): Promise<SubmitResult> {
+      const mine = ++epoch;
+      const isCurrent = () => mine === epoch;
       set({ isProcessing: true, error: null });
       // 新規報告では前回の判断を必ず消す（失敗時に古い判断が表示されないように）
       if (options.clearPrevious) {
@@ -312,6 +327,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
       }
       try {
         const { incident, result } = await fn();
+        if (!isCurrent()) return { ok: false, error: SUPERSEDED };
         set({
           currentIncident: incident,
           currentDecision: result.decision,
@@ -321,11 +337,12 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
         return { ok: true, result };
       } catch (error) {
         console.error("Failed to process incident:", error);
+        if (!isCurrent()) return { ok: false, error: SUPERSEDED };
         const message = errorMessage(error);
         set({ error: message });
         return { ok: false, error: message };
       } finally {
-        set({ isProcessing: false });
+        if (isCurrent()) set({ isProcessing: false });
       }
     }
 
@@ -434,11 +451,12 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
             const confirmation = get().externalAiConfirmation;
             if (!current || !confirmation)
               throw new Error("確認する送信内容がありません");
-            const stored = (await db.incidents.get(current.id)) ?? current;
+            // await の前に記録する（直後の reset で確実に消えるように）
             approved = {
-              incidentId: stored.id,
+              incidentId: current.id,
               approvalKey: confirmation.approvalKey,
             };
+            const stored = (await db.incidents.get(current.id)) ?? current;
             // 送る直前の内容が確認した内容と違えば、ポートは送らずにもう一度確認を求める
             const result = await evaluate(stored, {
               approvalKey: confirmation.approvalKey,
@@ -453,7 +471,9 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
 
       reset: () => {
         approved = null;
+        epoch++;
         set({
+          isProcessing: false,
           currentIncident: null,
           currentDecision: null,
           followUpQuestions: [],
@@ -464,6 +484,17 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
     };
   });
 }
+
+/**
+ * インシデント履歴の AI 参考情報の再取得・送信確認用（報告画面とは別のインスタンス）。
+ * 片方の画面の送信中の操作・確認待ちの内容が、もう片方の画面に出ないようにする
+ */
+export const useIncidentLogStore = createIncidentStore({
+  db: defaultDb,
+  providers: defaultProviders,
+  llm: createLlmAssistPort(),
+  mateSearch: createHelpmateSearchPort(),
+});
 
 export const useIncidentStore = createIncidentStore({
   db: defaultDb,

@@ -23,9 +23,10 @@ import { gameLabel } from "@/lib/application/incident-labels";
 import { db as defaultDb, type ArbiterDatabase } from "@/lib/infrastructure/db";
 import { loadIncidentLog } from "@/lib/infrastructure/db/incident-repository";
 import {
-  useIncidentStore,
+  useIncidentLogStore,
   type createIncidentStore,
 } from "@/lib/stores/incident-store";
+import { useShallow } from "zustand/react/shallow";
 import { Dialog } from "@/components/ui/Dialog";
 import { IncidentLogFilters } from "./IncidentLogFilters";
 import { IncidentRow } from "./IncidentRow";
@@ -43,7 +44,7 @@ interface IncidentLogViewProps {
 /** Incident Log 画面（実装計画 §3.1 / §3.3、要件 §24 / §25） */
 export function IncidentLogView({
   db = defaultDb,
-  incidentStore = useIncidentStore,
+  incidentStore = useIncidentLogStore,
 }: IncidentLogViewProps) {
   const [entries, setEntries] = useState<IncidentLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,7 +63,17 @@ export function IncidentLogView({
     retryIncident,
     confirmExternalAiSend,
     reset: resetAi,
-  } = incidentStore();
+  } = incidentStore(
+    useShallow((s) => ({
+      currentIncident: s.currentIncident,
+      externalAiConfirmation: s.externalAiConfirmation,
+      isProcessing: s.isProcessing,
+      error: s.error,
+      retryIncident: s.retryIncident,
+      confirmExternalAiSend: s.confirmExternalAiSend,
+      reset: s.reset,
+    }))
+  );
   // 最後に AI 参考情報の操作をした Incident（その Incident の詳細にだけ結果を出す）
   const [aiTargetId, setAiTargetId] = useState<string | null>(null);
   const mountedRef = useRef(true);

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { Decision } from "@/lib/domain/entities";
 import {
   decisionOf,
@@ -121,8 +122,16 @@ function AiActions({
   status: Decision["llm"];
   ai: IncidentDetailAiActions;
 }) {
+  // 送信内容が出たら、確認ボタンまで見えるようにする（スマホでは詳細の下の方にあるため）
+  const regionRef = useRef<HTMLDivElement>(null);
+  const hasConfirmation = ai.confirmation !== null;
+  useEffect(() => {
+    if (hasConfirmation)
+      regionRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [hasConfirmation]);
+
   return (
-    <div className="mb-4 space-y-3">
+    <div ref={regionRef} className="mb-4 space-y-3">
       {ai.error && (
         <p role="alert" className="p-3 rounded bg-red-50 text-red-800 text-sm">
           {ai.error}
@@ -147,6 +156,7 @@ function AiActions({
           </button>
         )
       )}
+      {/* 保存後の再取得: 同じ内容を確認済みならそのまま送り、そうでなければ送信内容の確認から */}
       {status?.errorCode === "unauthorized" && (
         <LlmAccessTokenField onSaved={ai.onRetry} />
       )}

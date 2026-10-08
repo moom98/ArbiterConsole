@@ -19,6 +19,7 @@ ADRs document important architectural and design decisions made during the proje
 | [ADR-007](./ADR-007-gemini-llm-via-server-route.md) | Google Gemini via a Server Route Handler for LLM Features | Accepted |
 | [ADR-008](./ADR-008-round-checklist.md) | Round Checklist: Storage, Phases, Sources and Guarded Round Transitions | Accepted |
 | [ADR-009](./ADR-009-cloudflare-workers-deployment.md) | Deploy to Cloudflare Workers via OpenNext (first deployment without the embedding model) | Accepted |
+| [ADR-010](./ADR-010-gemini-embeddings-for-semantic-search.md) | Gemini Embedding for Semantic Rule Search (replaces the self-hosted model) | Accepted |
 
 ## Naming Convention
 

@@ -193,6 +193,37 @@ describe("ingestRulesFromPDF", () => {
     expect(await database.embeddings.count()).toBe(0);
   });
 
+  it("keeps the embeddings created before a failure and shows retry waits", async () => {
+    const messages: string[] = [];
+    const result = await ingestRulesFromPDF(
+      file,
+      fideMeta,
+      (p) => messages.push(p.message),
+      deps({
+        embed: async (_texts, options) => {
+          options.onRetry?.(5_000);
+          const error = Object.assign(new Error("rate-limited"), {
+            partialVectors: [[0.5, 0.5, 0.5]],
+          });
+          throw error;
+        },
+      })
+    );
+    expect(result).toMatchObject({
+      ruleCount: 2,
+      embeddingCount: 1,
+      embeddingError: "rate-limited",
+    });
+    const [rules, embeddings] = await Promise.all([
+      database.rules.toArray(),
+      database.embeddings.toArray(),
+    ]);
+    expect(rules).toHaveLength(2);
+    expect(embeddings).toHaveLength(1);
+    expect(rules.map((r) => r.id)).toContain(embeddings[0].ruleId);
+    expect(messages.some((m) => /5秒待って再試行/.test(m))).toBe(true);
+  });
+
   it("reports progress through to completion", async () => {
     const stages: string[] = [];
     await ingestRulesFromPDF(

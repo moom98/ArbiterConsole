@@ -16,6 +16,8 @@ export interface RuleSourceSummary {
 
 export interface RuleStatistics {
   total: number;
+  /** 検索対象の条文のうち、現行モデルの意味検索用データがない件数（ADR-010） */
+  missingEmbeddingCount: number;
   bySource: Record<RuleSourceType, number>;
   sources: RuleSourceSummary[];
 }
@@ -47,6 +49,16 @@ export async function getRuleStatistics(): Promise<RuleStatistics> {
     }
   }
 
+  const activeSourceIds = new Set(
+    sources.filter((s) => s.status === "active").map((s) => s.id)
+  );
+  const embeddedRuleIds = new Set(embeddings.map((e) => e.ruleId));
+  const missingEmbeddingCount = rules.filter(
+    (r) =>
+      (!r.sourceId || activeSourceIds.has(r.sourceId)) &&
+      !embeddedRuleIds.has(r.id)
+  ).length;
+
   const embeddingsBySourceId = new Map<string, number>();
   for (const e of embeddings) {
     const sourceId = sourceIdByRuleId.get(e.ruleId);
@@ -60,6 +72,7 @@ export async function getRuleStatistics(): Promise<RuleStatistics> {
 
   return {
     total: rules.length,
+    missingEmbeddingCount,
     bySource,
     sources: sources.map((source) => ({
       source,

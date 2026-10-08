@@ -14,6 +14,7 @@ import {
   type GenerateEmbeddingsOptions,
 } from "@/lib/infrastructure/embeddings/generator";
 import type { PDFExtractionResult } from "@/lib/infrastructure/pdf/extractor";
+import { embeddingTextForRule } from "./embedding-backfill";
 import {
   findActiveSourcesInScope,
   getImportScopeInfo,
@@ -205,31 +206,45 @@ export async function ingestRulesFromPDF(
     updatedAt: now,
   }));
 
-  let embeddings: Embedding[] = [];
-  let embeddingError: string | undefined;
-  try {
-    const vectors = await deps.embed(
-      rules.map((r) => `${r.article} ${r.title}\n${r.content}`),
-      {
-        onProgress: (done, total) =>
-          onProgress?.({
-            stage: "generating-embeddings",
-            current: done,
-            total,
-            message: `Embedding生成中... (${done}/${total})`,
-          }),
-      }
-    );
-    embeddings = vectors.map((vector, i) => ({
+  const toEmbeddings = (vectors: readonly number[][]): Embedding[] =>
+    vectors.slice(0, rules.length).map((vector, i) => ({
       id: crypto.randomUUID(),
       ruleId: rules[i].id,
       vector,
       model: deps.modelId,
       createdAt: now,
     }));
+
+  let embeddings: Embedding[] = [];
+  let embeddingError: string | undefined;
+  let embeddedSoFar = 0;
+  try {
+    const vectors = await deps.embed(rules.map(embeddingTextForRule), {
+      onProgress: (done, total) => {
+        embeddedSoFar = done;
+        onProgress?.({
+          stage: "generating-embeddings",
+          current: done,
+          total,
+          message: `意味検索用データを作成中... (${done}/${total})`,
+        });
+      },
+      onRetry: (waitMs) =>
+        onProgress?.({
+          stage: "generating-embeddings",
+          current: embeddedSoFar,
+          total: rules.length,
+          message: `AIサービスが混雑しているため${Math.round(waitMs / 1000)}秒待って再試行します... (${embeddedSoFar}/${rules.length})`,
+        }),
+    });
+    embeddings = toEmbeddings(vectors);
   } catch (error) {
-    // 意味検索用モデルが利用できなくても、全文検索用に条文は保存する
+    // 意味検索用データを作成できなくても、キーワード検索用に条文は保存する。
+    // 失敗前に作成できた分は保存し、残りは後で「意味検索用データを作成」で作成する（ADR-010）
     embeddingError = error instanceof Error ? error.message : String(error);
+    const partial = (error as { partialVectors?: unknown } | null)
+      ?.partialVectors;
+    if (Array.isArray(partial)) embeddings = toEmbeddings(partial);
   }
 
   onProgress?.({

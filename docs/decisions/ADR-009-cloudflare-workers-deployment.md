@@ -59,7 +59,7 @@
 
 ## Consequences
 
-- Semantic (vector) rule search is not available in this deployment; keyword search works. Restoring it needs the model hosted elsewhere, e.g. Cloudflare R2 with a pinned revision and hash check, plus an ADR-003 update. That is a follow-up.
+- Semantic (vector) rule search is not available in this deployment; keyword search works. **Resolved by [ADR-010](./ADR-010-gemini-embeddings-for-semantic-search.md):** semantic search now uses Gemini Embedding through `/api/llm/embed`. The self-hosted model, `ALLOW_MISSING_MODEL` and `public/.assetsignore` are gone, so deploy with `npm run cf:deploy`.
 - **Next.js 14 is end-of-life, and adapter 1.15.x will not get new fixes.** Plan an upgrade to Next.js 15.5+/16 and the current adapter. This touches React 19 and `next-pwa` compatibility, so it needs its own milestone.
 - The in-memory rate limit and daily cap are per Worker isolate (ADR-007). Set Google Cloud quotas and a billing budget for the Gemini key.
 - `npm run build` and `next start` on Node still work, so the Node deployment path is unchanged.

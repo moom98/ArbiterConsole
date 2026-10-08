@@ -33,11 +33,11 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
   - **Target:** Cloudflare Workers via OpenNext (ADR-009).
   - **AI protection:** `LLM_ACCESS_TOKEN`.
   - **Branch:** production comes from `main` after the user merges PR #1.
-  - **No embedding model in the first deploy:** keyword search only, because the 118 MB model exceeds the 25 MiB per-file limit on Workers.
+  - **First deploy without an embedding model** (keyword search only), because the 118 MB model exceeds the 25 MiB per-file limit on Workers. **Superseded by ADR-010 (Gemini Embedding), see below.**
   - **Deploy steps (README → Deploy):**
     1. The user runs `npx wrangler login`.
     2. `npx wrangler secret put GEMINI_API_KEY` and `npx wrangler secret put LLM_ACCESS_TOKEN`. The user enters the values.
-    3. `ALLOW_MISSING_MODEL=1 npm run cf:deploy`.
+    3. `npm run cf:deploy`. Since ADR-010 there is no model and no `ALLOW_MISSING_MODEL`.
   - Deploying is outward-facing. **Get the user's go-ahead before running `cf:deploy`.**
   - **Status: deployed 2026-10-08** to https://arbiter-console.arbiterconsole.workers.dev.
     - Cloudflare account `ArbiterConsole` (`account_id` in `wrangler.jsonc`), deployed from `main` at `274284e`.
@@ -47,8 +47,11 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
   - **Build-time safety (ADR-009):**
     - `cf:build` aborts if any `.env*` file other than `.env.example` exists.
     - Local Workers values go in `.dev.vars`; production values are set with `wrangler secret put`.
-    - `public/.assetsignore` keeps `models/` out of the upload.
     - Do not set `TRUST_PROXY` on Workers.
+- **Semantic search via Gemini Embedding (decided 2026-10-08, ADR-010):**
+  - The user chose option A, Gemini embeddings, over option B, hosting the model on R2.
+  - Semantic search now needs the network and the access token; keyword search remains the offline fallback.
+  - Implemented on branch `feature/gemini-embeddings`. See `milestones/gemini-embeddings.md`.
 - **Model change (requested earlier):** the user will change the classification and reasoning models in a later task. Only `GEMINI_MODEL_CLASSIFIER` and `GEMINI_MODEL_REASONING` (env) and the defaults in `lib/infrastructure/llm/server/config.ts` need to change. See `milestones/milestone-5.md` → "Changing models later".
 
 ## Important implementation decisions
@@ -92,16 +95,28 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `lib/infrastructure/llm/` (client, assist port, `server/` config, handler, rate limiter, Gemini client)
   - `lib/infrastructure/ai/`
   - `lib/infrastructure/chess/`
-- **API:** `app/api/llm/{reason,classify}/route.ts`
+- **API:** `app/api/llm/{reason,classify,embed}/route.ts`
+- **Semantic search (ADR-010):**
+  - `lib/infrastructure/embeddings/generator.ts` (Gemini client)
+  - `lib/application/embedding-backfill.ts`
+  - `EMBEDDING_MODEL` in `lib/infrastructure/llm/contract.ts`
 - **UI:**
   - `app/(tabs)/{home,report,search,log,settings,tournament}/`
   - `app/(tabs)/tournament/[id]/rounds/[round]/page.tsx`
   - `components/features/`, `components/checklist/`, `components/log/`
 - **Scripts:**
-  - `scripts/fetch-model-assets.mjs` (`npm run fetch-models`)
-  - `scripts/check-model-assets.mjs` (prebuild)
+  - `scripts/copy-runtime-assets.mjs` (prebuild; the pdf.js worker only)
+  - `scripts/check-cf-env.mjs` (`cf:build` env-file guard)
 
 ## Tests and verification performed
+
+**Gemini embeddings (ADR-010, 2026-10-08):**
+
+- tsc is clean.
+- 50 files / 769 tests pass, including 25 new tests for the embed route, the client, the backfill, stats, search and the review fixes.
+- eslint reports 0 errors.
+- `npm run build` and `npm run cf:build` succeed with no model switch. Static assets are 3.1 MB.
+- Not yet tested against the real Gemini API: the key is only in Cloudflare secrets.
 
 **Deployment prep (ADR-009, 2026-10-08):**
 
@@ -129,9 +144,9 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 - **Ad-hoc game ids** contain the local date, so their history splits at midnight.
 - **Blitz B.2 time penalty:** the literal reading is 2 minutes, and the app shows it as "要確認" (needs confirmation). Federation practice is unconfirmed.
 - **Search:**
-  - Thresholds have not been tuned on real PDFs.
+  - Thresholds have not been tuned on real PDFs. In particular, `vectorMinSimilarity` 0.65 for Gemini Embedding is provisional (ADR-010).
+  - Semantic search needs the network and the access token. Each device creates its own embeddings at import, or later with 意味検索用データを作成.
   - English precision is weak.
-  - Nothing warms the model cache offline.
 - **LLM:**
   - It has not been tested against the real Gemini API.
   - The rate limit and daily cap are per instance. Set Google Cloud quotas and a billing budget.
@@ -148,7 +163,6 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 - Whether the user's federation applies 1 or 2 minutes for Blitz B.2 (adequate supervision).
 - **Custom domain:** whether to use one, or the default `*.workers.dev` URL.
-- **Embedding model hosting:** how to restore semantic search later, e.g. R2 plus an ADR-003 update.
 
 ## Next steps
 
@@ -162,10 +176,10 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
      - AI reference information with the real token (Settings → AI設定);
      - rule PDF import and keyword search;
      - PWA install.
-   - **To redeploy**, run from `main` with no `.env*` files: `ALLOW_MISSING_MODEL=1 npm run cf:deploy`.
+   - **To redeploy**, run from `main` with no `.env*` files: `npm run cf:deploy`.
    - Plain `http://` is also served on workers.dev. Share the `https://` URL, since the PWA needs HTTPS.
 2. **Follow-ups found during deployment prep:**
-   - Host the embedding model so semantic search works again.
+   - Semantic search: done with ADR-010. Next, tune `vectorMinSimilarity` on real PDFs.
    - Upgrade to Next.js 15.5+/16 and the current OpenNext adapter. Next 14 is EOL.
 3. Later, if the user wants:
    - **Milestone 8 without voice input:** clock guide, player Q&A mode, UX polish.

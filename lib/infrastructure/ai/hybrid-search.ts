@@ -6,7 +6,7 @@ import {
 import { db } from "@/lib/infrastructure/db";
 import {
   EMBEDDING_MODEL_ID,
-  generateEmbedding,
+  generateQueryEmbedding,
 } from "@/lib/infrastructure/embeddings/generator";
 import { getFulltextIndex, type FulltextHit } from "./fulltext-search";
 import { scoreByVector, type VectorHit } from "./vector-search";
@@ -243,7 +243,7 @@ export async function hybridSearch(
     vectorWeight = 0.6,
     fulltextWeight = 0.4,
     minScore = 0.25,
-    vectorMinSimilarity = 0.5,
+    vectorMinSimilarity = DEFAULT_VECTOR_MIN_SIMILARITY,
   } = options;
 
   if (!query.trim()) {
@@ -318,6 +318,13 @@ export async function hybridSearch(
 
 const RELATED_LIMIT = 3;
 
+/**
+ * ベクトル類似度の既定の下限（Gemini Embedding, ADR-010）。
+ * 同じ分野の無関係な条文でも類似度が高めに出るため、旧モデル（0.5）より高くしている。
+ * 暫定値: 実際の FIDE/JCF の PDF で調整すること（docs/progress/current.md の既知の課題）。
+ */
+export const DEFAULT_VECTOR_MIN_SIMILARITY = 0.65;
+
 function errorMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
 }
@@ -364,15 +371,16 @@ const defaultDeps: HybridSearchDeps = {
   },
 
   async vector(query, candidates) {
-    // 埋め込みが無い場合（モデル未配信の環境等）はモデルを読み込まない（毎回の読み込み失敗を避ける）
+    // 意味検索用データが無い場合は検索語を送らない（不要な通信・費用を避ける）
     const embeddings = await db.embeddings
       .where("model")
       .equals(EMBEDDING_MODEL_ID)
       .toArray();
     if (embeddings.length === 0) {
-      throw new Error("No embeddings available for the current model");
+      throw new Error("意味検索用データがありません");
     }
-    const queryVector = await generateEmbedding(query);
+    // オフライン・未認証・フェアプレー関連の検索語などは例外 → キーワード検索のみで継続する
+    const queryVector = await generateQueryEmbedding(query);
     return scoreByVector(
       queryVector,
       candidates,

@@ -11,7 +11,7 @@ import type {
   LlmReasoningRequest,
 } from "@/lib/domain/llm/types";
 import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
-import { LLM_LIMITS } from "../contract";
+import { LLM_LIMITS, type EmbedRequest } from "../contract";
 
 /** フェアプレーは外部に送らない（§23, ADR-007）。クライアント側の防御が破られた場合の多重防御 */
 const FAIR_PLAY_NOT_SENT = "フェアプレー関連の内容はAIへ送信できません";
@@ -110,6 +110,50 @@ export function validateClassificationRequest(
     c.errors.push(FAIR_PLAY_NOT_SENT);
   if (c.errors.length > 0) return { ok: false, errors: c.errors };
   return { ok: true, value: { text: text as string } };
+}
+
+/**
+ * 埋め込みの入力検証（ADR-010）。
+ * - 文書（document）は登録したルール資料の条文。公開された規則のため送信してよい
+ * - 検索語（query）は事象の記述を含みうるため、フェアプレーに触れるものは送らない（§23, ADR-007）
+ */
+export function validateEmbedRequest(body: unknown): Validated<EmbedRequest> {
+  if (!isObject(body))
+    return {
+      ok: false,
+      errors: ["本文はJSONオブジェクトである必要があります"],
+    };
+  const errors: string[] = [];
+  const taskType = body.taskType;
+  if (taskType !== "document" && taskType !== "query")
+    errors.push("taskType は document または query です");
+  const texts = body.texts;
+  if (!Array.isArray(texts) || texts.length === 0) {
+    errors.push("texts は空でない配列である必要があります");
+  } else {
+    if (texts.length > LLM_LIMITS.maxEmbedTexts)
+      errors.push(`texts は${LLM_LIMITS.maxEmbedTexts}件以内にしてください`);
+    if (taskType === "query" && texts.length !== 1)
+      errors.push("検索語は1件ずつ送ってください");
+    texts.forEach((t, i) => {
+      if (typeof t !== "string" || t.trim() === "")
+        errors.push(`texts[${i}] は空でない文字列である必要があります`);
+      else if (t.length > LLM_LIMITS.maxEmbedTextChars)
+        errors.push(
+          `texts[${i}] は${LLM_LIMITS.maxEmbedTextChars}文字以内にしてください`
+        );
+      else if (taskType === "query" && mentionsFairPlay(t))
+        errors.push(FAIR_PLAY_NOT_SENT);
+    });
+  }
+  if (errors.length > 0) return { ok: false, errors };
+  return {
+    ok: true,
+    value: {
+      taskType: taskType as EmbedRequest["taskType"],
+      texts: texts as string[],
+    },
+  };
 }
 
 export function validateReasoningRequest(

@@ -36,7 +36,7 @@
 #### 📚 Rule Search
 
 - FIDE Laws of Chess、JCF規則のPDFインポート
-- AI embeddings生成（Transformers.js、オフライン対応）
+- 意味検索（Gemini Embedding、サーバー経由。オフライン時はキーワード検索のみ — [ADR-010](./docs/decisions/ADR-010-gemini-embeddings-for-semantic-search.md)）
 - Hybrid search（Vector検索 + Full-text検索）
 - ルール優先度システム（大会規則 > JCF > FIDE）
 
@@ -84,13 +84,13 @@
 ### Data & Storage
 
 - **Database**: Dexie.js (IndexedDB wrapper)
-- **Vector Search**: Transformers.js (paraphrase-multilingual-MiniLM-L12-v2)
+- **Vector Search**: Gemini Embedding（`gemini-embedding-001`, 768次元）+ 端末内（IndexedDB）でのコサイン類似度
 - **Full-text Search**: Lunr.js（日本語は文字bi-gram）
 
 ### AI & ML
 
 - **LLM**: Google Gemini API（`@google/genai`、サーバーの Route Handler 経由のみ。[ADR-007](./docs/decisions/ADR-007-gemini-llm-via-server-route.md)）
-- **Embeddings**: Xenova/paraphrase-multilingual-MiniLM-L12-v2 (384-dim, 多言語, 約120MB, 自己ホスト — [ADR-003](./docs/decisions/ADR-003-offline-rule-search.md))
+- **Embeddings**: `gemini-embedding-001`（768次元、多言語。`/api/llm/embed` 経由 — [ADR-010](./docs/decisions/ADR-010-gemini-embeddings-for-semantic-search.md)。旧: 端末内モデル、ADR-003）
 - **Runtime**: WebAssembly (browser-based)
 
 ### Tools
@@ -115,20 +115,11 @@ git clone git@github.com:moom98/ArbiterConsole.git
 cd ArbiterConsole
 
 # Install dependencies
-npm install
-
-# Download the embedding model into public/models/ (one-time, ~120MB, needs network)
-npm run fetch-models
+npm ci
 ```
 
-オフライン動作のため、実行時アセットはすべて同一オリジンから配信します（[ADR-003](./docs/decisions/ADR-003-offline-rule-search.md)）。
-
-- `public/pdfjs/`, `public/ort/`: `npm run dev` / `npm run build` の前に `scripts/copy-runtime-assets.mjs` が node_modules から自動コピー
-- `public/models/`: `npm run fetch-models` で Hugging Face からダウンロード（デプロイ前に実行）。リビジョンはコミットSHAに固定され、ダウンロード後にファイルのハッシュを検証します
-
-いずれも生成物のためリポジトリには含めません（.gitignore 対象）。モデル未配置の場合、ルール検索はキーワード検索のみで動作します。
-
-`npm run build` はモデル未配置だとエラーで停止します（意味検索なしでのデプロイ防止）。開発・CIでモデル無しのままビルドする場合は明示的に `ALLOW_MISSING_MODEL=1` を指定してください。
+- `public/pdfjs/`: `npm run dev` / `npm run build` の前に `scripts/copy-runtime-assets.mjs` が node_modules から自動コピーします（生成物のため .gitignore 対象）。
+- 意味検索は Gemini Embedding を `/api/llm/embed` 経由で使います（[ADR-010](./docs/decisions/ADR-010-gemini-embeddings-for-semantic-search.md)）。条文のベクトルは PDF 取り込み時に作成し、端末（IndexedDB）に保存します。オフライン・トークン未入力の端末ではキーワード検索のみで動作し、後から「設定 → 意味検索用データを作成」で作成できます。
 
 ### LLM（AI参考情報）の設定
 
@@ -145,6 +136,8 @@ npm run fetch-models
 | `LLM_ACCESS_TOKEN`                                                        | （なし）                   | 設定すると `/api/llm/*` は `X-Arbiter-Access-Token` ヘッダーの一致を要求（401）。Gemini キーとは別物。`NEXT_PUBLIC_` にしないこと。**本番（`NODE_ENV=production`）で未設定の場合、AIルートは 503 を返す** |
 | `LLM_RATE_LIMIT_REASON_PER_MINUTE` / `LLM_RATE_LIMIT_CLASSIFY_PER_MINUTE` | `10` / `10`                | ルートごとのレート制限                                                                                                            |
 | `LLM_DAILY_REQUEST_LIMIT`                                                 | `500`                      | プロセスあたりの1日（UTC）の上限（`0` は無制限）                                                                                  |
+| `LLM_RATE_LIMIT_EMBED_PER_MINUTE`                                         | `60`                       | 意味検索の埋め込み（`/api/llm/embed`）のレート制限（1回最大16件）                                                                  |
+| `LLM_DAILY_EMBED_REQUEST_LIMIT`                                           | `1000`                     | 埋め込みの1日（UTC）の上限（推論・分類とは別。`0` は無制限）                                                                      |
 | `LLM_ALLOW_UNAUTHENTICATED`                                               | （なし）                   | `1` のときのみ、本番でトークン未設定でも AI ルートを有効にする（デプロイ先の認証で保護している場合のみ） |
 | `GEMINI_THINKING_BUDGET`                                                  | （なし）                   | 思考トークン数（予算方式のモデル向け。設定時はレベルより優先） |
 | `TRUST_PROXY`                                                             | （なし）                   | `1` のときのみ `X-Forwarded-For` を IP として使う（信頼できるプロキシの背後のみ）                                                 |
@@ -159,6 +152,7 @@ npm run fetch-models
 
 - **モデルの変更（判定=分類 / 推論）:** サーバーの環境変数 `GEMINI_MODEL_CLASSIFIER`（分類）と `GEMINI_MODEL_REASONING`（推論）を変更し、サーバーを再起動するだけです。コード変更は不要です。既定値は `lib/infrastructure/llm/server/config.ts` の `DEFAULT_CLASSIFIER_MODEL` / `DEFAULT_REASONING_MODEL` の1か所だけで定義しています（他のファイルにモデル ID を書かないこと）。
 - **既定値の変更:** `config.ts` の2つの定数のみを変更し、`.env.example` と本 README の表を合わせて更新します。
+- **埋め込みモデル（意味検索）:** `lib/infrastructure/llm/contract.ts` の `EMBEDDING_MODEL` で固定しています（環境変数では変えません）。変更すると保存済みのベクトルと比較できなくなるため、変更後は各端末で「意味検索用データを作成」を実行してください（ADR-010）。
 - **プロバイダーの変更:** `GenerateJsonFn`（`lib/infrastructure/llm/server/generate.ts`）を実装したアダプターを追加します。次に `lib/infrastructure/llm/server/provider.ts` の `llmProvider` を差し替え、必要なら `config.ts` の環境変数名を変更します。ドメイン（検証器・DecisionEngine）、クライアント、UI は変更不要です。
 
 ### Development
@@ -174,11 +168,8 @@ npm run dev
 ### Build
 
 ```bash
-# Production build (requires `npm run fetch-models` first)
+# Production build
 npm run build
-
-# Build without the embedding model (development / CI only; keyword search only)
-ALLOW_MISSING_MODEL=1 npm run build
 
 # Start production server
 npm start
@@ -187,7 +178,6 @@ npm start
 ### Deploy（Cloudflare Workers。ADR-009）
 
 OpenNext アダプター（`@opennextjs/cloudflare` 1.15.x。Next.js 14 対応の最終系列）で Workers にデプロイします。
-埋め込みモデル（118MB）は Workers の1ファイル上限（25MiB）を超えるため、現在はモデルなし（キーワード検索のみ）で配信します。
 
 ```bash
 # 1. Cloudflare にログイン（初回のみ。ブラウザが開きます）
@@ -198,14 +188,13 @@ npx wrangler secret put GEMINI_API_KEY
 npx wrangler secret put LLM_ACCESS_TOKEN   # アービターに配布するトークン（設定画面の「AI設定」で入力）
 
 # 3. ビルドしてデプロイ
-ALLOW_MISSING_MODEL=1 npm run cf:deploy
+npm run cf:deploy
 
 # ローカルで Workers 上の動作を確認する場合（.dev.vars に GEMINI_API_KEY / LLM_ACCESS_TOKEN を書く。.gitignore 済み）
-ALLOW_MISSING_MODEL=1 npm run cf:preview
+npm run cf:preview
 ```
 
 - `.env.example` 以外の `.env*` ファイルがあると `cf:build` は中止します（必ず `npm run cf:*` を使用。`opennextjs-cloudflare` を直接実行するとこの確認は行われません）。OpenNext がその値をワーカーに埋め込むためです。ローカル確認の値は `.dev.vars`、本番の値は `wrangler secret put` で設定してください。
-- `npm run fetch-models` 済みでも、`public/models/` は `.assetsignore` によりアップロードされません。
 - 本番で `LLM_ACCESS_TOKEN` が未設定の場合、AI機能は 503 で無効になります（ADR-007）。
 - Gemini キーには Google Cloud 側でクォータと予算アラートを設定してください（レート制限はインスタンスごと）。
 
@@ -220,7 +209,7 @@ npm test
 ### 1. Rule Search
 
 1. 設定画面で資料種別（FIDE / JCF）を選び、資料名・版・PDFを指定してインポート。同じ種別の有効な資料が既にある場合は、「置き換える（既存資料は旧版として保存し検索対象外）」か「両方を有効にする」かを画面上で選択します。登録済み資料は設定画面から削除できます
-2. システムが条文とページ番号を抽出し、embeddingsを生成（初回のみ、数分かかる場合があります）
+2. システムが条文とページ番号を抽出し、意味検索用データを作成（オンライン時。条文数により数十秒〜数分）
 3. 検索画面でキーワード・条文番号を入力（例: "違法手", "7.5.4", "illegal move"）
 4. 結果には資料名・版・ページが表示され、タップで条文全文と出典を確認できます
 
@@ -259,7 +248,7 @@ npm test
                       ↓
 ┌─────────────────────────────────────────────────┐
 │         Infrastructure Layer                    │
-│  (IndexedDB + Transformers.js + /api/llm→Gemini)│
+│  (IndexedDB + /api/llm→Gemini)                  │
 └─────────────────────────────────────────────────┘
 ```
 

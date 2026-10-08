@@ -1,5 +1,5 @@
-import type { GenerateJsonFn } from "./generate";
-import { geminiGenerateJson } from "./gemini-client";
+import type { EmbedTextsFn, GenerateJsonFn } from "./generate";
+import { geminiEmbedTexts, geminiGenerateJson } from "./gemini-client";
 
 /**
  * 使用する LLM プロバイダーの唯一の結合点（ADR-007）。
@@ -10,3 +10,6 @@ import { geminiGenerateJson } from "./gemini-client";
  *   （必要に応じて config.ts の環境変数名も変更する）。ドメイン・クライアント・UI は変更不要。
  */
 export const llmProvider: GenerateJsonFn = geminiGenerateJson;
+
+/** 意味検索の埋め込み（ADR-010）。モデルは contract.ts の EMBEDDING_MODEL で固定 */
+export const embedProvider: EmbedTextsFn = geminiEmbedTexts;

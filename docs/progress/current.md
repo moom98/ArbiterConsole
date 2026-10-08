@@ -173,6 +173,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
     - `docs/design/jev-classifier-design.md` (ADR-011)
     - `docs/design/external-ai-data-protection.md` (ADR-012): Sensitive Gate and PII redaction for **all** external AI, Gemini included
     - `docs/design/fact-model.md` (ADR-013): the Decision Tree decides the required facts, Jev only checks "explicitly stated?", unknown answers, calibrated thresholds
+    - ADR-014: DT-005 Draw Claim, DT-006 Automatic Draw, DT-007 Touch Move, local `game.history`, position-based mate possibility, `TimeControl` periods
     - catalogue: `docs/design/jev-missing-info-catalog.md`
   - **User decisions:**
     - Q1: classification only;
@@ -181,7 +182,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
     - Q5: de-identify Gemini too;
     - the catalogue review: 12 points, all reflected.
   - **Still open:**
-    - the catalogue re-review (the 要確認 items, the DT question rewording, the B/C/O levels);
+    - (done 2026-10-08) the catalogue re-review: 15 points reflected, ADR-014 added. **The user approved implementing the fact catalogue.**
     - Q-DP1: no AI reasoning for sensitive incidents?
     - Q-DP2: the review of the doubtful vocabulary;
     - Q-F1: value suggestion (not planned);
@@ -212,7 +213,14 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 3. **Jev classifier and data protection (ADR-011/012/013):** after the catalogue re-review, implement the steps in jev-classifier-design §10 in order (J0, J1a data protection, J1b fact model, J1c Jev, J2, J3):
    - J0: check the official API with a real key;
    - J1a: data protection for all routes;
-   - J1b: the fact model, with `unknown` in every DT and `resolveUnknown`;
+   - J1b: the fact model and ADR-014, in slices:
+     - J1b-1: the catalogue data, types and `requiredFacts` (pure, no tree changes);
+     - J1b-2: `unknown` and `resolveUnknown`;
+     - J1b-3: `game.history`;
+     - J1b-4: mate possibility;
+     - J1b-5: DT-005/006 restructure;
+     - J1b-6: DT-007 touch move and counting;
+     - J1b-7: `TimeControl` periods;
    - J1c: the Jev port, adapter, calibrated parser and `/api/llm/facts`, with the default provider kept on `gemini`;
    - J2: UI;
    - J3: Japanese evaluation, then the production switch by env.

@@ -1,6 +1,6 @@
 # ADR-013: Fact Model — Decision Trees Decide Required Facts; Jev Only Checks Explicit Presence
 
-**Status:** Accepted (the direction). The user reviewed it on 2026-10-08. The revised catalogue is under re-review. Not implemented.
+**Status:** Accepted. The user reviewed it twice on 2026-10-08 and approved implementing the catalogue. Not implemented yet.
 
 **Date:** 2026-10-08
 
@@ -28,7 +28,7 @@ The first Jev design showed "the top 5 missing items of the category by probabil
 
 ## Decision
 
-1. **Facts** are catalogue data. Each has:
+1. **Facts** are catalogue data. A shared fact (`game.*`) has one definition, and one usage (level and condition) per category. Each fact has:
    - an observation question;
    - an answer spec, where `unknown` is always available;
    - a level and `appliesWhen`, as data;
@@ -48,9 +48,9 @@ The first Jev design showed "the top 5 missing items of the category by probabil
    - A branch that needs more input counts as disagreeing.
    - Unknown count, duration and text facts, or more than 2 unknown facts, go straight to `manual-review`.
    - `parseBoolean` must keep `unknown`.
-   - The draw "other" subtype, which includes the 50-move claim, uses a fact plan with the same claim facts.
+   - Draw claims (threefold and 50-move) are in DT-005, and automatic draws in DT-006. Touch move is in DT-007. See [ADR-014](./ADR-014-draw-dt-touch-move-game-history.md).
 4. **Observations, not judgments.**
-   - The existing judgment questions are reworded. `opponentCanCheckmate` is replaced by the material count plus the ADR-005 check.
+   - The existing judgment questions are reworded or replaced. `opponentCanCheckmate` is replaced by a position-based mate-possibility service (ADR-014 §5). Counts are never enough for "can-mate".
    - Comparisons are made in domain code with rule parameters: remaining time against the limit, minutes late against the default time.
 5. **Presence check.**
    - Jev answers one `noul` per required, presence-checkable fact: "explicitly stated?". It goes through `/api/llm/facts`, with the questions built on the server from the catalogue, and through the ADR-012 guard.
@@ -71,5 +71,5 @@ The first Jev design showed "the top 5 missing items of the category by probabil
 **Negative and trade-offs**
 
 - Presence saves no taps: it only orders the questions. Value suggestion (Q-F1) is deliberately left out.
-- Every DT question needs an `unknown` option, and DT-001…005 need `resolveUnknown` with tests. This is significant domain work.
+- Every DT question needs an `unknown` option, and DT-001…007 need `resolveUnknown` with tests. This is significant domain work.
 - Calibration needs a labelled synthetic dataset per model version.

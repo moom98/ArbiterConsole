@@ -64,7 +64,7 @@ Per §9, the 10 primary categories are:
 | `two-hands-castling` | Castling with two hands | Decision Tree | Same as general |
 | `promotion-issue` | Incorrect promotion procedure | Decision Tree | Piece placed? Clock pressed? |
 | `illegal-castling` | Castled when not allowed | Decision Tree | Why illegal? (King moved? Through check?) |
-| `touch-move-violation` | Touched piece not moved | LLM+RAG | Arbiter observed? Player claimed? Piece released? |
+| `touch-move` | Touched piece not moved (Article 4) | Decision Tree (DT-007, ADR-014) | Pieces touched in order? Adjust declared? On move? Released? Claim timing? |
 | `illegal-en-passant` | En passant captured when not allowed | Decision Tree | Same as general |
 | `piece-knocked-over` | Piece accidentally knocked during move | LLM+RAG | Intentional? Game affected? |
 
@@ -216,11 +216,11 @@ function hasMatingMaterial(pieces: ChessPiece[]): boolean {
 | `draw-offer` | Draw offer made | LLM+RAG | Proper procedure? Recorded? Excessive? |
 | `threefold-repetition-claim` | Player claims threefold repetition | Decision Tree | Position repeated 3 times? Player's turn? Move recorded? Clock stopped? |
 | `fivefold-repetition` | Arbiter declares draw (5-fold) | Decision Tree | Position repeated 5 times? |
-| `50-move-claim` | Player claims 50-move rule | Decision Tree | 50 moves without capture/pawn move? Player's turn? Move recorded? |
+| `50-move-claim` | Player claims 50-move rule | Decision Tree (DT-005 Draw Claim, `claimBasis: fifty-move`, ADR-014) | From the verified game history: 50 moves without capture or pawn move? Player's turn? Move written? |
 | `75-move-rule` | Arbiter declares draw (75-move) | Decision Tree | 75 moves without capture/pawn move? |
 | `stalemate` | Stalemate position | Decision Tree | Position verified? |
 | `dead-position` | No possible checkmate | Decision Tree | Material verified? |
-| `insufficient-material` | Both sides lack mating material | Decision Tree | Material checked? |
+| `insufficient-material` | Dead position: neither side can checkmate by any series of legal moves (6.9 / 9.6) | Mate-possibility service (ADR-014 §5): material-only only for the proven cases, otherwise position and helpmate search, else CA | Position? |
 
 **Decision Tree Coverage** (High):
 - `threefold-repetition-claim`

@@ -2,6 +2,7 @@ import type {
   CompetitionType,
   IllegalMoveDetection,
   IllegalMoveSubtype,
+  MatePositionInput,
   Penalty,
   PlayerColor,
   SupervisionRegime,
@@ -31,6 +32,8 @@ import {
   opponentOf,
   type TreeOutput,
 } from "./tree-support";
+import type { MatePossibility } from "@/lib/domain/services/mate-possibility";
+import { mateStep, reinstatedPositionQuestions } from "./mate-position";
 
 /**
  * Rapid / Blitz の違法手（DT-002 / DT-003）で共通のペナルティ判断。
@@ -46,7 +49,9 @@ export interface FastPenaltyContext {
   subtype: IllegalMoveSubtype;
   playerIncidentCount: unknown;
   priorIllegalMoves?: PriorIllegalMove[];
-  opponentCanCheckmate?: boolean | "unknown";
+  matePosition?: MatePositionInput;
+  /** 違法手の直前に戻した局面によるメイト可能性（ADR-014 §5） */
+  mate?: MatePossibility;
   /** 判断の根拠として先頭に追加する条文（A.4 / A.5.2 / B.2 / B.3 など） */
   regimeSources: CitationKey[];
   /** 大会規定による明示的な上書き（Blitz B.2 の加算時間のみ参照。ADR-006） */
@@ -117,18 +122,18 @@ export function evaluateFastPenalty(
     ctx.playerIncidentCount
   );
   const article = FAST_SUBTYPE_ARTICLE[subtype];
-  const canMate = ctx.opponentCanCheckmate;
-  if (canMate === undefined) {
+  const step = mateStep(ctx.matePosition, ctx.mate);
+  if (step.kind === "ask") {
     return out.needsInput(
-      [QUESTIONS.opponentCanCheckmate],
-      `${label}: ${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）の可能性があります。結論には、相手がメイト可能な局面かの確認が必要です（7.5.5 ただし書き）。\n${priorLines.join("\n")}`,
+      reinstatedPositionQuestions(),
+      `${label}: ${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）の可能性があります。結論には、相手がメイト可能な局面かの判定が必要です（7.5.5 ただし書き）。違法手の直前に戻した局面を入力してください。${step.error ? `\n${step.error}` : ""}\n${priorLines.join("\n")}`,
       cite(...ctx.regimeSources, article, "FIDE_7_5_5")
     );
   }
-  if (canMate === "unknown") {
+  if (step.kind === "unknown") {
     return out.decided({
       kind: "manual-review",
-      conclusion: `${label}: ${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手がメイト可能な局面か判断できないため、結論（負け／ドロー）を確定できません。CAへ確認してください。`,
+      conclusion: `${label}: ${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手がメイト可能な局面か確定できないため（${step.reason}）、結論（負け／ドロー）を確定できません。局面を確認し、CAへ確認してください。`,
       actions: [
         "時計を止める",
         ...priorLines,
@@ -144,10 +149,10 @@ export function evaluateFastPenalty(
         "7.5.5 ただし書き（相手がメイト不可能ならドロー）の該当性を判断できません",
     });
   }
-  if (canMate === false) {
+  if (step.kind === "cannot-mate") {
     return out.decided({
       kind: "recommendation",
-      conclusion: `${label}: ${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手はどのような合法手の連続でもメイトできない局面のため、ドローとなります。`,
+      conclusion: `${label}: ${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手はどのような合法手の連続でもメイトできない局面のため、ドローとなります。（${step.reason}）`,
       actions: [
         "時計を止める",
         ...priorLines,
@@ -175,10 +180,11 @@ export function evaluateFastPenalty(
   const inconsistent = ctx.playerIncidentCount >= 2;
   return out.decided({
     kind: "recommendation",
-    conclusion: `${label}: ${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）です。相手はメイト可能な局面のため、${COLOR_JA[color]}の負けとなります。`,
+    conclusion: `${label}: ${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）です。相手はメイト可能な局面のため、${COLOR_JA[color]}の負けとなります。\nメイトまでの手順の例（違法手の直前の局面から）: ${step.line}`,
     actions: [
       "時計を止める",
       ...priorLines,
+      "入力した局面（手番を含む）が、違法手の直前の局面と一致することを確認する",
       `${COLOR_JA[color]}の負けを宣言する（7.5.5）`,
       "結果を記録する",
     ],
@@ -214,7 +220,12 @@ export interface IllegalMoveFastInput {
   subtype: IllegalMoveSubtype;
   gameEnded: boolean;
   clockPressed: boolean;
-  opponentCanCheckmate: boolean | "unknown";
+  /** 7.5.5 ただし書きの判定に使う局面の入力方法 */
+  matePosition: MatePositionInput;
+  /** 違法手の直前に戻した局面（FEN） */
+  positionFen?: string;
+  /** DecisionEngine が算出したメイト可能性（ADR-014 §5） */
+  mate?: MatePossibility;
   /** A.5 / B.3 のみ */
   opponentMadeNextMove: boolean;
   /** A.5 / B.3 のみ */

@@ -390,7 +390,7 @@ describe("requiredFacts: subtype, records and explicit requests", () => {
     expect(result).toEqual([
       "ct.event",
       "ct.zero-side",
-      "game.history",
+      "game.position",
       "ct.last-period",
     ]);
   });
@@ -400,9 +400,9 @@ describe("requiredFacts: subtype, records and explicit requests", () => {
       category: "clock-time",
       answers: {},
       context: {},
-      dtRequestedQuestionIds: ["positionFen", "materialConfirmed"],
+      dtRequestedQuestionIds: ["matePosition", "positionFen"],
     });
-    expect(result.filter((id) => id === "game.history")).toHaveLength(1);
+    expect(result.filter((id) => id === "game.position")).toHaveLength(1);
   });
 
   it("treats an 'unknown' derived value as not derived", () => {

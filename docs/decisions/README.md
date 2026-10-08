@@ -20,6 +20,11 @@ ADRs document important architectural and design decisions made during the proje
 | [ADR-008](./ADR-008-round-checklist.md) | Round Checklist: Storage, Phases, Sources and Guarded Round Transitions | Accepted |
 | [ADR-009](./ADR-009-cloudflare-workers-deployment.md) | Deploy to Cloudflare Workers via OpenNext (first deployment without the embedding model) | Accepted |
 | [ADR-010](./ADR-010-gemini-embeddings-for-semantic-search.md) | Gemini Embedding for Semantic Rule Search (replaces the self-hosted model) | Accepted |
+| [ADR-011](./ADR-011-jev-for-incident-classification.md) | TypeSafe AI Jev for Incident Classification (provider-switchable) | Accepted (design) |
+| [ADR-012](./ADR-012-external-ai-data-protection.md) | Sensitive Gate and PII Redaction for Every External AI Send | Accepted (design) |
+| [ADR-013](./ADR-013-fact-model.md) | Fact Model — Decision Trees Decide Required Facts; Jev Only Checks Explicit Presence | Accepted |
+| [ADR-014](./ADR-014-draw-dt-touch-move-game-history.md) | Draw Claim and Automatic Draw Trees, Touch-Move Tree, Local Game History, Position-Based Mate Possibility | Accepted (partly implemented) |
+| [ADR-015](./ADR-015-local-helpmate-search.md) | Local Helpmate Search for Mate Possibility (own move generator, Web Worker, verified evidence) | Accepted |
 
 ## Naming Convention
 

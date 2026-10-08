@@ -7,6 +7,7 @@ import { createTournamentRepositories } from "@/lib/infrastructure/db/tournament
 import { TournamentService } from "@/lib/application/tournament-management";
 import { fixedProviders, FIXED_NOW } from "../helpers";
 import { profileInput } from "./fixtures";
+import { runHelpmateSearch } from "@/lib/infrastructure/chess/helpmate/run";
 
 let n = 0;
 
@@ -17,7 +18,11 @@ describe("Incident store with tournament games (ADR-006)", () => {
 
   beforeEach(() => {
     db = new ArbiterDatabase(`store-tournament-${++n}`);
-    store = createIncidentStore({ db, providers: fixedProviders(`i${n}`) });
+    store = createIncidentStore({
+      db,
+      providers: fixedProviders(`i${n}`),
+      mateSearch: { search: async (r) => runHelpmateSearch(r) },
+    });
     service = new TournamentService(
       createTournamentRepositories(db, () => FIXED_NOW),
       fixedProviders(`t${n}`)
@@ -87,13 +92,14 @@ describe("Incident store with tournament games (ADR-006)", () => {
     const { g } = await blitzB2(true);
     await reportIllegalMove(g.id);
     await reportIllegalMove(g.id);
-    // 2回目は 7.5.5 ただし書きの確認が必要
+    // 2回目は 7.5.5 ただし書きの判定に局面が必要
     expect(store.getState().followUpQuestions.map((q) => q.id)).toContain(
-      "opponentCanCheckmate"
+      "matePosition"
     );
-    const answered = await store
-      .getState()
-      .answerFollowUp({ opponentCanCheckmate: "true" });
+    const answered = await store.getState().answerFollowUp({
+      matePosition: "fen",
+      reinstatedFen: "6k1/8/8/8/8/8/5q2/6K1 w - - 0 40",
+    });
     if (!answered.ok) throw new Error(answered.error);
     expect(answered.result.decision.penalties[0].type).toBe("game-loss");
   });

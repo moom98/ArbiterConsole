@@ -95,6 +95,7 @@ export default function ReportPage() {
     followUpQuestions,
     isProcessing,
     llmPending,
+    mateSearchPending,
     error,
     lastContext,
     loadLastContext,
@@ -750,9 +751,11 @@ export default function ReportPage() {
           <div className="bg-white rounded-lg p-8 text-center">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
             <p className="text-lg font-semibold">
-              {llmPending
-                ? "AI参考情報を取得中...（オンライン）"
-                : "判断支援を準備中..."}
+              {mateSearchPending
+                ? "局面からメイトの手順を探しています...（端末内）"
+                : llmPending
+                  ? "AI参考情報を取得中...（オンライン）"
+                  : "判断支援を準備中..."}
             </p>
           </div>
         </div>

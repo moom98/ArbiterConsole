@@ -58,10 +58,15 @@ export interface IllegalMoveFacts {
   /** 対局がすでに終了しているか（署名済み・結果確定など） */
   gameEnded: boolean;
   /**
-   * 相手（違反していない側）が、あらゆる合法手の連続によって
-   * 違反者のキングをチェックメイトできる局面か（7.5.5 ただし書き）
+   * 7.5.5 ただし書き（相手がメイト不可能ならドロー）の判定に使う局面の入力方法。
+   * メイト可能性は局面からコードが判定する（ADR-014 §5）。直接は質問しない。
    */
-  opponentCanCheckmate: boolean | "unknown";
+  matePosition?: MatePositionInput;
+  /**
+   * 違法手の直前に戻した局面（7.5.1〜7.5.4 で再開する局面。手番は違反者）の FEN。
+   * 端末内だけで使い、外部へは送らない（ADR-012）。
+   */
+  positionFen?: string;
   /**
    * Rapid / Blitz（A.5 / B.3）のみ: 違反者の相手がすでに次の手を指したか（A.5.2）
    */
@@ -77,6 +82,31 @@ export interface IllegalMoveFacts {
  * - other:          それ以外（観戦者からの報告など）
  */
 export type IllegalMoveDetection = "arbiter" | "opponent-claim" | "other";
+
+/**
+ * メイト可能性（6.9 / 7.5.5 / A.5.3）の判定に使う局面の入力方法（ADR-014 §5）。
+ * - fen:         局面の FEN を入力して判定する
+ * - unknown: 局面を入力できない（CAへ確認。ツリー独自の unknown で、resolveUnknown では列挙しない）
+ */
+export type MatePositionInput = "fen" | "unknown";
+
+/**
+ * 端末内のヘルプメイト探索の結果（ADR-015）。判定のたびに ChessPositionPort で
+ * 手順を再検証してから使う（記録自体は証拠の候補にすぎない）。
+ */
+export interface MateSearchRecord {
+  /** 探索した局面 */
+  fen: string;
+  /** メイトする側 */
+  attacker: PlayerColor;
+  status: "found" | "not-found";
+  /** found: 局面からメイトまでの手順（SAN） */
+  moves?: string[];
+  /** not-found の理由（limit / deadline / error など） */
+  reason?: string;
+  /** 探索エンジンの版（not-found を新しい版で探し直すため） */
+  engine: string;
+}
 
 // ---------------------------------------------------------------------------
 // 時計・時間（clock-time）
@@ -127,14 +157,13 @@ export interface FlagFallFacts {
   gameEndedBeforeFlag: boolean;
   /** 時間切れのプレーヤーは、そのピリオドの規定手数を完了していなかったか（6.4 / 6.9） */
   movesNotCompleted: boolean | "unknown";
-  /** 盤上の駒数（キングを除く） */
-  material?: { white: Partial<SideMaterial>; black: Partial<SideMaterial> };
-  /** 駒数を確認したか（既定値 0 のまま送信されることを防ぐ） */
-  materialConfirmed?: boolean;
-  /** 任意: 局面の FEN。指定されて有効な場合は駒数をこちらから求める */
+  /**
+   * 6.9 / A.5.3 ただし書き（相手がメイト不可能ならドロー）の判定に使う局面の入力方法。
+   * 駒数による判定・閉塞局面の質問は廃止（ADR-014 §5）。
+   */
+  matePosition?: MatePositionInput;
+  /** フラッグ確定時の局面（正しい手番を含む）の FEN。端末内だけで使う */
   fen?: string;
-  /** 駒が固定され到達できない閉塞局面か（ポーンがある場合の確認） */
-  positionBlocked?: boolean | "unknown";
 }
 
 // ---------------------------------------------------------------------------
@@ -219,6 +248,8 @@ export interface Incident {
    * DecisionEngine が resolveUnknown で全分岐を評価する。
    */
   unknownAnswers?: string[];
+  /** メイト可能性の局面に対するヘルプメイト探索の結果（ADR-015） */
+  mateSearch?: MateSearchRecord;
   /** 報告時点の規則セット（v5 以前の Incident には存在しない） */
   rulesetSnapshot?: RulesetSnapshot;
   /** 自由記述（メモ）。判断には使用しない */

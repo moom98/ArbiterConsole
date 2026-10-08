@@ -30,6 +30,11 @@ import { chessJsPositionPort } from "@/lib/infrastructure/chess/chess-js-positio
 import type { LlmAssistPort } from "@/lib/domain/llm/ports";
 import { createLlmAssistPort } from "@/lib/infrastructure/llm/llm-assist-port";
 import {
+  mateSearchNeeded,
+  type HelpmateSearchPort,
+} from "@/lib/domain/services/mate-possibility";
+import { createHelpmateSearchPort } from "@/lib/infrastructure/chess/helpmate/port";
+import {
   ensureGameForContext,
   loadGameRecords,
   loadLastReportContext,
@@ -61,6 +66,8 @@ export interface IncidentStore {
   isProcessing: boolean;
   /** AI 参考情報（LLM）を取得中（決定木の対象外の事象のみ） */
   llmPending: boolean;
+  /** 局面からメイトの手順を探している（端末内。ADR-015） */
+  mateSearchPending: boolean;
   error: string | null;
   lastContext: ReportContext | null;
 
@@ -81,6 +88,11 @@ export interface IncidentStoreDeps {
   providers: DomainProviders;
   /** 決定木の対象外の事象の AI 参考情報（未指定なら手動確認のみ）。ADR-007 */
   llm?: LlmAssistPort;
+  /**
+   * メイト可能性の局面のヘルプメイト探索（端末内の Web Worker。ADR-015）。
+   * 未指定なら探索しない（局面からメイト可能を確定できず、CAへ確認になる）
+   */
+  mateSearch?: HelpmateSearchPort;
 }
 
 function errorMessage(error: unknown): string {
@@ -95,6 +107,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
   const { db, providers } = deps;
   // 同時に複数の AI 参考情報の取得が走っても正しく表示できるよう件数で管理する
   let setLlmPending: (pending: boolean) => void = () => {};
+  let setMateSearchPending: (pending: boolean) => void = () => {};
   let inFlight = 0;
   const llm: LlmAssistPort | undefined = deps.llm
     ? {
@@ -132,7 +145,27 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
     return derived.ok ? derived.ruleset : undefined;
   }
 
-  async function evaluate(incident: Incident): Promise<DecisionEngineResult> {
+  /**
+   * 判定にヘルプメイトの手順が必要で、この局面の探索結果がなければ探索して Incident に付ける。
+   * 探索の失敗は記録しない（次の評価で再試行。今回は「探索を利用できない」として CA 確認）。
+   */
+  async function withMateSearch(incident: Incident): Promise<Incident> {
+    if (!deps.mateSearch) return incident;
+    const request = mateSearchNeeded(chessJsPositionPort, incident);
+    if (!request) return incident;
+    setMateSearchPending(true);
+    try {
+      return { ...incident, mateSearch: await deps.mateSearch.search(request) };
+    } catch (error) {
+      console.error("Helpmate search failed:", error);
+      return incident;
+    } finally {
+      setMateSearchPending(false);
+    }
+  }
+
+  async function evaluate(input: Incident): Promise<DecisionEngineResult> {
+    const incident = await withMateSearch(input);
     const game = await db.games.get(incident.gameId);
     const ruleset = await rulesetFor(incident, game);
     const records = await loadGameRecords(db, incident.gameId);
@@ -213,6 +246,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
 
   return create<IncidentStore>((set, get) => {
     setLlmPending = (pending) => set({ llmPending: pending });
+    setMateSearchPending = (pending) => set({ mateSearchPending: pending });
     async function run(
       fn: () => Promise<{ incident: Incident; result: DecisionEngineResult }>,
       options: { clearPrevious: boolean }
@@ -250,6 +284,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
       followUpQuestions: [],
       isProcessing: false,
       llmPending: false,
+      mateSearchPending: false,
       error: null,
       lastContext: null,
 
@@ -348,4 +383,5 @@ export const useIncidentStore = createIncidentStore({
   db: defaultDb,
   providers: defaultProviders,
   llm: createLlmAssistPort(),
+  mateSearch: createHelpmateSearchPort(),
 });

@@ -29,6 +29,11 @@ export interface NormalizedPosition {
   fullmoveNumber: number;
   isCheckmate: boolean;
   sideToMove: "white" | "black";
+  /**
+   * 手番でない側のキングがチェックされている（実戦では起こりえない局面。
+   * FEN の手番の誤りなど）
+   */
+  opponentInCheck: boolean;
 }
 
 export interface ChessPositionPort {

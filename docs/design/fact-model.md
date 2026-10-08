@@ -121,7 +121,7 @@ type FactAnswer = { value: string | number | string[] } | { unknown: true };
 - **Facts the tree does not use.** A DT category may also hold fact-plan facts that the tree does not need but the record does, for example `game.record-state` after the game has ended. They have no DT mapping, are required only by their `appliesWhen`, and never change the tree's decision.
 - **Derived facts.** The caller passes values derived from settings and records as `context.derivedValues`. They are never asked, and conditions use them before the answers. A fact that is only ever derived (`im.count`, `ss.current-period`, `pb.tournament-device-rule`) is `optional`, so it is never asked.
 - **Mapping:** each DT question maps to **at most one** fact. Some facts cover several questions:
-  - `game.history` covers the position inputs of the trees, with `dtValues: "computed"`: `opponentCanCheckmate` (DT-001…003, until J1b-4 removes it), `positionFen` and `materialConfirmed` (DT-004), and `positionsText` (DT-005). `game.position` has no DT mapping. The tree requests it through `requestedFactIds` only when there is no valid history;
+  - `game.history` covers `positionsText` (DT-005). Since J1b-4, `game.position` covers the mate-possibility position questions, with `dtValues: "computed"`: `matePosition` + `reinstatedFen` (DT-001…003) and `matePosition` + `positionFen` (DT-004). Deriving that position from `game.history` comes later (with the history input UI);
   - `game.end-event` covers `gameEnded` and `gameEndedBeforeFlag`;
   - `ct.last-period` and `ct.quickplay-guidelines` (yes/no, derived from settings when possible) cover `lastPeriod` and `quickplayGuidelinesApply`.
 - **Values.** Fact values use the DT question values where they map, for example `opponent-claim`, `white-first` and `threefold-repetition-claim`. Where the shapes differ, `dtValues` converts them, for example `game.end-event` → `gameEnded` (true/false). The new draw kinds map to `other` until J1b-5. A test checks that every value converts to a valid DT option.
@@ -129,8 +129,7 @@ type FactAnswer = { value: string | number | string[] } | { unknown: true };
 
   | Question                               | Why it has no fact                                                                       |
   | -------------------------------------- | ---------------------------------------------------------------------------------------- |
-  | `materialConfirmed`                    | removed together with the count input (ADR-014 §5)                                       |
-  | `positionBlocked`, `lastMoveCheckmate` | removed as questions; decided by code from `game.history` / `game.position` (§3.5, §3.7) |
+    | `positionBlocked`, `lastMoveCheckmate` | removed as questions; decided by code from `game.history` / `game.position` (§3.5, §3.7) |
   | `competitionType`, `supervisionRegime` | game context from the tournament profile                                                 |
 
 - **Draw (ADR-014 §1).** The threefold and 50-move claims are both in DT-005 Draw Claim, so they share the claim facts, including `dr.claim-timing` and `dr.next-move-written` (R7). Fivefold and 75 moves are DT-006. Only agreement, stalemate, dead position and "other" use a fact plan.
@@ -195,9 +194,9 @@ When a DT meets `unknown` on a fact it needs, it applies `resolveUnknown` (a new
   - If the tree asks for unknown facts **and** other unanswered questions, only the other questions are asked first.
   - If it asks only for unknown facts, they are enumerated. A branch that asks only for **other unknown** facts adds them to the enumeration (still at most 2). Any other `needs-input` branch, or a branch outside the trees, disagrees (rule a).
   - **Exception to rule a.** If **every** branch asks for the same unanswered questions, and none of them is unknown, those questions are asked. Example: a second offence with the subtype unknown still asks for mate possibility, because every subtype needs it. This is not a recursion: the arbiter answers, and the enumeration runs again.
-- **Facts that cannot be enumerated** (`onUnknown: "manual-review"`, today only `materialConfirmed`) go to manual-review as soon as the tree asks for them, before any other question. Otherwise the tree would keep re-asking the other questions.
+- **Facts that cannot be enumerated** (`onUnknown: "manual-review"`) go to manual-review as soon as the tree asks for them, before any other question. Otherwise the tree would keep re-asking the other questions. Since J1b-4 there are none: `materialConfirmed` was removed with the count input.
 - **Which questions offer the generic `unknown`.** Every incident-scope choice question, with `onUnknown: "enumerate"`, except:
-  - the questions that already have their own tree-specific unknown value (`opponentCanCheckmate`, `bothFlagsOrder`, `movesNotCompleted`, `positionBlocked`, the repetition, fivefold and 75-move checks). Their trees keep their own manual-review paths, with specific wording;
+  - the questions that already have their own tree-specific unknown value (`matePosition` "局面を入力できない", `bothFlagsOrder`, `movesNotCompleted`, the repetition, fivefold and 75-move checks). Their trees keep their own manual-review paths, with specific wording;
   - count and text inputs. Count inputs (material) are removed with ADR-014 §5. Text inputs are optional, and empty means unknown;
   - game-context questions (competition type, regime), which come from the tournament profile.
 - **When branches agree.** The decision keeps the shared kind, intervention and penalties. The confidence is at most `medium`. Actions that every branch shares come first. Actions that only some branches have are kept with their condition, for example "［どの違反ですか？ →「昇格の駒を置かずに時計を押した」 の場合］…". So no step is lost. If the conclusions differ, each branch's conclusion is listed.
@@ -287,6 +286,21 @@ See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §5.
 - "can-mate" requires a position, and a helpmate sequence found by a bounded search. The sequence is shown as evidence.
 - Everything else is "unknown", which means "局面を確認／CAへ確認".
 - Generic insufficient-material detection is never used in place of 6.9.
+
+**Implementation (J1b-4).** See [ADR-015](../decisions/ADR-015-local-helpmate-search.md) and `docs/progress/milestones/j1b-4-mate-possibility.md`.
+
+- **Questions.** `matePosition` ("局面（FEN）を入力して判定する" / "局面を入力できない（CAへ確認）" = tree-specific `unknown`), then the FEN, shown only after "入力して判定する":
+  - DT-001…003 (7.5.5, second offence): `reinstatedFen` → `IllegalMoveFacts.positionFen`, the position **before** the illegal move. Its side to move must be the offender.
+  - DT-004: `positionFen` → `FlagFallFacts.fen`, the position when the flag is established. Asked in the same round as `movesNotCompleted` (only when "not completed").
+  - Removed: `opponentCanCheckmate`, the 12 material counts, `materialConfirmed`, `positionBlocked`.
+- **Who mates.** `matePositionRequest(incident)`: 7.5.5 → the offender's opponent (`incident.playerColor` is the offender); flag fall → the opponent of the flagged side (with both flags, the first one).
+- **Domain** `assessMatePossibility(port, request, incident.mateSearch)` (pure):
+  - invalid FEN, the side not to move in check, or the wrong side to move → `unknown` with a cause; the tree asks the FEN again with the reason;
+  - `materialCannotMate` (the three provable cases) → `cannot-mate`;
+  - a stored line that replays legally (strict) to the defender's checkmate, without reaching 150 halfmoves before the last move → `can-mate`, with the numbered line ("52... Kh8 53. Qg7#") in the conclusion;
+  - otherwise `unknown` (`not-searched`, `not-found`, `evidence-invalid`) → "局面を確認し、CAへ確認".
+- **Search.** The store runs the Web Worker search (`mateSearchNeeded`) before evaluation and saves the record on the incident. A record for another FEN or attacker is ignored. The trees only receive the verified `MatePossibility`.
+- **UI.** `isQuestionVisible(q, answers, round)` hides a question whose condition question is itself hidden, so a stale "FEN を入力する" answer never leaves a required FEN field after "規定手数は完了していた" is chosen.
 
 ### 3.8 Touch move and counting
 

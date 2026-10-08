@@ -13,16 +13,26 @@ import {
   type BranchResult,
 } from "@/lib/domain/decision-trees/tree-support";
 import {
-  MATERIAL_KEYS,
   QUESTIONS,
   UNKNOWN_VALUE,
   applyIncidentAnswers,
-  materialQuestionId,
   type FollowUpQuestion,
   type IncidentQuestionId,
 } from "@/lib/domain/follow-up";
 import { IncidentCounter } from "@/lib/domain/services/incident-counter";
 import { fixedProviders, FIXED_NOW } from "./helpers";
+import { chessJsPositionPort } from "@/lib/infrastructure/chess/chess-js-position-port";
+import { runHelpmateSearch } from "@/lib/infrastructure/chess/helpmate/run";
+import { mateSearchNeeded } from "@/lib/domain/services/mate-possibility";
+
+/** ストアと同じく、局面があればヘルプメイトを探して Incident に付ける（ADR-015） */
+function withSearch(inc: Incident): Incident {
+  const request = mateSearchNeeded(chessJsPositionPort, inc);
+  return request ? { ...inc, mateSearch: runHelpmateSearch(request) } : inc;
+}
+
+/** 黒が K+Q（白の手番）。黒のメイトの手順が見つかる局面 */
+const BLACK_QUEEN_WHITE_TO_MOVE = "6k1/8/8/8/8/8/5q2/6K1 w - - 0 40";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -74,8 +84,10 @@ function evaluate(
   answers: Partial<Record<IncidentQuestionId, string>>,
   ctx: Partial<DecisionEngineContext> = {}
 ) {
-  const inc = applyIncidentAnswers(incident(base), answers);
-  return new DecisionEngine(fixedProviders()).processIncident({
+  const inc = withSearch(applyIncidentAnswers(incident(base), answers));
+  return new DecisionEngine(fixedProviders(), {
+    positions: chessJsPositionPort,
+  }).processIncident({
     incident: inc,
     ruleset: STANDARD,
     illegalMoveHistory: { white: [], black: [] },
@@ -130,10 +142,9 @@ describe("unknown answers: questions", () => {
 
   it("questions with their own unknown value keep it (handled by their tree)", () => {
     for (const id of [
-      "opponentCanCheckmate",
+      "matePosition",
       "bothFlagsOrder",
       "movesNotCompleted",
-      "positionBlocked",
       "repetitionCheck",
     ] as const)
       expect(QUESTIONS[id].onUnknown).toBeUndefined();
@@ -512,14 +523,20 @@ describe("DT-001 with unknown answers", () => {
   it("subtype unknown on a second offence: mate possibility still asked, then decided", () => {
     const ctx = { illegalMoveHistory: { white: priors(1), black: [] } };
     const r1 = evaluate({}, { ...ILLEGAL_BASE, subtype: "unknown" }, ctx);
-    // どの種類でも同じ質問（opponentCanCheckmate）が必要 → その質問を尋ねる
+    // どの種類でも同じ質問（局面）が必要 → その質問を尋ねる
     expect(r1.requiresFollowUp).toBe(true);
     expect(r1.followUpQuestions.map((x) => x.id)).toEqual([
-      "opponentCanCheckmate",
+      "matePosition",
+      "reinstatedFen",
     ]);
     const r2 = evaluate(
       {},
-      { ...ILLEGAL_BASE, subtype: "unknown", opponentCanCheckmate: "true" },
+      {
+        ...ILLEGAL_BASE,
+        subtype: "unknown",
+        matePosition: "fen",
+        reinstatedFen: BLACK_QUEEN_WHITE_TO_MOVE,
+      },
       ctx
     );
     expect(r2.decision.penalties).toEqual([
@@ -762,20 +779,13 @@ describe("DT-002 / DT-003 with unknown answers", () => {
 // ---------------------------------------------------------------------------
 
 const FLAG = { category: "clock-time" as const, subtype: "flag-fall" };
-/** 駒数の回答（UI と同じく全項目。既定値 0） */
-const ZERO_MATERIAL = Object.fromEntries(
-  (["white", "black"] as const).flatMap((c) =>
-    MATERIAL_KEYS.map((p) => [materialQuestionId(c, p), "0"])
-  )
-);
-/** 白のフラッグ。黒は K+Q（メイト可能）、白は K のみ */
+/** 白のフラッグ。黒は K+Q（局面からメイトの手順が見つかる）、白は K のみ */
 const FLAG_BASE = {
-  ...ZERO_MATERIAL,
   flagFallen: "white",
   gameEndedBeforeFlag: "false",
   movesNotCompleted: "true",
-  blackQueens: "1",
-  materialConfirmed: "true",
+  matePosition: "fen",
+  positionFen: BLACK_QUEEN_WHITE_TO_MOVE,
 } as const;
 
 describe("DT-004 with unknown answers", () => {
@@ -796,10 +806,12 @@ describe("DT-004 with unknown answers", () => {
     expectManualReview(r.decision, ["gameEndedBeforeFlag"]);
   });
 
-  it("materialConfirmed unknown cannot be enumerated → manual-review (never re-asks the counts)", () => {
-    const r = evaluate(FLAG, { ...FLAG_BASE, materialConfirmed: "unknown" });
+  it("position unavailable is the tree's own unknown (specific consult-CA, not enumerated)", () => {
+    const r = evaluate(FLAG, { ...FLAG_BASE, matePosition: "unknown" });
     expect(r.requiresFollowUp).toBe(false);
-    expectManualReview(r.decision, ["materialConfirmed"]);
+    expect(r.decision.kind).toBe("manual-review");
+    expect(r.decision.penalties).toEqual([]);
+    expect(r.decision.unconfirmedFacts ?? []).toEqual([]);
   });
 
   const BOTH = {

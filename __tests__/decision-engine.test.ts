@@ -8,6 +8,9 @@ import type { Incident } from "@/lib/domain/entities";
 import type { PriorIllegalMove } from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
 import { applyIncidentAnswers } from "@/lib/domain/follow-up";
 import { fixedProviders, FIXED_NOW } from "./helpers";
+import { chessJsPositionPort as chessPort } from "@/lib/infrastructure/chess/chess-js-position-port";
+import { runHelpmateSearch } from "@/lib/infrastructure/chess/helpmate/run";
+import { matePositionRequest } from "@/lib/domain/services/mate-possibility";
 
 function incident(overrides: Partial<Incident> = {}): Incident {
   return {
@@ -316,7 +319,9 @@ describe("DecisionEngine", () => {
     });
 
     it("re-evaluates the same incident after follow-up answers", () => {
-      const engine = new DecisionEngine(fixedProviders());
+      const engine = new DecisionEngine(fixedProviders(), {
+        positions: chessPort,
+      });
       let inc = incident();
       const first = engine.processIncident({
         incident: inc,
@@ -337,10 +342,28 @@ describe("DecisionEngine", () => {
         illegalMoveHistory: hist(1, 0),
       });
       expect(second.followUpQuestions.map((q) => q.id)).toEqual([
-        "opponentCanCheckmate",
+        "matePosition",
+        "reinstatedFen",
       ]);
 
-      inc = applyIncidentAnswers(inc, { opponentCanCheckmate: "true" });
+      // 違法手の直前に戻した局面（白の手番）。黒は K+Q
+      inc = applyIncidentAnswers(inc, {
+        matePosition: "fen",
+        reinstatedFen: "6k1/8/8/8/8/8/5q2/6K1 w - - 0 40",
+      });
+      // 探索前: 手順がないので結論は出ない（駒数からメイト可能とはしない）
+      const unsearched = engine.processIncident({
+        incident: inc,
+        ruleset: STANDARD,
+        illegalMoveHistory: hist(1, 0),
+      });
+      expect(unsearched.decision.kind).toBe("manual-review");
+      expect(unsearched.decision.penalties).toHaveLength(0);
+
+      inc = {
+        ...inc,
+        mateSearch: runHelpmateSearch(matePositionRequest(inc)!),
+      };
       const third = engine.processIncident({
         incident: inc,
         ruleset: STANDARD,
@@ -349,6 +372,24 @@ describe("DecisionEngine", () => {
       expect(third.requiresFollowUp).toBe(false);
       expect(third.decision.incidentId).toBe("inc-1");
       expect(third.decision.penalties[0].type).toBe("game-loss");
+      expect(third.decision.conclusion).toContain("40. ");
+    });
+
+    it("a reinstated position with the wrong side to move is asked again", () => {
+      const engine = new DecisionEngine(fixedProviders(), {
+        positions: chessPort,
+      });
+      const inc = applyIncidentAnswers(incident(fullFacts), {
+        matePosition: "fen",
+        reinstatedFen: "6k1/8/8/8/8/8/5q2/6K1 b - - 0 40",
+      });
+      const r = engine.processIncident({
+        incident: inc,
+        ruleset: STANDARD,
+        illegalMoveHistory: hist(1, 0),
+      });
+      expect(r.requiresFollowUp).toBe(true);
+      expect(r.decision.conclusion).toContain("手番");
     });
 
     it("missing history escalates instead of assuming zero", () => {
@@ -378,34 +419,35 @@ describe("applyIncidentAnswers", () => {
     expect(inc.illegalMoveFacts).toEqual({ gameEnded: false });
   });
 
-  it("maps an unrecognised checkmate answer to unknown", () => {
-    const inc = applyIncidentAnswers(incident(), { opponentCanCheckmate: "?" });
-    expect(inc.illegalMoveFacts?.opponentCanCheckmate).toBe("unknown");
+  it("stores the reinstated position and ignores an unknown input method", () => {
+    const inc = applyIncidentAnswers(incident(), {
+      matePosition: "maybe",
+      reinstatedFen: "  8/8/8/8/8/8/8/K6k w - - 0 1 ",
+    });
+    expect(inc.illegalMoveFacts?.matePosition).toBeUndefined();
+    expect(inc.illegalMoveFacts?.positionFen).toBe(
+      "8/8/8/8/8/8/8/K6k w - - 0 1"
+    );
   });
 });
 
 describe("applyIncidentAnswers (M4 questions)", () => {
-  it("stores flag-fall material counts and ignores out-of-range values", () => {
+  it("stores the flag-fall position (no material counts any more)", () => {
     const inc = applyIncidentAnswers(
       incident({ category: "clock-time", subtype: "flag-fall" }),
       {
         flagFallen: "black",
         gameEndedBeforeFlag: "false",
         movesNotCompleted: "true",
-        whiteRooks: "1",
-        whitePawns: "9",
-        blackQueens: "x",
-        materialConfirmed: "true",
+        matePosition: "fen",
         positionFen: "  ",
       }
     );
     expect(inc.playerColor).toBe("black");
     expect(inc.flagFallFacts?.flagFallen).toBe("black");
-    expect(inc.flagFallFacts?.material?.white.rooks).toBe(1);
-    expect(inc.flagFallFacts?.material?.white.pawns).toBeUndefined();
-    expect(inc.flagFallFacts?.material?.black.queens).toBeUndefined();
-    expect(inc.flagFallFacts?.materialConfirmed).toBe(true);
+    expect(inc.flagFallFacts?.matePosition).toBe("fen");
     expect(inc.flagFallFacts?.fen).toBeUndefined();
+    expect(inc.illegalMoveFacts).toBeUndefined();
   });
 
   it("stores draw-claim answers and the subtype", () => {

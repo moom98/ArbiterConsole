@@ -138,7 +138,8 @@ export class IllegalMoveFastBasicTree {
       subtype,
       playerIncidentCount: input.playerIncidentCount,
       priorIllegalMoves: input.priorIllegalMoves,
-      opponentCanCheckmate: input.opponentCanCheckmate,
+      matePosition: input.matePosition,
+      mate: input.mate,
       regimeSources: this.regimeSources(),
     });
   }

@@ -481,6 +481,7 @@ function syntheticHistory(
     fullmoveNumber: 1,
     isCheckmate: i === length - 1,
     sideToMove: (i % 2 === 0 ? "white" : "black") as "white" | "black",
+    opponentInCheck: false,
   }));
   return {
     history: { moves: [] },

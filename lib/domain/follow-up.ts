@@ -12,9 +12,9 @@ import type {
   IllegalMoveDetection,
   IllegalMoveFacts,
   IllegalMoveSubtype,
+  MatePositionInput,
   PlayerColor,
   RepetitionClaimMode,
-  SideMaterial,
   SupervisionRegime,
 } from "@/lib/domain/entities";
 
@@ -23,19 +23,15 @@ import type {
  * 質問の定義（ID・ラベル・選択肢・入力形式）はドメインが持ち、UIは表示と回答の収集のみを行う。
  */
 
-/** 駒数の質問 ID（例: "whiteQueens", "blackLightBishops"） */
-export type MaterialQuestionId =
-  `${PlayerColor}${Capitalize<keyof SideMaterial>}`;
-
 export type IncidentQuestionId =
   // 違法手（DT-001 / DT-002 / DT-003）
   | "playerColor"
   | "subtype"
   | "gameEnded"
   | "clockPressed"
-  | "opponentCanCheckmate"
   | "opponentMadeNextMove"
   | "detectedBy"
+  | "reinstatedFen"
   // 時計・時間（DT-004）
   | "clockTimeSubtype"
   | "flagFallen"
@@ -44,10 +40,9 @@ export type IncidentQuestionId =
   | "lastPeriod"
   | "gameEndedBeforeFlag"
   | "movesNotCompleted"
-  | MaterialQuestionId
-  | "materialConfirmed"
   | "positionFen"
-  | "positionBlocked"
+  // メイト可能性の局面（DT-001〜004。ADR-014 §5）
+  | "matePosition"
   // ドロー（DT-005）
   | "drawSubtype"
   | "claimant"
@@ -133,11 +128,18 @@ export function enumerableValues(q: FollowUpQuestion): string[] {
 /** showWhen の条件を満たすか（UI 用の純粋関数） */
 export function isQuestionVisible(
   q: FollowUpQuestion,
-  answers: Record<string, string>
+  answers: Record<string, string>,
+  /**
+   * 同じラウンドの質問。指定すると、条件の質問自体が非表示なら（以前の回答が残っていても）
+   * この質問も非表示にする（例: 局面の入力方法が隠れたら FEN 欄も隠す）
+   */
+  round?: FollowUpQuestion[]
 ): boolean {
   if (!q.showWhen) return true;
   const a = answers[q.showWhen.questionId];
-  return a !== undefined && q.showWhen.values.includes(a);
+  if (a === undefined || !q.showWhen.values.includes(a)) return false;
+  const parent = round?.find((p) => p.id === q.showWhen?.questionId);
+  return parent ? isQuestionVisible(parent, answers, round) : true;
 }
 
 const YES_NO: FollowUpOption[] = [
@@ -168,63 +170,6 @@ export const DRAW_SUBTYPE_LABELS: Record<DrawSubtype, string> = {
   "75-move-rule": "75手ルール（9.6.2）",
   other: "その他（合意・50手ルール等）",
 };
-
-const PIECE_LABELS: Record<keyof SideMaterial, string> = {
-  queens: "クイーン",
-  rooks: "ルーク",
-  lightBishops: "白マスのビショップ",
-  darkBishops: "黒マスのビショップ",
-  knights: "ナイト",
-  pawns: "ポーン",
-};
-
-/** 駒数入力の上限（昇格を含めて理論上ありうる最大値） */
-const PIECE_MAX: Record<keyof SideMaterial, number> = {
-  queens: 9,
-  rooks: 10,
-  lightBishops: 9,
-  darkBishops: 9,
-  knights: 10,
-  pawns: 8,
-};
-
-export const MATERIAL_KEYS: readonly (keyof SideMaterial)[] = [
-  "queens",
-  "rooks",
-  "lightBishops",
-  "darkBishops",
-  "knights",
-  "pawns",
-];
-
-export function materialQuestionId(
-  color: PlayerColor,
-  piece: keyof SideMaterial
-): MaterialQuestionId {
-  return `${color}${piece.charAt(0).toUpperCase()}${piece.slice(1)}` as MaterialQuestionId;
-}
-
-function materialQuestions(): Record<MaterialQuestionId, FollowUpQuestion> {
-  const out = {} as Record<MaterialQuestionId, FollowUpQuestion>;
-  for (const color of ["white", "black"] as const) {
-    for (const piece of MATERIAL_KEYS) {
-      const id = materialQuestionId(color, piece);
-      out[id] = {
-        id,
-        scope: "incident",
-        label: PIECE_LABELS[piece],
-        input: "count",
-        min: 0,
-        max: PIECE_MAX[piece],
-        defaultValue: "0",
-        options: [],
-        group:
-          color === "white" ? "白の駒（キング以外）" : "黒の駒（キング以外）",
-      };
-    }
-  }
-  return out;
-}
 
 /** 共通の unknown を加える（fact-model §3.3: すべての DT 質問に unknown） */
 function withUnknown(
@@ -269,16 +214,24 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     help: "「手を指さずに時計を押した」の場合は「はい」",
     options: YES_NO,
   },
-  opponentCanCheckmate: {
-    id: "opponentCanCheckmate",
+  reinstatedFen: {
+    id: "reinstatedFen",
     scope: "incident",
-    label:
-      "相手は、あらゆる合法手の連続によって違反者のキングをチェックメイトできる局面ですか？",
-    help: "メイト不可能な場合はドロー（7.5.5 ただし書き）。判断できない場合は「わからない」を選ぶと、CA確認の判断支援になります。",
+    label: "違法手の直前に戻した局面の FEN（手番は違反者）",
+    help: "7.5.1〜7.5.4 により対局を再開する局面です（違法手を指した後の局面ではありません）。入力した局面は端末の外へ送りません。",
+    input: "text",
+    placeholder: "例: 6k1/5ppp/8/8/8/8/5PPP/3R2K1 b - - 0 30",
+    options: [],
+    showWhen: { questionId: "matePosition", values: ["fen"] },
+  },
+  matePosition: {
+    id: "matePosition",
+    scope: "incident",
+    label: "相手がメイト可能かを、局面から判定しますか？",
+    help: "局面（FEN）を入力すると、端末内でメイトまでの手順を探します。手順が見つかれば「メイト可能」、駒の構成上メイト不可能なら「メイト不可能」。それ以外はCAへ確認になります。",
     options: [
-      { value: "true", label: "メイト可能" },
-      { value: "false", label: "メイト不可能" },
-      { value: "unknown", label: "わからない（CAへ確認）" },
+      { value: "fen", label: "局面（FEN）を入力して判定する" },
+      { value: "unknown", label: "局面を入力できない（CAへ確認）" },
     ],
   },
   opponentMadeNextMove: {
@@ -361,33 +314,15 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
       { value: "unknown", label: "わからない（CAへ確認）" },
     ],
   },
-  ...materialQuestions(),
-  materialConfirmed: {
-    id: "materialConfirmed",
-    scope: "incident",
-    label: "盤上の駒数を上のとおり確認しましたか？",
-    help: "キング以外の駒を数えてください。FEN を入力した場合は FEN の駒が使われます。",
-    options: [{ value: "true", label: "確認した" }],
-  },
   positionFen: {
     id: "positionFen",
     scope: "incident",
-    label: "（任意）局面の FEN",
+    label: "フラッグ確定時の局面の FEN（正しい手番を含む）",
+    help: "入力した局面は端末の外へ送りません。",
     input: "text",
-    optional: true,
-    placeholder: "例: 8/8/8/4k3/8/8/4K3/7R w - - 0 1",
+    placeholder: "例: 8/8/8/4k3/8/8/4K3/7R b - - 0 60",
     options: [],
-  },
-  positionBlocked: {
-    id: "positionBlocked",
-    scope: "incident",
-    label:
-      "ポーンが固定され、駒が相手キングに到達できない「閉塞局面」の可能性はありますか？",
-    help: "盤上にポーンがあるため、駒数だけでは判定できません。",
-    options: [
-      { value: "false", label: "ない（通常の局面）" },
-      { value: "unknown", label: "ある／判断できない（CAへ確認）" },
-    ],
+    showWhen: { questionId: "matePosition", values: ["fen"] },
   },
 
   // ---- ドロー ----
@@ -551,9 +486,9 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
 
 /**
  * 共通の unknown を持つ質問（fact-model §3.3）。
- * 独自の unknown 値を持つ質問（opponentCanCheckmate・bothFlagsOrder・movesNotCompleted・
- * positionBlocked・同一局面の確認・対局履歴の照合）は各 DT が独自の手動確認で扱うため含めない。
- * 駒数（count）・テキストは列挙できず、テキストは任意（空欄 = 不明）のため含めない。
+ * 独自の unknown 値を持つ質問（matePosition・bothFlagsOrder・movesNotCompleted・
+ * 同一局面の確認・対局履歴の照合）は各 DT が独自の手動確認で扱うため含めない。
+ * テキスト（FEN・棋譜）は列挙できないため含めない。
  * game-context（競技区分・規則）は大会プロファイルから与えるため含めない。
  */
 const ENUMERATED_UNKNOWN: readonly IncidentQuestionId[] = [
@@ -576,10 +511,8 @@ const ENUMERATED_UNKNOWN: readonly IncidentQuestionId[] = [
   "touchedPiece",
   "lastMoveCheckmate",
 ];
-const MANUAL_REVIEW_UNKNOWN: readonly IncidentQuestionId[] = [
-  // 「確認した」の1択。確認できなければ駒数が使えないため手動確認
-  "materialConfirmed",
-];
+/** 列挙できない質問（unknown なら手動確認）。現在はなし（駒数の確認は ADR-014 §5 で廃止） */
+const MANUAL_REVIEW_UNKNOWN: readonly IncidentQuestionId[] = [];
 
 export const QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
   ...BASE_QUESTIONS,
@@ -619,26 +552,6 @@ function isOneOf<T extends string>(
   return (allowed as readonly string[]).includes(value);
 }
 
-/** 駒数の回答を解釈する（範囲外・非整数は無視） */
-function parseCount(raw: string, max: number): number | undefined {
-  const trimmed = raw.trim();
-  if (!/^\d+$/.test(trimmed)) return undefined;
-  const n = Number(trimmed);
-  return n <= max ? n : undefined;
-}
-
-const MATERIAL_ID_MAP: Record<
-  string,
-  { color: PlayerColor; piece: keyof SideMaterial }
-> = Object.fromEntries(
-  (["white", "black"] as const).flatMap((color) =>
-    MATERIAL_KEYS.map((piece) => [
-      materialQuestionId(color, piece),
-      { color, piece },
-    ])
-  )
-);
-
 const CONDITION_CHECKS = ["met", "not-met", "unknown", "auto"] as const;
 
 /**
@@ -650,15 +563,7 @@ export function applyIncidentAnswers(
   answers: Partial<Record<IncidentQuestionId, string>>
 ): Incident {
   const facts: Partial<IllegalMoveFacts> = { ...incident.illegalMoveFacts };
-  const flag: Partial<FlagFallFacts> = {
-    ...incident.flagFallFacts,
-    material: incident.flagFallFacts?.material
-      ? {
-          white: { ...incident.flagFallFacts.material.white },
-          black: { ...incident.flagFallFacts.material.black },
-        }
-      : undefined,
-  };
+  const flag: Partial<FlagFallFacts> = { ...incident.flagFallFacts };
   const draw: Partial<DrawClaimFacts> = { ...incident.drawClaimFacts };
   let playerColor: PlayerColor | undefined = incident.playerColor;
   let subtype: string | undefined = incident.subtype;
@@ -693,7 +598,6 @@ export function applyIncidentAnswers(
       case "quickplayGuidelinesApply":
       case "lastPeriod":
       case "gameEndedBeforeFlag":
-      case "materialConfirmed":
         delete flag[id];
         touchedFlag = true;
         break;
@@ -733,17 +637,6 @@ export function applyIncidentAnswers(
     }
     unknown.delete(id);
 
-    const material = MATERIAL_ID_MAP[id];
-    if (material) {
-      const n = parseCount(raw, PIECE_MAX[material.piece]);
-      if (n !== undefined) {
-        flag.material = flag.material ?? { white: {}, black: {} };
-        flag.material[material.color][material.piece] = n;
-        touchedFlag = true;
-      }
-      continue;
-    }
-
     switch (id) {
       // ---- 違法手 ----
       case "playerColor":
@@ -765,9 +658,20 @@ export function applyIncidentAnswers(
         }
         break;
       }
-      case "opponentCanCheckmate": {
-        const b = parseBoolean(raw);
-        facts.opponentCanCheckmate = b ?? "unknown";
+      case "matePosition":
+        if (isOneOf(raw, ["fen", "unknown"] as readonly MatePositionInput[])) {
+          if (incident.category === "illegal-move") {
+            facts.matePosition = raw;
+            touchedIllegal = true;
+          } else if (incident.category === "clock-time") {
+            flag.matePosition = raw;
+            touchedFlag = true;
+          }
+        }
+        break;
+      case "reinstatedFen": {
+        const fen = raw.trim();
+        facts.positionFen = fen === "" ? undefined : fen;
         touchedIllegal = true;
         break;
       }
@@ -816,8 +720,7 @@ export function applyIncidentAnswers(
         break;
       case "quickplayGuidelinesApply":
       case "lastPeriod":
-      case "gameEndedBeforeFlag":
-      case "materialConfirmed": {
+      case "gameEndedBeforeFlag": {
         const b = parseBoolean(raw);
         if (b !== undefined) {
           flag[id] = b;
@@ -825,8 +728,7 @@ export function applyIncidentAnswers(
         }
         break;
       }
-      case "movesNotCompleted":
-      case "positionBlocked": {
+      case "movesNotCompleted": {
         const t = parseTriState(raw);
         if (t !== undefined) {
           flag[id] = t;

@@ -1,9 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   EMPTY_SIDE,
-  assessMatingPossibility,
+  materialCannotMate,
   materialFromFen,
-  validateSideMaterial,
 } from "@/lib/domain/services/mate-material";
 import type { SideMaterial } from "@/lib/domain/entities";
 
@@ -13,118 +12,52 @@ const side = (m: Partial<SideMaterial>): SideMaterial => ({
   ...m,
 });
 
-describe("assessMatingPossibility (attacker vs defender)", () => {
+/** 白がメイトする側 */
+const cannot = (white: SideMaterial, black: SideMaterial) =>
+  materialCannotMate({ white, black }, "white");
+
+describe("materialCannotMate (ADR-014 §5: only the provable cases)", () => {
   it.each([
-    // [label, attacker, defender, verdict, positionDependent]
-    ["K vs K", K, K, "cannot-mate", false],
+    ["K vs K", K, K],
+    ["lone king vs K+Q", K, side({ queens: 1 })],
+    ["K+N vs K", side({ knights: 1 }), K],
+    ["K+B vs K", side({ lightBishops: 1 }), K],
+    ["K+2 same-colour B vs K", side({ darkBishops: 2 }), K],
     [
-      "K vs K+Q (lone king never mates)",
-      K,
-      side({ queens: 1 }),
-      "cannot-mate",
-      false,
-    ],
-    ["K+N vs K", side({ knights: 1 }), K, "cannot-mate", false],
-    ["K+B vs K", side({ lightBishops: 1 }), K, "cannot-mate", false],
-    [
-      "K+2 same-colour B vs K",
-      side({ darkBishops: 2 }),
-      K,
-      "cannot-mate",
-      false,
-    ],
-    [
-      "K+B vs K+B same colour",
+      "only same-colour bishops on the board",
       side({ lightBishops: 1 }),
-      side({ lightBishops: 1 }),
-      "cannot-mate",
-      false,
+      side({ lightBishops: 2 }),
     ],
-    ["K+Q vs K", side({ queens: 1 }), K, "can-mate", false],
-    ["K+R vs K+N", side({ rooks: 1 }), side({ knights: 1 }), "can-mate", false],
-    ["K+P vs K (pawn on board)", side({ pawns: 1 }), K, "can-mate", true],
-    ["K+2N vs K", side({ knights: 2 }), K, "can-mate", false],
-    ["K+B+N vs K", side({ knights: 1, darkBishops: 1 }), K, "can-mate", false],
-    [
-      "K+opposite-colour BB vs K",
-      side({ lightBishops: 1, darkBishops: 1 }),
-      K,
-      "can-mate",
-      false,
-    ],
-    [
-      "K+Q vs K+P (blockade possible)",
-      side({ queens: 1 }),
-      side({ pawns: 1 }),
-      "can-mate",
-      true,
-    ],
-    [
-      "K+N vs K+N (helpmate position-dependent)",
-      side({ knights: 1 }),
-      side({ knights: 1 }),
-      "unknown",
-      true,
-    ],
-    [
-      "K+B vs K+B opposite colour",
-      side({ lightBishops: 1 }),
-      side({ darkBishops: 1 }),
-      "unknown",
-      true,
-    ],
-    ["K+N vs K+P", side({ knights: 1 }), side({ pawns: 1 }), "unknown", true],
-    [
-      "K+B vs K+R",
-      side({ darkBishops: 1 }),
-      side({ rooks: 1 }),
-      "unknown",
-      true,
-    ],
-  ] as const)("%s → %s", (_label, attacker, defender, verdict, dep) => {
-    const a = assessMatingPossibility(attacker, defender);
-    expect(a.verdict).toBe(verdict);
-    expect(a.positionDependent).toBe(dep);
-    expect(a.reason).toBeTruthy();
+  ] as const)("%s → cannot mate", (_label, a, d) => {
+    expect(cannot(a, d)).toBeTruthy();
   });
 
-  it("is not symmetric: K+Q vs K means the queen side can mate, the lone king cannot", () => {
-    expect(assessMatingPossibility(side({ queens: 1 }), K).verdict).toBe(
-      "can-mate"
-    );
-    expect(assessMatingPossibility(K, side({ queens: 1 })).verdict).toBe(
-      "cannot-mate"
-    );
+  it.each([
+    // メイト可能とは限らないが、駒の構成だけでは不可能と証明できない → 局面で判定
+    ["K+Q vs K", side({ queens: 1 }), K],
+    ["K+P vs K", side({ pawns: 1 }), K],
+    ["K+2N vs K", side({ knights: 2 }), K],
+    ["K+B+N vs K", side({ knights: 1, darkBishops: 1 }), K],
+    ["K+opposite B vs K", side({ lightBishops: 1, darkBishops: 1 }), K],
+    ["K+N vs K+N (helpmate)", side({ knights: 1 }), side({ knights: 1 })],
+    ["K+N vs K+P (helpmate)", side({ knights: 1 }), side({ pawns: 1 })],
+    [
+      "K+B vs K+B opposite colours",
+      side({ lightBishops: 1 }),
+      side({ darkBishops: 1 }),
+    ],
+    ["K+B vs K+R", side({ darkBishops: 1 }), side({ rooks: 1 })],
+  ] as const)("%s → not decided by material", (_label, a, d) => {
+    expect(cannot(a, d)).toBeUndefined();
   });
-});
 
-describe("validateSideMaterial", () => {
-  it("accepts the initial material", () => {
+  it("is not symmetric: the side with the queen is not the one that cannot mate", () => {
     expect(
-      validateSideMaterial(
-        {
-          queens: 1,
-          rooks: 2,
-          knights: 2,
-          lightBishops: 1,
-          darkBishops: 1,
-          pawns: 8,
-        },
-        "白"
-      )
-    ).toEqual([]);
-  });
-  it("rejects impossible counts", () => {
+      materialCannotMate({ white: side({ queens: 1 }), black: K }, "white")
+    ).toBeUndefined();
     expect(
-      validateSideMaterial(side({ pawns: 9 }), "白").length
-    ).toBeGreaterThan(0);
-    expect(
-      validateSideMaterial(side({ queens: 2, pawns: 8 }), "白").length
-    ).toBeGreaterThan(0);
-    expect(
-      validateSideMaterial({ queens: -1 } as never, "白").length
-    ).toBeGreaterThan(0);
-    expect(validateSideMaterial(undefined, "白").length).toBeGreaterThan(0);
+      materialCannotMate({ white: side({ queens: 1 }), black: K }, "black")
+    ).toBeTruthy();
   });
 });
 

@@ -80,6 +80,7 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 - **ADR-008:** the round checklist.
   - Templates are code, and customisation stores references to them.
   - Dexie v7. v6 is unused, and future schema versions must be ≥ 8.
+- **ADR-015:** mate-possibility search in infrastructure (own 0x88 generator + best-first portfolio, Web Worker, 1.5 s), result stored on the incident and re-verified by the domain through `ChessPositionPort` every time. A search bug can only cause "unknown".
 - **ADR-009:** Cloudflare Workers through OpenNext.
   - Next.js 14.2.35 with `@opennextjs/cloudflare@~1.15.1`. Do not bump to 1.16+ without moving to Next 15.5+/16.
   - Transformers.js and onnxruntime-node are aliased out of the server bundle.
@@ -95,14 +96,14 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `lib/domain/decision-engine/index.ts`
   - `lib/domain/decision-trees/`
   - `lib/domain/llm/` (output validator, quote match, keyword classifier, ports)
-  - `lib/domain/services/` (incident-counter, mate-material, fair-play, round-checklist, round-planning, game-context, …)
+  - `lib/domain/services/` (incident-counter, mate-material, mate-possibility, game-history, position-analysis, fair-play, round-checklist, round-planning, game-context, …)
   - `lib/domain/rules/citations.ts`
 - **Application:** `lib/application/` (rule-ingestion, rule-library, csv-export, llm-classification, round-checklist, tournament-management)
 - **Infrastructure:**
   - `lib/infrastructure/db/schema.ts` (Dexie v1–v3, v5, v7)
   - `lib/infrastructure/llm/` (client, assist port, `server/` config, handler, rate limiter, Gemini client)
   - `lib/infrastructure/ai/`
-  - `lib/infrastructure/chess/`
+  - `lib/infrastructure/chess/` (chess.js port; `helpmate/` search, worker and port)
 - **API:** `app/api/llm/{reason,classify,embed}/route.ts`
 - **Semantic search (ADR-010):**
   - `lib/infrastructure/embeddings/generator.ts` (Gemini client)
@@ -117,6 +118,15 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `scripts/check-cf-env.mjs` (`cf:build` env-file guard)
 
 ## Tests and verification performed
+
+**J1b-4 mate possibility (2026-10-08, `feature/fact-catalog`):**
+
+- tsc is clean.
+- eslint reports 0 problems.
+- 59 files / 968 tests pass, including the new `helpmate-search`, `helpmate-port` and `mate-possibility` tests.
+- Acceptance (ADR-014 §5): a chess.js-verified helpmate is found in 68/72 realistic fixtures (94 %); 18/20 (90 %) on the playouts not used for tuning. Laptop: median 18 ms, p90 246 ms, max 439 ms.
+- `npm run build` and `npm run cf:build` succeed; the worker chunks are in the SW precache.
+- Review: APPROVE (no must-fix) → the 3 should-fix items were fixed. See `milestones/j1b-4-mate-possibility.md`.
 
 **J1b-3 `game.history` (2026-10-08, `feature/fact-catalog`):**
 
@@ -164,13 +174,16 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 ## Known issues
 
+- **J1b-4:**
+  - Typing a FEN on a phone is slow; there is no board editor and the position is not derived from `game.history` yet (J2). Many flag falls and second illegal moves end in "局面を確認／CAへ確認". Counts never give "can-mate" any more (K+Q vs K without a FEN is no longer an automatic loss).
+  - Phone timing of the 1.5 s search is estimated, not measured. Check on a real device.
+  - The acceptance margin on untuned positions is exactly 90 %; re-check with real flag-fall positions (J3).
 - **J1b-3:**
   - `Game.pgn` is not wired in: no UI sets it, so the history comes only from the pasted text.
   - There is no board diagram; the arbiter compares the FEN and the last move with the board (J2).
   - The side to move still comes from the `claimantHasMove` question, and the history only validates it (J1b-5).
 - **J1b-2:**
   - With an unknown answer, a branch that needs another unanswered question counts as disagreeing, unless every branch asks the same question. Example: `claimMode` unknown and `moveWritten` unanswered give manual-review.
-  - `materialConfirmed` = unknown gives manual-review until ADR-014 §5 removes the count inputs.
   - The fact layer's `FactAnswer.unknown` is not yet linked to `Incident.unknownAnswers`. That happens when facts replace the follow-up questions.
 
 - **Illegal-move count:** it follows the _suggested_ decision. There is no "applied / not applied" confirmation yet (ADR-004). AI decisions stay `pending` until edited.
@@ -219,6 +232,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
     - J1b-1: `lib/domain/facts/`, pure;
     - J1b-2: `unknown` answers and `resolveUnknown` in the engine. No Decision Tree body changed.
     - J1b-3: `lib/domain/services/game-history.ts`, strict replay in the port, and `historyConfirmed` in DT-005.
+    - J1b-4: `lib/domain/services/mate-possibility.ts`, `lib/infrastructure/chess/helpmate/` (ADR-015).
   - The key must never go into `.env*` (`cf:deploy` refuses to run). Keep it in `~/.config/arbiter-console/typesafe.key` for J0 and J3.
 
 - Whether the user's federation applies 1 or 2 minutes for Blitz B.2 (adequate supervision).
@@ -256,7 +270,10 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
        - PGN or scoresheet text is parsed in the domain (start position only via `[FEN]`, FEN lists rejected), then replayed with chess.js `strict: true`.
        - In an incomplete history, "not met" is inconclusive and the start FEN's clock is not trusted.
        - DT-005 asks `historyConfirmed`: the arbiter compares the final position and the move count with the board.
-     - J1b-4: mate possibility;
+     - J1b-4: mate possibility. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-4-mate-possibility.md` and ADR-015.
+       - Questions `matePosition` (FEN を入力 / 入力できない) + `reinstatedFen` (DT-001…003) or `positionFen` (DT-004). `opponentCanCheckmate`, the material counts, `materialConfirmed` and `positionBlocked` are removed.
+       - "cannot-mate" only from the three provable material cases; "can-mate" only from a helpmate line found by the local search (Web Worker, own 0x88 move generator) **and** re-verified by chess.js (strict) on every evaluation; otherwise "局面を確認し、CAへ確認".
+       - The store searches before evaluation and saves `Incident.mateSearch`.
      - J1b-5: DT-005/006 restructure;
      - J1b-6: DT-007 touch move and counting;
      - J1b-7: `TimeControl` periods;

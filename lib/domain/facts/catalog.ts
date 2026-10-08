@@ -935,17 +935,17 @@ export const FACT_USAGES: readonly FactUsage[] = [
     level: "conditional",
     dtQuestionIds: ["detectedBy"],
   },
-  // 7.5.5: 違法手の直前に戻した局面でメイト可能性を判定する（ADR-014 §5）。
-  // 既存の質問 opponentCanCheckmate は J1b-4 で廃止するまで、対局履歴から計算して答える
+  // 7.5.5: 違法手の直前に戻した局面でメイト可能性を判定する（ADR-014 §5、J1b-4）。
+  // 局面は FEN で入力する（入力方法 matePosition と FEN reinstatedFen）。メイト可能性はコードが判定する。
+  // 対局履歴から局面を求めるのは後続（対局履歴の入力 UI ができてから）
+  { factId: "game.history", ...IM, level: "conditional" },
   {
-    factId: "game.history",
+    factId: "game.position",
     ...IM,
     level: "conditional",
-    dtQuestionIds: ["opponentCanCheckmate"],
+    dtQuestionIds: ["matePosition", "reinstatedFen"],
     dtValues: "computed",
   },
-  // 対局履歴がない・検証に失敗したときだけ、DT が requestedFactIds で要求する
-  { factId: "game.position", ...IM, level: "conditional" },
   // 記録から求めるだけで質問しない
   { factId: "im.count", ...IM, level: "optional" },
 
@@ -1013,17 +1013,16 @@ export const FACT_USAGES: readonly FactUsage[] = [
       "other",
     ]),
   },
-  // フラッグ確定時の局面でメイト可能性を判定する（ADR-014 §5）。
-  // 既存の局面入力（positionFen・駒数の確認）は対局履歴から計算して答える
+  // フラッグ確定時の局面でメイト可能性を判定する（ADR-014 §5、J1b-4）。
+  // 局面は FEN で入力する（駒数の入力は廃止）。メイト可能性はコードが判定する
+  { factId: "game.history", category: "clock-time", level: "conditional" },
   {
-    factId: "game.history",
+    factId: "game.position",
     category: "clock-time",
     level: "conditional",
-    dtQuestionIds: ["positionFen", "materialConfirmed"],
+    dtQuestionIds: ["matePosition", "positionFen"],
     dtValues: "computed",
   },
-  // 対局履歴がないときだけ、DT が requestedFactIds で要求する
-  { factId: "game.position", category: "clock-time", level: "conditional" },
   // 設定から求められない場合のみ質問する
   {
     factId: "ct.last-period",

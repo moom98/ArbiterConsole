@@ -1,6 +1,6 @@
 # ADR-014: Draw Claim and Automatic Draw Trees, Touch-Move Tree, Local Game History, Position-Based Mate Possibility
 
-**Status:** Accepted. The user approved it in the catalogue re-review on 2026-10-08. Partly implemented: §4 (game history) in J1b-3, 2026-10-08. See fact-model §3.5 "Implementation (J1b-3)". §1–§3 and §5–§7 are not implemented yet.
+**Status:** Accepted. The user approved it in the catalogue re-review on 2026-10-08. Partly implemented: §4 (game history) in J1b-3 and §5 (mate possibility) in J1b-4, both 2026-10-08. See fact-model §3.5 "Implementation (J1b-3)", §3.7 "Implementation (J1b-4)" and [ADR-015](./ADR-015-local-helpmate-search.md). §1–§3, §6 and §7 are not implemented yet.
 
 **Date:** 2026-10-08
 

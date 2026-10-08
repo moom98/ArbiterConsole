@@ -78,6 +78,9 @@ export const chessJsPositionPort: ChessPositionPort = {
     if (!loaded.ok) return loaded;
     const { chess } = loaded;
     const fields = chess.fen().split(" ");
+    const mover = chess.turn();
+    const other = mover === "w" ? "b" : "w";
+    const otherKing = chess.findPiece({ type: "k", color: other })[0];
     const key = [
       fields[0],
       chess.turn(),
@@ -91,6 +94,8 @@ export const chessJsPositionPort: ChessPositionPort = {
       fullmoveNumber: Number(fields[5]) || 1,
       isCheckmate: chess.isCheckmate(),
       sideToMove: chess.turn() === "w" ? "white" : "black",
+      opponentInCheck:
+        otherKing !== undefined && chess.isAttacked(otherKing, mover),
     };
   },
 

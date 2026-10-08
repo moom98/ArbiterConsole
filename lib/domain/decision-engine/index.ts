@@ -45,6 +45,11 @@ import {
   parseGameHistoryText,
   validateGameHistory,
 } from "@/lib/domain/services/game-history";
+import {
+  assessMatePossibility,
+  matePositionRequest,
+  type MatePossibility,
+} from "@/lib/domain/services/mate-possibility";
 import type { LlmAssistOutcome, LlmAssistPort } from "@/lib/domain/llm/ports";
 import { buildLlmDecision } from "@/lib/domain/llm/llm-decision";
 import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
@@ -55,7 +60,10 @@ import {
 } from "@/lib/domain/services/fair-play";
 
 export interface DecisionEngineDeps {
-  /** 同一局面の自動判定に使う局面解析（未指定なら自動判定は利用不可） */
+  /**
+   * 局面解析。同一局面の自動判定と、メイト可能性の手順の検証（ADR-014 §5）に使う
+   * （未指定ならどちらも利用不可）
+   */
   positions?: ChessPositionPort;
   /**
    * 決定木の対象外の事象について AI 参考情報を取得するポート（ADR-007）。
@@ -403,6 +411,7 @@ export class DecisionEngine {
             ...incident.flagFallFacts,
             competitionType,
             supervisionRegime: regime,
+            mate: this.mateFor(incident),
           }),
           rulesVersion
         );
@@ -499,6 +508,7 @@ export class DecisionEngine {
       playerColor: color,
       playerIncidentCount: Array.isArray(prior) ? prior.length : undefined,
       priorIllegalMoves: prior,
+      mate: this.mateFor(incident),
     });
     const decision = {
       ...result.decision,
@@ -531,6 +541,7 @@ export class DecisionEngine {
       playerIncidentCount: Array.isArray(prior) ? prior.length : undefined,
       priorIllegalMoves: prior,
       tournamentOverrides: context.ruleset?.tournamentOverrides,
+      mate: this.mateFor(incident),
     };
     const result =
       regime === "competition-rules"
@@ -545,6 +556,31 @@ export class DecisionEngine {
             rulesVersion
           ).evaluate(input);
     return this.finish(incident, result, rulesVersion);
+  }
+
+  /**
+   * メイト可能性（6.9 / 7.5.5 / A.5.3）を局面から判定する（ADR-014 §5）。
+   * ヘルプメイトの手順は Incident.mateSearch の候補を、毎回ポートで再生して検証する。
+   */
+  private mateFor(incident: Incident): MatePossibility {
+    const request = matePositionRequest(incident);
+    if (!request)
+      return {
+        verdict: "unknown",
+        cause: "no-position",
+        reason: "局面が入力されていません",
+      };
+    if (!this.deps.positions)
+      return {
+        verdict: "unknown",
+        cause: "not-searched",
+        reason: "局面解析を利用できません",
+      };
+    return assessMatePossibility(
+      this.deps.positions,
+      request,
+      incident.mateSearch
+    );
   }
 
   private finish(

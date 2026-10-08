@@ -17,6 +17,8 @@ import {
   type FollowUpQuestion,
 } from "@/lib/domain/follow-up";
 import { buildDecision, type DecisionFields } from "./build-decision";
+import type { MatePossibility } from "@/lib/domain/services/mate-possibility";
+import { mateStep, reinstatedPositionQuestions } from "./mate-position";
 
 export const DT_001_ID = "DT-001-illegal-move-standard" as const;
 export const DT_001_RULES_VERSION = "FIDE-2023";
@@ -38,6 +40,11 @@ export interface IllegalMoveStandardInput extends IllegalMoveFacts {
    * IncidentCounter が算出する。
    */
   priorIllegalMoves?: PriorIllegalMove[];
+  /**
+   * 違法手の直前に戻した局面によるメイト可能性（DecisionEngine が assessMatePossibility で算出。
+   * ADR-014 §5）。matePosition = "fen" のときに使う
+   */
+  mate?: MatePossibility;
 }
 
 /** これまでに違法手ペナルティが適用された Incident の要約 */
@@ -159,11 +166,11 @@ export class IllegalMoveStandardTree {
       input.priorIllegalMoves,
       priorCount
     );
-    const canMate = input.opponentCanCheckmate;
-    if (canMate === undefined) {
+    const step = mateStep(input.matePosition, input.mate);
+    if (step.kind === "ask") {
       return this.needsInput(
-        [QUESTIONS.opponentCanCheckmate],
-        `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）の可能性があります。結論には、相手がメイト可能な局面かの確認が必要です（7.5.5 ただし書き）。\n${priorLines.join("\n")}`,
+        reinstatedPositionQuestions(),
+        `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）の可能性があります。結論には、相手がメイト可能な局面かの判定が必要です（7.5.5 ただし書き）。違法手の直前に戻した局面を入力してください。${step.error ? `\n${step.error}` : ""}\n${priorLines.join("\n")}`,
         cite(
           SUBTYPE_ARTICLE[subtype],
           "FIDE_7_5_5",
@@ -171,14 +178,16 @@ export class IllegalMoveStandardTree {
         )
       );
     }
-    if (canMate === "unknown")
+    if (step.kind === "unknown")
       return this.decided(
-        this.secondOffenceMateUnknown(color, subtype, priorLines)
+        this.secondOffenceMateUnknown(color, subtype, priorLines, step.reason)
       );
-    if (canMate === false)
-      return this.decided(this.secondOffenceDraw(color, subtype, priorLines));
+    if (step.kind === "cannot-mate")
+      return this.decided(
+        this.secondOffenceDraw(color, subtype, priorLines, step.reason)
+      );
     return this.decided(
-      this.secondOffenceLoss(color, subtype, priorCount, priorLines)
+      this.secondOffenceLoss(color, subtype, priorCount, priorLines, step.line)
     );
   }
 
@@ -396,12 +405,13 @@ export class IllegalMoveStandardTree {
   private secondOffenceMateUnknown(
     color: PlayerColor,
     subtype: IllegalMoveSubtype,
-    priorLines: string[]
+    priorLines: string[],
+    reason: string
   ): DecisionFields {
     return {
       ...this.base(),
       kind: "manual-review",
-      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手がメイト可能な局面か判断できないため、結論（負け／ドロー）を確定できません。CAへ確認してください。`,
+      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手がメイト可能な局面か確定できないため（${reason}）、結論（負け／ドロー）を確定できません。局面を確認し、CAへ確認してください。`,
       actions: [
         "時計を止める",
         ...priorLines,
@@ -427,16 +437,18 @@ export class IllegalMoveStandardTree {
     color: PlayerColor,
     subtype: IllegalMoveSubtype,
     priorCount: number,
-    priorLines: string[]
+    priorLines: string[],
+    line: string
   ): DecisionFields {
     const inconsistent = priorCount >= 2;
     return {
       ...this.base(),
       kind: "recommendation",
-      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）です。相手はメイト可能な局面のため、${COLOR_JA[color]}の負けとなります。`,
+      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）です。相手はメイト可能な局面のため、${COLOR_JA[color]}の負けとなります。\nメイトまでの手順の例（違法手の直前の局面から）: ${line}`,
       actions: [
         "時計を止める",
         ...priorLines,
+        "入力した局面（手番を含む）が、違法手の直前の局面と一致することを確認する",
         `${COLOR_JA[color]}の負けを宣言する（7.5.5）`,
         "結果を記録する",
       ],
@@ -469,12 +481,13 @@ export class IllegalMoveStandardTree {
   private secondOffenceDraw(
     color: PlayerColor,
     subtype: IllegalMoveSubtype,
-    priorLines: string[]
+    priorLines: string[],
+    reason: string
   ): DecisionFields {
     return {
       ...this.base(),
       kind: "recommendation",
-      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手はどのような合法手の連続でもメイトできない局面のため、ドローとなります。`,
+      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手はどのような合法手の連続でもメイトできない局面のため、ドローとなります。（${reason}）`,
       actions: [
         "時計を止める",
         ...priorLines,

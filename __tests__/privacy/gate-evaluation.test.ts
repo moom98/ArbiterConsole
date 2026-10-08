@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import sensitive from "../fixtures/privacy/sensitive.ja.json";
 import context from "../fixtures/privacy/context-expressions.ja.json";
 import benign from "../fixtures/privacy/benign.ja.json";
+import review1 from "../fixtures/privacy/sensitive-review1.ja.json";
 import { CONTEXT_EXPRESSIONS, evaluateSensitivity } from "@/lib/domain/privacy";
 
 /**
@@ -29,6 +30,14 @@ describe("Sensitive Gate evaluation (release gate)", () => {
 
   it("0 false negatives: no sensitive report reaches clear", () => {
     const falseNegatives = sensitive.cases.filter(
+      (c) => evaluateSensitivity({ text: c.text }).verdict === "clear"
+    );
+    expect(falseNegatives).toEqual([]);
+  });
+
+  it("0 false negatives on the reviewer's independent set (now a regression set)", () => {
+    expect(review1.cases.length).toBeGreaterThanOrEqual(100);
+    const falseNegatives = review1.cases.filter(
       (c) => evaluateSensitivity({ text: c.text }).verdict === "clear"
     );
     expect(falseNegatives).toEqual([]);

@@ -125,6 +125,98 @@ describe("Sensitive Gate (external-ai-data-protection §4)", () => {
     });
   });
 
+  describe("L3v: known vocabulary (ADR-012 amendment, user decision 2026-10-08)", () => {
+    it("is clear only when every content word is known chess / incident vocabulary", () => {
+      for (const text of [
+        "白が違法手を指して時計を押した",
+        "〈選手A〉が2回目の違法手。〈選手B〉が指摘した",
+        "黒のフラッグが落ちた",
+        "白がNf3と指した後にe5を戻した",
+        "三回同一局面のクレーム",
+        "結果用紙に白負けと書いた",
+        "黒のスマホが鳴った",
+      ])
+        expect(verdict(text), text).toBe("clear");
+    });
+
+    it("an unknown word (a paraphrase the term lists do not know) is uncertain", () => {
+      for (const text of [
+        "白の選手が胸を押さえて苦しそうにしている",
+        "インスリン注射が必要とのこと",
+        "対局後にケンカになった",
+        "財布が見当たらない",
+        "ラマダン中で断食している",
+        "お母さんが迎えに来ない",
+        "置き引きにあった",
+        "外来に行った",
+        "押し合った",
+        "目を回した",
+        "白が消えた",
+        "弱っていた",
+      ])
+        expect(verdict(text), text).not.toBe("clear");
+      expect(codes("インスリン注射が必要とのこと")).toContain(
+        "unknown-vocabulary"
+      );
+    });
+
+    it("hiragana spellings are not explained by grammar endings", () => {
+      for (const text of [
+        "けいさつを呼んだ",
+        "びょういんに行った",
+        "あたまがいたい",
+        "いたいと言った",
+        "相手にたたかれた",
+        "しにたいと言った",
+        "白が動けない",
+        "目が見えない",
+      ])
+        expect(verdict(text), text).not.toBe("clear");
+    });
+
+    it("an unredacted name is an unknown word", () => {
+      expect(verdict("中村が違法手を指した")).toBe("uncertain");
+      expect(verdict("はるとくんが違法手")).toBe("uncertain");
+    });
+
+    it("can be skipped for the raw text before redaction (step A)", () => {
+      expect(verdict("中村が違法手を指した", { vocabulary: false })).toBe(
+        "clear"
+      );
+      // L0–L4 still apply
+      expect(verdict("中村が体調不良", { vocabulary: false })).toBe("blocked");
+    });
+
+    it("a person who does not move is sensitive; a clock that does not move is not", () => {
+      expect(verdict("白が動かない")).toBe("blocked");
+      expect(verdict("時計が動かない")).toBe("clear");
+      expect(verdict("ずっと動かない")).toBe("uncertain");
+    });
+  });
+
+  describe("review fixes (J1a-1 review 1)", () => {
+    it("matches a phrase split by a line break", () => {
+      expect(verdict("財布が\nなくなった")).toBe("blocked");
+      expect(verdict("エンジンを使っている\n疑い")).toBe("blocked");
+    });
+
+    it("ばかり is not abuse; 馬鹿 is", () => {
+      expect(verdict("白が指したばかりの手")).toBe("clear");
+      expect(verdict("馬鹿と言われた")).toBe("blocked");
+    });
+
+    it("a signature needs a document noun to be benign (M2)", () => {
+      expect(verdict("観客が白にこっそりサインした")).not.toBe("clear");
+      expect(verdict("棋譜にサインしていない")).toBe("clear");
+      expect(verdict("サイン漏れ")).toBe("clear");
+    });
+
+    it("being pushed or touched by someone is blocked", () => {
+      expect(verdict("相手に押された")).toBe("blocked");
+      expect(verdict("相手に触られた")).toBe("blocked");
+    });
+  });
+
   describe("L4: unanalyzable input", () => {
     it("mostly-Latin text is uncertain, even when it looks harmless", () => {
       expect(verdict("White made an illegal move")).toBe("uncertain");

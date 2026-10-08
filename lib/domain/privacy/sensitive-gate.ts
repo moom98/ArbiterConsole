@@ -15,6 +15,7 @@ import {
   type MatchText,
   type Span,
 } from "./normalize";
+import { unknownVocabulary } from "./known-vocabulary";
 import {
   CONTEXT_EXPRESSIONS,
   SENSITIVE_EXPRESSIONS,
@@ -34,6 +35,8 @@ export type GateReasonCode =
   | "context-sensitive"
   /** L3: 文脈で判断できない表現 */
   | "context-uncertain"
+  /** L3v: 既知の語彙で説明できない語がある（ADR-012 の改訂） */
+  | "unknown-vocabulary"
   /** L4: 解析できない文字が多い */
   | "unanalyzable"
   /** L4: 英字が主の本文 */
@@ -68,6 +71,11 @@ export interface GateInput {
   maxLength?: number;
   /** L4: 残存チェック（residual-check）が失敗した */
   residualFailed?: boolean;
+  /**
+   * L3v: 既知の語彙の判定を行うか（既定 true）。置き換える前の本文（§3 の A）では
+   * 名前が未知の語になるため false にし、置き換え後（E）とサーバー（L5）で必ず行う
+   */
+  vocabulary?: boolean;
 }
 
 /** L4: 日本語・英字・数字・一般的な記号以外の文字の割合の上限 */
@@ -111,10 +119,13 @@ function knownSensitive(text: MatchText): SensitiveClass[] {
 }
 
 /** L3: 文脈で判断する表現（出現ごとに判断し、最も重い結果） */
-function contextVerdicts(
-  text: MatchText
-): { entry: string; verdict: GateVerdict }[] {
+function contextVerdicts(text: MatchText): {
+  verdicts: { entry: string; verdict: GateVerdict }[];
+  /** 安全な文脈に覆われた範囲（既知の語彙として扱う） */
+  benignSpans: Span[];
+} {
   const out: { entry: string; verdict: GateVerdict }[] = [];
+  const benignSpans: Span[] = [];
   for (const e of CONTEXT_EXPRESSIONS) {
     const occurrences = spans(e.triggers, text);
     if (occurrences.length === 0) continue;
@@ -122,16 +133,18 @@ function contextVerdicts(
     const benign = e.benign.flatMap((p) => spans(p, text));
     let verdict: GateVerdict = "clear";
     for (const occ of occurrences) {
+      const cover = benign.find((b) => covers(b, occ));
       const v: GateVerdict = sensitive.some((s) => overlaps(s, occ))
         ? "blocked"
-        : benign.some((b) => covers(b, occ))
+        : cover
           ? "clear"
           : "uncertain";
+      if (v === "clear" && cover) benignSpans.push(cover);
       verdict = worst(verdict, v);
     }
     if (verdict !== "clear") out.push({ entry: e.id, verdict });
   }
-  return out;
+  return { verdicts: out, benignSpans };
 }
 
 /** L4: 解析できない入力 */
@@ -186,12 +199,22 @@ export function evaluateSensitivity(input: GateInput): GateResult {
   }
 
   // L3
-  for (const c of contextVerdicts(text)) {
+  const context = contextVerdicts(text);
+  for (const c of context.verdicts) {
     verdict = worst(verdict, c.verdict);
     reasons.push({
       code: c.verdict === "blocked" ? "context-sensitive" : "context-uncertain",
       entry: c.entry,
     });
+  }
+
+  // L3v: すべての内容語が既知の語彙で説明できる場合だけ clear（見逃しを防ぐ主な層）
+  if (input.vocabulary !== false) {
+    const v = unknownVocabulary(text.nfkc, context.benignSpans);
+    if (v.unknownRuns > 0) {
+      verdict = worst(verdict, "uncertain");
+      reasons.push({ code: "unknown-vocabulary" });
+    }
   }
 
   // L4

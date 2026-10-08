@@ -56,6 +56,13 @@ Today the incident description, the article text and search queries go to Gemini
    - PII leaks must be 0 on the covered identifier types.
    - Only synthetic data is used.
 
+## Amendment (2026-10-08, user decision after the J1a-1 review)
+
+- **A known-vocabulary layer (L3v) decides `clear`.** Incident-derived text is sent only when every content word is explained by known chess and incident vocabulary; otherwise it is handled locally. L2 and L3 remain for the `blocked` reasons and the benign phrases.
+- **Why:** an independent review found that the term lists let about 115 of 151 independently written sensitive reports through. A list of sensitive words cannot reach 0 false negatives.
+- **Accepted trade-off:** free-text reports with words outside the vocabulary get no external AI help. The vocabulary grows only through review, like the term lists, and must never contain sensitive words or single kanji that combine into them.
+- Details: design §4.2 (L3v), §10.
+
 ## Consequences
 
 **Positive**

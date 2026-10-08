@@ -6,7 +6,7 @@
  */
 import type { KnownIdentifiers } from "./pii-redaction";
 import { normalizeName } from "./normalize";
-import { textOutsidePlaceholders } from "./placeholders";
+import { neutralizeBrackets, textOutsidePlaceholders } from "./placeholders";
 
 export type ResidualFinding =
   /** 登録済みの識別子（緩い照合: かな・空白・中黒・姓だけ） */
@@ -40,16 +40,19 @@ const DETECTORS: readonly { finding: ResidualFinding; re: RegExp }[] = [
   { finding: "contact", re: /@[\w-]+\.|https?:|www\.|\d{2,4}-\d{2,4}-\d{3,4}/ },
   {
     finding: "date",
-    re: /\d+\s*月\s*\d+\s*日|[〇一二三四五六七八九十]+月[〇一二三四五六七八九十]+日|\d{4}[-/.]\d{1,2}|(?<![\d/-])\d{1,2}\/\d{1,2}(?![\d/-])|[月火水木金土日]曜/,
+    re: /(令和|平成|昭和)\s*(元|\d|[一二三四五六七八九十])|\d+\s*日(?![目間])|\d{4}\s*年|\d+\s*月\s*\d+\s*日|[〇一二三四五六七八九十]+月[〇一二三四五六七八九十]+日|\d{4}[-/.]\d{1,2}|(?<![\d/-])\d{1,2}\/\d{1,2}(?![\d/-])|[月火水木金土日]曜/,
   },
-  { finding: "time", re: /(午前|午後)\s*\d|\d+\s*時(?![間計])\s*\d*/ },
+  {
+    finding: "time",
+    re: /(午前|午後)\s*[\d〇一二三四五六七八九十]|\d+\s*時(?![間計])\s*\d*|[〇一二三四五六七八九十]+時(半|[〇一二三四五六七八九十]+分|頃|ごろ|に|から|まで|過ぎ|すぎ|ちょうど)/,
+  },
   {
     finding: "board-round",
-    re: /\d+\s*(回戦|ラウンド|番?(ボード|盤|テーブル|卓|席))|第\s*[0-9〇一二三四五六七八九十]+\s*(回戦|ラウンド|局|番|ボード|盤|テーブル|卓|席)|(ボード|盤|テーブル|席)\s*\d|\b(Board|Round|Table)\s*\d/i,
+    re: /(ラウンド|回戦)\s*[\d〇一二三四五六七八九十]|\d+\s*(回戦|ラウンド|番?(ボード|盤|テーブル|卓|席))|第\s*[0-9〇一二三四五六七八九十]+\s*(回戦|ラウンド|局|番|ボード|盤|テーブル|卓|席)|(ボード|盤|テーブル|席)\s*\d|\b(Board|Round|Table)\s*\d/i,
   },
   {
     finding: "labelled-id",
-    re: /(会員|登録|JCF|FIDE|ID|番号|No\.?)\s*[:：]?\s*[A-Za-z0-9-]*\d/,
+    re: /(会員|登録|JCF|FIDE|LINE|ID|番号|No\.?)\s*[:：]\s*[A-Za-z0-9_.@-]{3,}|(会員|登録|JCF|FIDE|LINE|ID|番号|No\.?)\s*[A-Za-z0-9_.-]*\d/,
   },
   {
     finding: "latin-title-name",
@@ -57,10 +60,10 @@ const DETECTORS: readonly { finding: ResidualFinding; re: RegExp }[] = [
   },
 ];
 
-/** 時計の表示（残り・持ち時間などの近くの H:MM）は時刻として扱わない */
+/** 時計の表示（残り・時計・白・黒・フラッグなどの近くの H:MM）は時刻として扱わない */
 function withoutClockReadings(text: string): string {
   return text.replace(
-    /((?:残り|持ち時間|時計|表示|秒読み).{0,6}?)\d{1,2}:\d{2}(?::\d{2})?|\d{1,2}:\d{2}(?::\d{2})?(?=\s*残)/g,
+    /((?:残り|持ち時間|時計|表示|秒読み|白番|黒番|白|黒|フラッグ|フラグ)[\s\S]{0,6}?)\d{1,2}:\d{2}(?::\d{2})?|\d{1,2}:\d{2}(?::\d{2})?(?=\s*(残|で?(フラッグ|フラグ|時間切|0になった)))/g,
     (_m, before?: string) => `${before ?? ""}#`
   );
 }
@@ -73,6 +76,8 @@ const CLOCK_LIKE = /\d{1,2}:\d{2}/;
 function looseIdentifierHit(text: string, ids: KnownIdentifiers): boolean {
   const hay = normalizeName(text);
   const needles: string[] = [];
+  /** 1文字の漢字の姓・名（前後が漢字でない場合だけ） */
+  const singles: string[] = [];
   const add = (v?: string) => {
     if (!v) return;
     const n = normalizeName(v);
@@ -85,7 +90,12 @@ function looseIdentifierHit(text: string, ids: KnownIdentifiers): boolean {
       .normalize("NFKC")
       .trim()
       .split(/[\s・]+/);
-    for (const part of parts) add(part);
+    for (const part of parts) {
+      add(part);
+      const n = normalizeName(part);
+      if (parts.length > 1 && n.length === 1 && /[\u4e00-\u9fff々]/.test(n))
+        singles.push(n);
+    }
     // 空白なしで登録された漢字の名前: 先頭2文字（姓）でも照合する
     const n = normalizeName(p.name);
     if (parts.length === 1 && n.length >= 3 && /^[一-鿿々]{2}/.test(n))
@@ -99,6 +109,14 @@ function looseIdentifierHit(text: string, ids: KnownIdentifiers): boolean {
       .split(/[\s・]+/))
       add(part);
   }
+  if (
+    singles.some((n) =>
+      new RegExp(`(?<![\\u4e00-\\u9fff々])${n}(?![\\u4e00-\\u9fff々])`).test(
+        hay
+      )
+    )
+  )
+    return true;
   return needles.some((n) =>
     /^[a-z0-9]+$/.test(n)
       ? new RegExp(`(?<![a-z0-9])${n}(?![a-z0-9])`).test(hay)
@@ -113,7 +131,7 @@ export function residualCheck(
 ): ResidualResult {
   const findings = new Set<ResidualFinding>();
   const outside = withoutClockReadings(
-    textOutsidePlaceholders(redacted.normalize("NFKC"))
+    textOutsidePlaceholders(neutralizeBrackets(redacted.normalize("NFKC")))
   );
   if (looseIdentifierHit(outside, ids)) findings.add("registered-identifier");
   if (DIGITS.test(outside)) findings.add("digits");

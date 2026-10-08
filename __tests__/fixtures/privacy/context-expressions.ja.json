@@ -1620,6 +1620,51 @@
    "entry": "term:通報",
    "expected": "uncertain",
    "text": "通報する"
+  },
+  {
+   "entry": "not-moving",
+   "expected": "blocked",
+   "text": "白が動かない"
+  },
+  {
+   "entry": "not-moving",
+   "expected": "blocked",
+   "text": "選手が動けない"
+  },
+  {
+   "entry": "not-moving",
+   "expected": "blocked",
+   "text": "相手が全く動かない"
+  },
+  {
+   "entry": "not-moving",
+   "expected": "clear",
+   "text": "時計が動かない"
+  },
+  {
+   "entry": "not-moving",
+   "expected": "clear",
+   "text": "駒が動かない"
+  },
+  {
+   "entry": "not-moving",
+   "expected": "clear",
+   "text": "ボタンが動かない"
+  },
+  {
+   "entry": "not-moving",
+   "expected": "uncertain",
+   "text": "動かないまま"
+  },
+  {
+   "entry": "not-moving",
+   "expected": "uncertain",
+   "text": "ずっと動かない"
+  },
+  {
+   "entry": "not-moving",
+   "expected": "uncertain",
+   "text": "動けずにいた"
   }
  ]
 }

@@ -57,7 +57,8 @@ export function dual(
   source: string,
   options: { flags?: string; unfoldedOnly?: boolean } = {}
 ): DualPattern {
-  const flags = `g${options.flags ?? ""}`;
+  // s: 「.」が改行にも一致する（テキスト欄の改行で表現が分かれても照合する）
+  const flags = `gs${options.flags ?? ""}`;
   return {
     nfkc: new RegExp(source, flags),
     folded: options.unfoldedOnly

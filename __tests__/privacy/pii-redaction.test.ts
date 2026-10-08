@@ -3,6 +3,7 @@ import pii from "../fixtures/privacy/pii.ja.json";
 import {
   NO_IDENTIFIERS,
   PlaceholderMap,
+  protectIncidentText,
   redactPii,
   residualCheck,
   type KnownIdentifiers,
@@ -118,6 +119,68 @@ describe("PII redaction (external-ai-data-protection §5.2)", () => {
     });
   });
 
+  describe("review fixes (J1a-1 review 1)", () => {
+    it("text inside a non-placeholder 〈…〉 is redacted and checked (M3)", () => {
+      expect(redact("〈田中太郎〉が違法手を指した")).toBe(
+        "「〈選手A〉」が違法手を指した"
+      );
+      expect(redact("相手の〈中村健司〉さん")).toBe("相手の「〈人物1〉」さん");
+      // U+2329 は NFKC で〈になる
+      expect(redact("\u2329田中太郎\u232a")).toBe("「〈選手A〉」");
+      expect(residualCheck("〈中村〉が違法手", IDS).ok).toBe(true);
+      expect(residualCheck("〈佐藤〉が違法手", IDS).ok).toBe(false);
+    });
+
+    it("a single-kanji surname of a registered player, outside longer kanji words", () => {
+      expect(redact("林が違法手を指した")).toBe("〈選手A〉が違法手を指した");
+      expect(redact("白の林、黒の高橋で対局中")).toBe(
+        // 番号は一致した順（長い名前から）。位置の順ではない
+        "白の〈選手B〉、黒の〈選手A〉で対局中"
+      );
+      expect(redact("林檎を持っていた")).toBe("林檎を持っていた");
+      expect(residualCheck("白の林が投了", IDS).ok).toBe(false);
+    });
+
+    it("round written noun first, kanji-numeral times, partial dates, eras", () => {
+      expect(redact("ボード12で違法手、ラウンド5")).toBe(
+        "〈盤1〉で違法手、〈ラウンド1〉"
+      );
+      expect(redact("十四時ごろ違法手")).toBe("〈日時1〉ごろ違法手");
+      expect(redact("午後三時に違法手")).toBe("〈日時1〉に違法手");
+      expect(redact("一時停止した")).toBe("一時停止した");
+      expect(redact("8日の対局")).toBe("〈日時1〉の対局");
+      expect(redact("3日目の対局")).toBe("3日目の対局");
+      expect(redact("2026年10月の大会")).toBe("〈日時1〉の大会");
+      expect(redact("令和8年")).toBe("〈日時1〉");
+      expect(residualCheck("ラウンド5で違法手", IDS).ok).toBe(false);
+      expect(residualCheck("午後三時に違法手", IDS).ok).toBe(false);
+    });
+
+    it("school years, LINE ID", () => {
+      expect(redact("小6の選手")).toBe("〈属性1〉の選手");
+      expect(redact("中2の生徒")).toBe("〈属性1〉の生徒");
+      expect(redact("LINE ID: tanaka_t")).not.toContain("tanaka_t");
+    });
+
+    it("keeps clock readings next to 白 / 黒 / フラッグ", () => {
+      expect(redact("白の時計は0:45、黒は1:20のときにフラッグ")).toBe(
+        "白の時計は0:45、黒は1:20のときにフラッグ"
+      );
+      expect(redact("白 0:00 黒 0:12 でフラッグ")).toBe(
+        "白 0:00 黒 0:12 でフラッグ"
+      );
+      expect(residualCheck("白 0:00 黒 0:12 でフラッグ", IDS).ok).toBe(true);
+    });
+
+    it("keeps a leading role noun, 1局目, and rule terms in English", () => {
+      expect(redact("黒番中村さんが違法手")).toBe("黒番〈人物1〉さんが違法手");
+      expect(redact("1局目と2局目")).toBe("1局目と2局目");
+      expect(redact("Threefold Repetition claimed")).toBe(
+        "Threefold Repetition claimed"
+      );
+    });
+  });
+
   it("the map is never serialized (JSON gives an empty object)", () => {
     const map = new PlaceholderMap();
     redactPii("田中太郎が違法手", IDS, map);
@@ -164,6 +227,20 @@ describe("PII evaluation (release gate)", () => {
   it("covered identifiers are already removed by the redaction (the residual check is only a backstop)", () => {
     const missed = results.filter((r) => !r.risk && r.left.length > 0);
     expect(missed).toEqual([]);
+  });
+
+  it("the known residual risks are stopped by the known-vocabulary layer (never sent)", () => {
+    for (const c of pii.cases.filter(
+      (x) => (x as { residualRisk?: string }).residualRisk
+    )) {
+      const r = protectIncidentText({
+        route: "classify",
+        text: c.text,
+        identifiers: IDS,
+        map: new PlaceholderMap(),
+      });
+      expect(r.ok, c.text).toBe(false);
+    }
   });
 
   it("reports the known residual risks separately", () => {

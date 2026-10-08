@@ -1,0 +1,437 @@
+{
+ "description": "Regression set: sensitive reports written independently by the J1a-1 reviewer (2026-10-08) that the first, list-based gate let through as clear. Every entry must NOT be clear. No longer held out (used during the fix).",
+ "cases": [
+  {
+   "class": "fair-play",
+   "text": "対局中に胸ポケットの電子機器を何度も触っていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "スマートウォッチで何かを確認していた"
+  },
+  {
+   "class": "fair-play",
+   "text": "評価値を見ていたのではないかと相手が申し立てた"
+  },
+  {
+   "class": "fair-play",
+   "text": "観客が指で手順を教えていたようだ"
+  },
+  {
+   "class": "fair-play",
+   "text": "最善手をささやいている人がいた"
+  },
+  {
+   "class": "fair-play",
+   "text": "Stockfishの手と一致率が高いと相手が主張"
+  },
+  {
+   "class": "fair-play",
+   "text": "コンピュータの助けを借りているかもしれない"
+  },
+  {
+   "class": "fair-play",
+   "text": "メモに次の手が書いてあった"
+  },
+  {
+   "class": "fair-play",
+   "text": "対局中に解析ソフトを開いていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "通信機器を所持していた"
+  },
+  {
+   "class": "fair-play",
+   "text": "相手の手番中に仲間と目配せしていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "AIに指し手を聞いていたらしい"
+  },
+  {
+   "class": "fair-play",
+   "text": "わざと負けるよう頼まれたと黒が言っている"
+  },
+  {
+   "class": "fair-play",
+   "text": "白が対局中に手元の端末で棋譜を検索していた"
+  },
+  {
+   "class": "fair-play",
+   "text": "相手がメガネ型の機器を付けていて気になると申告"
+  },
+  {
+   "class": "fair-play",
+   "text": "白がengineを使っていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "相手がphoneを見ていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "観客がsignalを送っていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "観客が白にこっそりサインした"
+  },
+  {
+   "class": "fair-play",
+   "text": "仲間が遠くから白にサインした"
+  },
+  {
+   "class": "health",
+   "text": "白の選手が胸を押さえて苦しそうにしている"
+  },
+  {
+   "class": "health",
+   "text": "インスリン注射が必要とのこと"
+  },
+  {
+   "class": "health",
+   "text": "ぜんそくの吸入器を使ってよいか聞かれた"
+  },
+  {
+   "class": "health",
+   "text": "眠気がひどく対局を続けられないと言う"
+  },
+  {
+   "class": "health",
+   "text": "妊婦の選手から休憩の相談"
+  },
+  {
+   "class": "health",
+   "text": "AEDを持ってきてもらった"
+  },
+  {
+   "class": "health",
+   "text": "目が見えにくい選手のため盤を大きくした"
+  },
+  {
+   "class": "health",
+   "text": "耳が聞こえない選手なので筆談で説明した"
+  },
+  {
+   "class": "health",
+   "text": "松葉杖の選手の席を通路側にした"
+  },
+  {
+   "class": "health",
+   "text": "黒がふらふらしていた"
+  },
+  {
+   "class": "health",
+   "text": "ｷｭｳｷｭｳｼｬを呼んだ"
+  },
+  {
+   "class": "health",
+   "text": "手首を骨折しているので代わりに駒を動かす"
+  },
+  {
+   "class": "health",
+   "text": "コロナ陽性だったと後で連絡があった"
+  },
+  {
+   "class": "health",
+   "text": "うずくまって動かない"
+  },
+  {
+   "class": "health",
+   "text": "呼吸が荒く汗がすごい"
+  },
+  {
+   "class": "health",
+   "text": "白がdizzyと言って時計を止めた"
+  },
+  {
+   "class": "health",
+   "text": "黒がdiabeticで補食が必要"
+  },
+  {
+   "class": "health",
+   "text": "白がcryingしている"
+  },
+  {
+   "class": "health",
+   "text": "酒に酔って来場した"
+  },
+  {
+   "class": "health",
+   "text": "酔っぱらって大声"
+  },
+  {
+   "class": "health",
+   "text": "白が「死にたい」と言っていた"
+  },
+  {
+   "class": "health",
+   "text": "自傷の跡があった"
+  },
+  {
+   "class": "health",
+   "text": "リストカットの跡"
+  },
+  {
+   "class": "harassment",
+   "text": "違法手の後、相手に胸ぐらをつかまれた"
+  },
+  {
+   "class": "harassment",
+   "text": "胸ぐらをつかむ"
+  },
+  {
+   "class": "harassment",
+   "text": "女性選手に執拗に話しかけて連絡先を聞いていた"
+  },
+  {
+   "class": "harassment",
+   "text": "下品な言葉を浴びせていた"
+  },
+  {
+   "class": "harassment",
+   "text": "睨みつけて威嚇した"
+  },
+  {
+   "class": "harassment",
+   "text": "胸を触られたと女子選手が申し出た"
+  },
+  {
+   "class": "harassment",
+   "text": "スカートの中を撮影していた"
+  },
+  {
+   "class": "harassment",
+   "text": "ストーカーのように会場までついてきた"
+  },
+  {
+   "class": "harassment",
+   "text": "暴行を受けたと申告"
+  },
+  {
+   "class": "harassment",
+   "text": "対局後にケンカになった"
+  },
+  {
+   "class": "harassment",
+   "text": "喧嘩になりそうだった"
+  },
+  {
+   "class": "harassment",
+   "text": "つかみ合いになった"
+  },
+  {
+   "class": "harassment",
+   "text": "駒を相手に投げつけた"
+  },
+  {
+   "class": "harassment",
+   "text": "人種的な侮辱を受けた"
+  },
+  {
+   "class": "harassment",
+   "text": "馬鹿と言われた"
+  },
+  {
+   "class": "harassment",
+   "text": "殺すぞと言われた"
+  },
+  {
+   "class": "harassment",
+   "text": "モラハラを受けている"
+  },
+  {
+   "class": "harassment",
+   "text": "キモいと言われた"
+  },
+  {
+   "class": "harassment",
+   "text": "外国人だからと見下す発言があった"
+  },
+  {
+   "class": "harassment",
+   "text": "黒がgropedされたと言う"
+  },
+  {
+   "class": "crime",
+   "text": "財布が見当たらない"
+  },
+  {
+   "class": "crime",
+   "text": "置き引きにあった"
+  },
+  {
+   "class": "crime",
+   "text": "スリにあったと申告"
+  },
+  {
+   "class": "crime",
+   "text": "会場で金銭を要求された"
+  },
+  {
+   "class": "crime",
+   "text": "刃物を持っていた"
+  },
+  {
+   "class": "crime",
+   "text": "ナイフを所持していた"
+  },
+  {
+   "class": "crime",
+   "text": "対局に金を賭けていた"
+  },
+  {
+   "class": "crime",
+   "text": "おまわりさんを呼んだ"
+  },
+  {
+   "class": "crime",
+   "text": "交番に届けた"
+  },
+  {
+   "class": "crime",
+   "text": "大麻を持っていた"
+  },
+  {
+   "class": "crime",
+   "text": "万引きで捕まった選手"
+  },
+  {
+   "class": "crime",
+   "text": "パトカーが来た"
+  },
+  {
+   "class": "crime",
+   "text": "時計が壊された、わざとだと思う"
+  },
+  {
+   "class": "crime",
+   "text": "相手のバッグから財布を抜いた"
+  },
+  {
+   "class": "crime",
+   "text": "財布が\nなくなった"
+  },
+  {
+   "class": "crime",
+   "text": "けいさつを呼んだ"
+  },
+  {
+   "class": "crime",
+   "text": "ちかんにあった"
+  },
+  {
+   "class": "crime",
+   "text": "とうさつされた"
+  },
+  {
+   "class": "crime",
+   "text": "黒がdrunkだった"
+  },
+  {
+   "class": "religion",
+   "text": "ラマダン中で断食している"
+  },
+  {
+   "class": "religion",
+   "text": "安息日のため土曜に対局できない"
+  },
+  {
+   "class": "religion",
+   "text": "イスラム教徒の選手から相談"
+  },
+  {
+   "class": "religion",
+   "text": "仏教徒なので"
+  },
+  {
+   "class": "religion",
+   "text": "キリスト教の行事で欠席"
+  },
+  {
+   "class": "religion",
+   "text": "教会に行くので遅れる"
+  },
+  {
+   "class": "religion",
+   "text": "ハラール食の相談"
+  },
+  {
+   "class": "religion",
+   "text": "しゅうきょうの理由"
+  },
+  {
+   "class": "religion",
+   "text": "おいのりの時間"
+  },
+  {
+   "class": "family-minors",
+   "text": "お母さんが迎えに来ない"
+  },
+  {
+   "class": "family-minors",
+   "text": "息子さんが迷子になった"
+  },
+  {
+   "class": "family-minors",
+   "text": "児童が会場からいなくなった"
+  },
+  {
+   "class": "family-minors",
+   "text": "娘が対局中に話しかけてきた"
+  },
+  {
+   "class": "family-minors",
+   "text": "ママと連絡がつかない"
+  },
+  {
+   "class": "family-minors",
+   "text": "孫の対局を見ていた祖父が口出し"
+  },
+  {
+   "class": "family-minors",
+   "text": "父さんが怒って帰った"
+  },
+  {
+   "class": "family-minors",
+   "text": "兄弟げんかになった"
+  },
+  {
+   "class": "family-minors",
+   "text": "ぎゃくたいされている"
+  },
+  {
+   "class": "other",
+   "text": "びょういんに行った"
+  },
+  {
+   "class": "other",
+   "text": "きゅうきゅうしゃを呼んだ"
+  },
+  {
+   "class": "other",
+   "text": "ぼうりょくをふるわれた"
+  },
+  {
+   "class": "other",
+   "text": "ほっさが起きた"
+  },
+  {
+   "class": "other",
+   "text": "体 調が悪い"
+  },
+  {
+   "class": "other",
+   "text": "警 察を呼んだ"
+  },
+  {
+   "class": "other",
+   "text": "白がseizureを起こした"
+  },
+  {
+   "class": "other",
+   "text": "白が指したばかりの手を相手に押された"
+  }
+ ]
+}

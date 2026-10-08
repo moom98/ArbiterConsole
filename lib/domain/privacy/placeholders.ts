@@ -21,8 +21,30 @@ export type PlaceholderKind =
   | "数値"
   | "属性";
 
-/** 〈…〉で囲まれた部分（置き換えの対象外） */
-export const PLACEHOLDER_PATTERN = /〈[^〈〉]*〉/g;
+/**
+ * このモジュールが作るプレースホルダー（置き換えの対象外）。
+ * 種類と番号の形のものだけ。それ以外の〈…〉は普通の本文として置き換え・確認する
+ * （「〈田中太郎〉」のように括弧で囲んで規則を逃れさせない）
+ */
+export const PLACEHOLDER_PATTERN =
+  /〈(?:選手|人物|日時|ID|連絡先|大会|会場|団体|盤|ラウンド|数値|属性)[A-Z0-9]+〉/g;
+
+/**
+ * プレースホルダーの形でない〈…〉の括弧を「」に替える（NFKC は U+2329 を〈に変えるため、
+ * 正規化の後に行う）。中の文字はそのまま規則と確認の対象になる
+ */
+export function neutralizeBrackets(text: string): string {
+  const re = new RegExp(PLACEHOLDER_PATTERN.source, "g");
+  let out = "";
+  let last = 0;
+  let m: RegExpExecArray | null;
+  const swap = (s: string) => s.replace(/〈/g, "「").replace(/〉/g, "」");
+  while ((m = re.exec(text)) !== null) {
+    out += swap(text.slice(last, m.index)) + m[0];
+    last = m.index + m[0].length;
+  }
+  return out + swap(text.slice(last));
+}
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 

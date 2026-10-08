@@ -9,6 +9,7 @@ import { normalizeName, normalizedWithOrigins } from "./normalize";
 import {
   PlaceholderMap,
   mapOutsidePlaceholders,
+  neutralizeBrackets,
   type PlaceholderKind,
 } from "./placeholders";
 
@@ -46,9 +47,15 @@ const NUM = `(?:[0-9]+|${KANJI_NUM}+)`;
 /** 名前・団体名などに使う文字（漢字・カタカナ・英字。ひらがなで区切る） */
 const NAME_CHARS = "[\\u3400-\\u4dbf\\u4e00-\\u9fff々〆ヶァ-ヺーA-Za-z]";
 
-/** 時計の表示として残す（§5.2.1）: 直前6文字以内に「残り」等、または直後に「残」 */
-const CLOCK_BEFORE = /(残り|持ち時間|時計|表示|秒読み).{0,6}$/;
-const CLOCK_AFTER = /^\s*残/;
+/**
+ * 時計の表示として残す（§5.2.1）: 直前6文字以内に「残り」「時計」「白」「黒」「フラッグ」等、
+ * または直後に「残」「でフラッグ」等（フラッグの裁定では時計の表示が重要）
+ */
+const CLOCK_BEFORE =
+  /(残り|持ち時間|時計|表示|秒読み|白番|黒番|白|黒|フラッグ|フラグ)[\s\S]{0,6}$/;
+const CLOCK_AFTER = /^\s*(残|で?(フラッグ|フラグ|時間切|0になった))/;
+/** 漢字の時刻（「一時停止」「一時中断」は時刻ではない） */
+const KANJI_TIME = `${KANJI_NUM}{1,3}時(?:${KANJI_NUM}{1,3}分|半)?(?=頃|ごろ|に|から|まで|過ぎ|すぎ|前|ちょうど|の|、|。|$)`;
 
 type Replacer = (segment: string, map: PlaceholderMap) => string;
 
@@ -95,7 +102,11 @@ const DATE = rule(
     [
       "\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}",
       "\\d{4}年\\s*\\d{1,2}月\\s*\\d{1,2}日",
+      "\\d{4}年\\s*\\d{1,2}月",
       "\\d{1,2}月\\s*\\d{1,2}日",
+      `(?:令和|平成|昭和)\\s*(?:元|\\d{1,2}|${KANJI_NUM}{1,3})年(?:\\s*\\d{1,2}月)?`,
+      // 「8日の対局」（「1日目」「3日間」は日数）
+      "(?<![\\d年月])\\d{1,2}日(?![目間])",
       `${KANJI_NUM}{1,3}月${KANJI_NUM}{1,3}日`,
       // 「1/2-1/2」（引き分けの結果）は日付ではない
       "(?<![\\d/-])\\d{1,2}/\\d{1,2}(?![\\d/-])",
@@ -108,7 +119,14 @@ const DATE = rule(
 
 /** 3. 時刻（時計の表示は残す） */
 const TIME = rule(
-  /(?:午前|午後)\s*\d{1,2}(?:時(?:\d{1,2}分|半)?|:\d{2})(?:頃|ごろ)?|\d{1,2}時(?![間計])(?:\d{1,2}分|半)?(?:頃|ごろ)?|(?<![\d:])\d{1,2}:\d{2}(?::\d{2})?(?![\d:])/,
+  new RegExp(
+    [
+      `(?:午前|午後)\\s*(?:\\d{1,2}|${KANJI_NUM}{1,3})(?:時(?:\\d{1,2}分|${KANJI_NUM}{1,3}分|半)?|:\\d{2})(?:頃|ごろ)?`,
+      "\\d{1,2}時(?![間計])(?:\\d{1,2}分|半)?(?:頃|ごろ)?",
+      KANJI_TIME,
+      "(?<![\\d:])\\d{1,2}:\\d{2}(?::\\d{2})?(?![\\d:])",
+    ].join("|")
+  ),
   "日時",
   (m, segment) =>
     /^\d/.test(m[0]) &&
@@ -119,7 +137,7 @@ const TIME = rule(
 
 /** 5. ラベル付きの会員番号・ID */
 const LABELLED_ID = rule(
-  /(?:会員|登録|JCF|FIDE|ID|番号|No\.?)\s*[:：]?\s*[A-Za-z0-9-]*\d[A-Za-z0-9-]*(?<=[A-Za-z0-9-]{3,})|\b[A-Z]{1,4}-?\d{3,}\b/,
+  /(?:会員|登録|JCF|FIDE|LINE|ID|番号|No\.?)\s*[:：]\s*[A-Za-z0-9_.@-]{3,}|(?:会員|登録|JCF|FIDE|LINE|ID|番号|No\.?)\s*[A-Za-z0-9_.-]*\d[A-Za-z0-9_.-]*(?<=[A-Za-z0-9_.-]{3,})|\b[A-Z]{1,4}-?\d{3,}\b/,
   "ID"
 );
 
@@ -159,7 +177,9 @@ const BOARD = rule(
 const ROUND = rule(
   new RegExp(
     [
-      `第?${NUM}(?:回戦|ラウンド|局)`,
+      // 「1局目」は手数・局数の表現として残す
+      `第?${NUM}(?:回戦|ラウンド|局(?!目))`,
+      `(?:ラウンド|回戦)\\s?${NUM}`,
       `第?[0-9]+R(?![A-Za-z])`,
       "\\b(?:Round|round|ROUND)\\s?\\d+\\b",
       "\\bRd(?:\\.\\s*|\\s+)\\d+\\b",
@@ -179,7 +199,7 @@ const FOUR_DIGITS = rule(/(?<!\d)\d{4}(?!\d)/, "数値");
 const TITLES = "(?:GM|IM|FM|CM|WGM|WIM|WFM|WCM|NM)";
 const ATTRIBUTE_ONLY = rule(
   new RegExp(
-    `\\d{1,3}\\s*歳|(?:小学|中学|高校)\\s*[1-6一二三四五六]\\s*年(?:生)?|[1-6一二三四五六]\\s*年生|\\b${TITLES}\\b`
+    `\\d{1,3}\\s*歳|(?:小学|中学|高校)\\s*[1-6一二三四五六]\\s*年(?:生)?|[1-6一二三四五六]\\s*年生|(?<![\\u4e00-\\u9fff])(?:小|中|高)[1-6一二三四五六](?![0-9年])|\\b${TITLES}\\b`
   ),
   "属性"
 );
@@ -225,15 +245,21 @@ const ROLE_NOUNS = [
   "該当",
 ];
 const HONORIFIC = new RegExp(
-  `(${NAME_CHARS}+)(?=さん|君|くん|ちゃん|選手(?!権)|氏(?!名)|様(?!子|々)|先生)`,
+  // 括弧で囲んだ名前（「中村」さん）も対象にする
+  `(${NAME_CHARS}+)(?=[」』)）]?(?:さん|君|くん|ちゃん|選手(?!権)|氏(?!名)|様(?!子|々)|先生))`,
   "g"
 );
+/** 先頭の役割の名詞（長い順）。「黒番中村さん」は「黒番」を残して名前だけ置き換える */
+const LEADING_ROLES = [...ROLE_NOUNS].sort((a, b) => b.length - a.length);
 const HONORIFIC_NAME: Replacer = (segment, map) =>
-  segment.replace(HONORIFIC, (run: string) =>
-    ROLE_NOUNS.some((r) => run.endsWith(r))
-      ? run
-      : map.placeholder("人物", run, normalizeName(run))
-  );
+  segment.replace(HONORIFIC, (run: string) => {
+    if (ROLE_NOUNS.some((r) => run.endsWith(r))) return run;
+    const role = LEADING_ROLES.find(
+      (r) => run.startsWith(r) && run.length > r.length
+    );
+    const name = role ? run.slice(role.length) : run;
+    return (role ?? "") + map.placeholder("人物", name, normalizeName(name));
+  });
 
 /** 13. 登録されていない英字の名前 */
 const LATIN_ALLOW = new Set(
@@ -275,6 +301,30 @@ const LATIN_ALLOW = new Set(
     "Draw",
     "Flag",
     "Illegal",
+    "Threefold",
+    "Fivefold",
+    "Repetition",
+    "Fifty",
+    "Moves",
+    "Rule",
+    "Claim",
+    "Dead",
+    "Position",
+    "Stalemate",
+    "Checkmate",
+    "Time",
+    "Control",
+    "Increment",
+    "Delay",
+    "Scoresheet",
+    "Tournament",
+    "Regulations",
+    "Round",
+    "Board",
+    "Swiss",
+    "Pairing",
+    "Flag",
+    "Fall",
   ].map((w) => w.toLowerCase())
 );
 const LATIN_NAME: Replacer = (segment, map) =>
@@ -301,9 +351,16 @@ interface NameTarget {
   /** 同じ人の部分（姓・名）を同じプレースホルダーにするための key */
   key: string;
   original: string;
+  /** 1文字の漢字の姓・名: 前後が漢字でない場合だけ一致させる（「林」は「林檎」に一致しない） */
+  standalone?: boolean;
 }
 
-/** 照合する名前の一覧（長い順。姓・名だけの照合は、空白で区切られた2文字以上の部分） */
+const KANJI_CHAR = /[\u3400-\u4dbf\u4e00-\u9fff々〆]/;
+
+/**
+ * 照合する名前の一覧（長い順）。姓・名だけの照合は空白で区切られた部分で、2文字以上、
+ * または前後が漢字でない1文字の漢字（§8.2「1文字の漢字の姓」）
+ */
 export function nameTargets(ids: KnownIdentifiers): NameTarget[] {
   const out: NameTarget[] = [];
   const add = (
@@ -324,6 +381,8 @@ export function nameTargets(ids: KnownIdentifiers): NameTarget[] {
     for (const part of parts) {
       const n = normalizeName(part);
       if (n.length >= 2) out.push({ needle: n, kind, key, original: value });
+      else if (n.length === 1 && KANJI_CHAR.test(n))
+        out.push({ needle: n, kind, key, original: value, standalone: true });
     }
   };
   for (const p of ids.players) {
@@ -353,6 +412,12 @@ function registered(targets: NameTarget[]): Replacer {
         const start = norm.starts[i];
         const end = norm.ends[i + t.needle.length - 1];
         if (taken.some((r) => start < r.end && r.start < end)) continue;
+        if (
+          t.standalone &&
+          (KANJI_CHAR.test(segment[start - 1] ?? "") ||
+            KANJI_CHAR.test(segment[end] ?? ""))
+        )
+          continue;
         if (
           /^[a-z0-9]+$/.test(t.needle) &&
           (/[A-Za-z0-9]/.test(segment[start - 1] ?? "") ||
@@ -412,7 +477,7 @@ export function redactPii(
           HONORIFIC_NAME,
           LATIN_NAME,
         ];
-  let out = text.normalize("NFKC");
+  let out = neutralizeBrackets(text.normalize("NFKC"));
   map.reserve(out);
   for (const step of steps)
     out = mapOutsidePlaceholders(out, (segment) => step(segment, map));

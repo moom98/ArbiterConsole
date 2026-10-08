@@ -42,6 +42,11 @@ From 2026-10-08:
   - Expressions such as スマホ, 疑い, 倒れた, 薬, サイン, 外部 and 離席 are managed as **context-dependent expressions**, each with patterns that include the surrounding words, and with evaluation cases.
   - When the gate cannot tell whether a report is sensitive, it is **not** treated as safe: it goes to the local fallback.
 
+- **D12 (2026-10-08, after the J1a-1 review).** The gate uses a **known-vocabulary (allow-list) layer**: incident-derived text is `clear` only when every content word is explained by known chess and incident vocabulary. Anything else is handled locally.
+  - Reason: an independent review found that the term lists (L2, L3) let about 115 of 151 independently written sensitive reports through as `clear`. Adding words cannot reach 0 false negatives, because every new paraphrase is another miss.
+  - Trade-off accepted by the user: free-text reports that use words outside the vocabulary get no external AI help (classification falls back to keywords, reasoning to the local handling of §4.3).
+  - L2 and L3 stay: they give the `blocked` reasons, and the L3 benign contexts mark safe phrases (for example スマホが鳴った) as known.
+
 ## 2. Scope: every external AI send
 
 | Route | Provider | What is sent today | After this design |
@@ -113,6 +118,7 @@ Regexes are only one layer, so no single layer is trusted alone (D7).
 | L1 Explicit flags | The incident or the arbiter's answers carry a sensitive marker: the "外部AIに送らない" switch (§4.4), or a fair-play flag set earlier in the flow. | `blocked` |
 | L2 Known sensitive expressions | High-precision, contextual regexes per class (Appendix A.1): the existing `mentionsFairPlay`, health or medical, harassment or violence or sexual misconduct or discrimination, crime or police, religion or belief, family or minors. The keyword classifier's `fair-play` result also counts. | `blocked` |
 | L3 Context-dependent expressions | A registry of ambiguous expressions (Appendix A.2, D11). Each occurrence is judged in its surrounding context: a sensitive context gives `blocked`; a benign context that covers the occurrence and its surroundings gives `clear`; **anything else gives `uncertain`** (local fallback). It is not a word list. | `blocked` / `clear` / `uncertain` per occurrence; the report takes the most severe |
+| L3v Known vocabulary (D12) | After redaction (step E) and on the server (L5): every content word must be known. The text is split into runs of kanji, katakana, hiragana and Latin letters; each run must be split completely into vocabulary words (kanji and katakana chess and incident words, SAN moves, a few English rule terms, hiragana grammar: particles, inflections and auxiliaries). A one-kana ending is allowed only right after a stem. Placeholders, digits, punctuation and L3 benign spans are known. It is skipped on the raw text (step A), where names would always be unknown. | `uncertain` when any run is unknown |
 | L4 Unanalyzable input | Any of these: more than 10% of characters outside Japanese, Latin, digits and common punctuation; **text that is mostly Latin letters (more than 50% of its letters)**, because the English term lists are small; text over the route's input limit before truncation; a failed residual check (§5.4). | `uncertain` |
 | L5 Server re-check | The server runs L2–L4 again on the redacted payload. For `/reason` it also runs L0 on the category it receives. | 400, nothing sent |
 
@@ -373,9 +379,17 @@ The pure package exists and is tested; nothing calls it yet (J1a-2 wires it into
   - L2 fair play: `フェア\s*プレ`, `ボディ\s*チェック`, `(身体|所持品|持ち物|手荷物)(の)?(検査|チェック)` (false negatives "ボディチェックを断った", "フェアプレーに関する申し立て");
   - L3 terms without a benign context: 家庭, 離婚, 親権 (false negative "家庭のことで集中できない");
   - L3 `smartphone`, sensitive context: also 見た and 使った.
+- **First review (2026-10-08): FIX REQUIRED.** The list-based gate missed about 115 of 151 sensitive reports written independently by the reviewer; the 0 false negatives on the author's own fixtures said little. This led to D12 (the known-vocabulary layer, `known-vocabulary.ts`).
+- **The known-vocabulary layer** (`unknownVocabulary`):
+  - Kanji, katakana and Latin words are listed; hiragana is limited to grammar. Mixed words (負け, 時間切れ, 間違い, 表示が消え …) are listed as whole words, so that general endings such as け or い are not allowed (けが, いたい).
+  - Single kanji that combine into sensitive words are excluded (audit): 切 (手を切った), 出 (手を出した), 引 (置き引き), 外 (外来), 合 (押し合った), 揉 (揉み合った), 目 (目を回した; 回目 and similar are words), 起 (起きない), 弱 (弱っていた), 消 (白が消えた).
+  - A new registry entry `not-moving`: a person who does not move is sensitive, a clock that does not move is benign.
+  - Adding vocabulary needs review and evaluation cases, like the term lists.
+- **Other fixes from the first review:** patterns match across line breaks (`s` flag); 「ばかり」 is not abuse, 馬鹿 is; the `sign` benign context requires a document noun (M2); only well-formed placeholders are skipped, any other 〈…〉 is processed as text (M3); `(に|から)(押|触|…)(さ|ら|か)れ` is blocked; redaction of single-kanji surnames (not inside longer kanji words), ラウンド5, kanji-numeral times (not 一時停止), partial dates and eras, 小6/中2, LINE ID; clock readings next to 白, 黒 or フラッグ are kept; a leading role noun (黒番) is kept; 1局目 and English rule terms are kept.
 - **Evaluation results (synthetic data, `__tests__/fixtures/privacy/`):**
-  - Sensitive Gate: 192 reports (at least 30 per class), **0 false negatives**. 324 registry cases, all with the expected verdict. False positives: 1 of 76 non-sensitive reports ("騒音で集中できないと苦情", `protest` uncertain), at most 12.5% per category.
+  - Sensitive Gate: 0 false negatives on the author's 192 reports and on the reviewer's 108 reports (`sensitive-review1.ja.json`, now a regression set, no longer held out). A new held-out set from a second independent review is the release check. 336 registry cases, all with the expected verdict. False positives: 1 of 76 non-sensitive reports, at most 12.5% per category; this set is short and close to the vocabulary, so real free-text reports will have more.
   - PII: 117 reports, **0 identifiers left** in a payload that would be sent, for the covered types. Known residual risks, counted separately: unregistered names without an honorific (3 cases) and **the kana reading of a name registered in kanji** (2 cases, a new class like romaji: the reading cannot be derived without a stored reading).
+  - The known PII residual risks (unregistered names without an honorific, kana readings) are not sent: the known-vocabulary layer makes them `uncertain`.
 - **Tests:** `__tests__/privacy/{sensitive-gate,gate-evaluation,pii-redaction,protect}.test.ts`.
 
 ## Appendix A. Sensitive terms (for review)
@@ -407,7 +421,7 @@ How the terms are applied:
 
 **This is not a word allow/block list.**
 
-- Each expression below is ambiguous on its own. It is managed as an entry in a registry (`lib/domain/privacy/context-expressions.ts`).
+- Each expression below is ambiguous on its own. It is managed as an entry in a registry (`CONTEXT_EXPRESSIONS` in `lib/domain/privacy/sensitive-terms.ts`).
 - Each entry has:
   - **triggers**: the expression and its spelling variants;
   - **sensitive contexts**: patterns that include the surrounding words, and make the occurrence `blocked`;

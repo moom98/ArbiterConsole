@@ -81,6 +81,8 @@ export function protectIncidentText(input: ProtectInput): ProtectResult {
     ...common,
     text: input.text,
     maxLength: RAW_INPUT_LIMITS[input.route],
+    // 置き換える前の本文では名前が未知の語になる。語彙の判定は E で行う
+    vocabulary: false,
   });
   if (raw.verdict !== "clear")
     return { ok: false, stage: "gate-raw", gate: raw };

@@ -168,6 +168,14 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 ## Unresolved questions
 
+- **Jev (TypeSafe AI) for classification (2026-10-08, design only):** see `docs/design/jev-classifier-design.md` and ADR-011 (Proposed).
+  - Waiting for the user's answers to Q1–Q4 in design §13:
+    - Q1: keep Gemini for reasoning and embeddings;
+    - Q2: approve the new paid service and create the API key;
+    - Q3: data policy;
+    - Q4: review of the missing-information catalogue.
+  - No code has been changed yet.
+
 - Whether the user's federation applies 1 or 2 minutes for Blitz B.2 (adequate supervision).
 - **Custom domain:** whether to use one, or the default `*.workers.dev` URL.
 
@@ -188,7 +196,12 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 2. **Follow-ups found during deployment prep:**
    - Semantic search: done with ADR-010. Next, tune `vectorMinSimilarity` on real PDFs.
    - Upgrade to Next.js 15.5+/16 and the current OpenNext adapter. Next 14 is EOL.
-3. Later, if the user wants:
+3. **Jev classifier (ADR-011, Proposed):** after the user answers Q1–Q4, implement the steps in design §10 in order:
+   - J0: check the official API with a real key;
+   - J1: port, adapter and domain thresholds, with the default provider kept on `gemini`;
+   - J2: UI;
+   - J3: Japanese evaluation, then the production switch by env.
+4. Later, if the user wants:
    - **Milestone 8 without voice input:** clock guide, player Q&A mode, UX polish.
    - **Milestone 9:** Playwright E2E, performance.
    - **Milestone 10.2/10.3:** user and developer docs.

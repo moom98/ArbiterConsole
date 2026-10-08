@@ -218,6 +218,18 @@ export const CITATIONS = {
     "Checking a ‘three times occurrence of the position’ or a ’50 moves’ claim is a duty of the players, under supervision of the arbiter."
   ),
 
+  // ---- Article 8.1.1 / 8.4: The Recording of the Moves ----
+  FIDE_8_1_1: fide(
+    "8.1.1",
+    29,
+    "In the course of play each player is required to record his/her own moves and those of his/her opponent in the correct manner, move after move, as clearly and legibly as possible, in one of the following ways:"
+  ),
+  FIDE_8_4: fide(
+    "8.4",
+    29,
+    "If a player has less than five minutes left on his/her clock during an allotted period of time and does not have additional time of 30 seconds or more added with each move, then for the remainder of the period he/she is not obliged to meet the requirements of Article 8.1.1."
+  ),
+
   // ---- Article 8.7 ----
   FIDE_8_7: fide(
     "8.7",

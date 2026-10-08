@@ -29,7 +29,7 @@ async function seedTournament() {
       name: "秋季ブリッツ",
       competitionType: "blitz",
       supervisionRegime: "competition-rules",
-      timeControl: { initialMinutes: 3, incrementSeconds: 2 },
+      timeControl: { periods: [{ minutes: 3, incrementSeconds: 2 }] },
       blitzCompetitionTimePenalty: {
         seconds: 60,
         source: { document: "秋季ブリッツ要項", article: "第7条" },

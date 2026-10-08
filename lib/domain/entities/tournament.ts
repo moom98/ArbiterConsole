@@ -23,12 +23,32 @@ export type RulesVersion = "FIDE-2023";
 
 export const SUPPORTED_RULES_VERSIONS: readonly RulesVersion[] = ["FIDE-2023"];
 
-export interface TimeControl {
-  initialMinutes: number;
+/**
+ * 持ち時間の1ピリオド（FIDE 8.4 / III.3.1 の "period"）。ADR-014 §7。
+ * 例: "40手90分、残り30分、1手30秒加算" は
+ * `[{ moves: 40, minutes: 90, incrementSeconds: 30 }, { minutes: 30, incrementSeconds: 30 }]`。
+ */
+export interface TimeControlPeriod {
+  /** このピリオドで指す手数。残りの全ての手を指す最後のピリオドでは省略する */
+  moves?: number;
+  /** ピリオドの開始時に与えられる時間（分） */
+  minutes: number;
+  /** このピリオドの1手ごとの加算（秒） */
   incrementSeconds: number;
-  additionalTimeAfterMove?: number;
+}
+
+export interface TimeControl {
+  /** 1つ以上。最後のピリオドだけ moves を省略する（検証: validateTimeControl） */
+  periods: TimeControlPeriod[];
   /** 遅延（Delay）秒数。設定がない場合は省略 */
   delaySeconds?: number;
+  /**
+   * ピリオドが不完全（旧形式の additionalTimeAfterMove があり、何手目の後かが分からない）。
+   * true の場合、現在のピリオド・加算・最終ピリオドは設定から求めず、質問する。
+   */
+  periodsIncomplete?: boolean;
+  /** @deprecated 旧形式（v7 以前）の値。意味が不明なため保持のみ（periodsIncomplete を参照） */
+  additionalTimeAfterMove?: number;
 }
 
 /**

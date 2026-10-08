@@ -38,7 +38,7 @@ describe("Incident store with tournament games (ADR-006)", () => {
       profileInput({
         competitionType: "blitz",
         supervisionRegime: "competition-rules",
-        timeControl: { initialMinutes: 3, incrementSeconds: 2 },
+        timeControl: { periods: [{ minutes: 3, incrementSeconds: 2 }] },
         blitzCompetitionTimePenalty: withOverride
           ? { seconds: 60, source: { document: "要項", article: "第7条" } }
           : undefined,

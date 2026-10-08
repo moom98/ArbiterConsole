@@ -2,6 +2,7 @@ import type {
   CompetitionType,
   RulesVersion,
   SupervisionRegime,
+  TimeControl,
   TournamentOverrides,
 } from "./tournament";
 
@@ -16,6 +17,11 @@ export interface RulesetSnapshot {
   rulesVersion: RulesVersion;
   /** 大会規定による上書き（出典を含めて保存） */
   tournamentOverrides?: TournamentOverrides;
+  /**
+   * 報告時の持ち時間（ADR-014 §7）。最終ピリオドかどうか等を設定から求めるために使う。
+   * J1b-7 より前のスナップショット・持ち時間のない暫定大会では省略（その場合は質問する）
+   */
+  timeControl?: TimeControl;
 }
 
 export type IncidentCategory =

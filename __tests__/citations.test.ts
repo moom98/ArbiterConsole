@@ -36,6 +36,14 @@ const EXPECTED: Record<string, { text: string; page: number }> = {
     page: 28,
     text: "After the action taken under Article 7.5.1, 7.5.2, 7.5.3 or 7.5.4 for the first completed illegal move by a player, the arbiter shall give two minutes extra time to his/her opponent; for the second completed illegal move by the same player the arbiter shall declare the game lost by this player. However, the game is drawn if the position is such that the opponent cannot checkmate the player’s king by any possible series of legal moves.",
   },
+  "FIDE 8.1.1": {
+    page: 29,
+    text: "In the course of play each player is required to record his/her own moves and those of his/her opponent in the correct manner, move after move, as clearly and legibly as possible, in one of the following ways:",
+  },
+  "FIDE 8.4": {
+    page: 29,
+    text: "If a player has less than five minutes left on his/her clock during an allotted period of time and does not have additional time of 30 seconds or more added with each move, then for the remainder of the period he/she is not obliged to meet the requirements of Article 8.1.1.",
+  },
   "FIDE 8.7": {
     page: 30,
     text: "At the conclusion of the game both players shall indicate the result of the game by signing both scoresheets or approve the result on their electronic scoresheets. Even if incorrect, this result shall stand, unless the arbiter decides otherwise.",

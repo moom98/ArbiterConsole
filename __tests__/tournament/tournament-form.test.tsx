@@ -54,7 +54,7 @@ describe("TournamentProfileForm", () => {
       competitionType: "blitz",
       supervisionRegime: "competition-rules",
       rulesVersion: "FIDE-2023",
-      timeControl: { initialMinutes: 3, incrementSeconds: 2 },
+      timeControl: { periods: [{ minutes: 3, incrementSeconds: 2 }] },
       blitzCompetitionTimePenalty: {
         seconds: 60,
         source: { document: "秋季ブリッツ要項", article: "第7条" },

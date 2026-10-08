@@ -70,7 +70,7 @@ describe("Tournament profile validation (§7)", () => {
     const blitz = profileInput({
       competitionType: "blitz",
       supervisionRegime: "competition-rules",
-      timeControl: { initialMinutes: 3, incrementSeconds: 2 },
+      timeControl: { periods: [{ minutes: 3, incrementSeconds: 2 }] },
     });
     expect(
       validateTournamentProfile({
@@ -103,7 +103,7 @@ describe("buildTournament", () => {
         name: "  ブリッツ  ",
         competitionType: "blitz",
         supervisionRegime: "competition-rules",
-        timeControl: { initialMinutes: 3, incrementSeconds: 2 },
+        timeControl: { periods: [{ minutes: 3, incrementSeconds: 2 }] },
         venue: " ",
         blitzCompetitionTimePenalty: {
           seconds: 120,

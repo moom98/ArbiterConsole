@@ -1,6 +1,6 @@
 # J1b-8: Game end from the observed event (ADR-014 §3)
 
-**Status:** Implemented and reviewed on branch `feature/fact-catalog`. Review verdict: MERGE with 3 should-fix items → fixed → re-review (see below).
+**Status:** Implemented and reviewed on branch `feature/fact-catalog`. Review verdict: MERGE with 3 should-fix items → fixed → re-review MERGE.
 
 **Date:** 2026-10-08
 
@@ -55,7 +55,7 @@ Separate read-only reviewer agent.
   - **S2:** no UI test for the optional choice with `showWhen`. Fix: `game-end.component.test.tsx`.
   - **S3:** the branch-count statement in fact-model §3.3(d) was stale. Fixed.
   - **Nits:** N1 (legacy "no" also re-asked) and N3 (record-state `conditional`) are documented. N2 (record-state unknown kept the old value) is fixed. N4 (no-fact table) is updated. N5 (helper location) is left as is.
-- **Re-review:** see the handoff in `current.md`.
+- **Re-review: MERGE.** Citations re-checked verbatim against the PDF; no new problems. Nit: the `gameEndEvent` help text was shortened.
 
 ## Known issues
 

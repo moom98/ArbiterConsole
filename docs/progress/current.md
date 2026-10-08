@@ -141,7 +141,7 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 - 66 files / 1184 tests pass, including the new `__tests__/game-end.test.ts` and `game-end.component.test.tsx`.
 - `npm run build` succeeds.
 - FIDE 5.1.1 and 5.2.1 citations were checked verbatim against the PDF (printed p.19).
-- Review: MERGE with 3 should-fix (illegal mating move answered as checkmate, UI test, stale doc) → fixed → re-review. See `milestones/j1b-8-game-end.md`.
+- Review: MERGE with 3 should-fix (illegal mating move answered as checkmate, UI test, stale doc) → fixed → re-review MERGE. See `milestones/j1b-8-game-end.md`.
 
 **J1b-7 time control periods (2026-10-08, `feature/fact-catalog`):**
 

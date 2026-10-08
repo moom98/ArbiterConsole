@@ -252,7 +252,7 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     scope: "incident",
     label:
       "違法手に気づいた時点で、対局を終わらせた出来事はありましたか？（観察したもの）",
-    help: "握手だけでは対局の終了として扱いません。投了やドローの合意の発言・動作、結果の記入などで終了を確認できない場合は「わからない・確認できない」を選んでください（ADR-014 §3）。",
+    help: "違法な手（第3条・4.2〜4.7 に反する手）によるチェックメイト・ステイルメイトでは対局は終了しません（5.1.1 / 5.2.1）。その場合は「まだ対局中」を選び、判断できない場合は「わからない・確認できない」を選んでください。握手だけでは対局の終了として扱いません。投了やドローの合意の発言・動作、結果の記入などで終了を確認できない場合は「わからない・確認できない」を選んでください（ADR-014 §3）。",
     options: GAME_END_EVENTS.map((value) => ({
       value,
       label: GAME_END_EVENT_LABELS[value],
@@ -369,7 +369,7 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     scope: "incident",
     label:
       "フラッグが確定する前に（アービターが気付く、または有効な主張がされる前に）、対局を終わらせる出来事がありましたか？",
-    help: "表示が 0 になった後でも、フラッグの確定前のチェックメイトは有効です（6.8 / 5.1.1）。握手だけでは対局の終了として扱いません。",
+    help: "表示が 0 になった後でも、フラッグの確定前のチェックメイトは有効です（6.8 / 5.1.1）。ただし、違法な手（第3条・4.2〜4.7 に反する手）によるチェックメイト・ステイルメイトでは対局は終了しません（5.1.1 / 5.2.1）。握手だけでは対局の終了として扱いません。",
     options: ENDED_BEFORE_FLAG_VALUES.map((value) => ({
       value,
       label: ENDED_BEFORE_FLAG_LABELS[value],
@@ -944,6 +944,10 @@ export function applyIncidentAnswers(
       case "gameRecordState":
         if (isOneOf(raw, GAME_RECORD_STATES)) {
           facts.recordState = raw;
+          touchedIllegal = true;
+        } else if (raw === UNKNOWN_VALUE) {
+          // 「わからない」は記録しない（以前の記録も残さない）
+          delete facts.recordState;
           touchedIllegal = true;
         }
         break;

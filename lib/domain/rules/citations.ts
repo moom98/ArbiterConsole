@@ -146,6 +146,16 @@ export const CITATIONS = {
   ),
 
   // ---- Article 5: The Completion of the Game ----
+  FIDE_5_1_1: fide(
+    "5.1.1",
+    19,
+    "The game is won by the player who has checkmated his/her opponent’s king. This immediately ends the game, provided that the move producing the checkmate position was in accordance with Article 3 and Articles 4.2 – 4.7."
+  ),
+  FIDE_5_2_1: fide(
+    "5.2.1",
+    19,
+    "The game is drawn when the player to move has no legal move and his/her king is not in check. The game is said to end in ‘stalemate’. This immediately ends the game, provided that the move producing the stalemate position was in accordance with Article 3 and Articles 4.2 – 4.7."
+  ),
   FIDE_5_2_2: fide(
     "5.2.2",
     19,

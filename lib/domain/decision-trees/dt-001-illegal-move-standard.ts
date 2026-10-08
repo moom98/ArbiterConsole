@@ -68,21 +68,47 @@ export function gameEndedFields(
 ): Pick<
   DecisionFields,
   "conclusion" | "actions" | "confidence" | "escalationRecommended"
-> {
+> & { endSources: CitationKey[] } {
   const recordAction = recordStateAction(recordState);
+  const end = endEventCheck(event);
   return {
     conclusion: `対局終了後（${GAME_END_EVENT_LABELS[event]}）に判明した${what}です。訂正はできず、結果はそのまま確定します。`,
     actions: [
       "局面・結果の訂正は行わない",
       "結果をそのまま記録する",
       ...(recordAction ? [recordAction] : []),
+      ...(end ? [end.action] : []),
       event === "other"
         ? "対局を終わらせた出来事（終了の根拠）を確認し、明確でなければCAへ確認する"
         : "対局終了の有無が明確でない場合はCAへ確認する",
     ],
-    confidence: event === "other" ? "medium" : "high",
+    confidence: event === "other" || end ? "medium" : "high",
     escalationRecommended: false,
+    endSources: end?.sources ?? [],
   };
+}
+
+/**
+ * チェックメイト・ステイルメイトは、その局面を作った手が第3条・4.2〜4.7 に従っている場合
+ * だけ対局を終わらせる（5.1.1 / 5.2.1）。違法な手によるものなら対局は終わっていない。
+ * DT-001〜004 の「終了していた」判断で、その確認を求める
+ */
+export function endEventCheck(
+  event: string
+): { action: string; sources: CitationKey[] } | undefined {
+  if (event === "checkmate")
+    return {
+      action:
+        "チェックメイトの局面を作った手が合法だったか確認する（違法な手によるメイトでは対局は終了していない。5.1.1）",
+      sources: ["FIDE_5_1_1"],
+    };
+  if (event === "stalemate")
+    return {
+      action:
+        "ステイルメイトの局面を作った手が合法だったか確認する（違法な手によるステイルメイトでは対局は終了していない。5.2.1）",
+      sources: ["FIDE_5_2_1"],
+    };
+  return undefined;
 }
 
 /** これまでに違法手ペナルティが適用された Incident の要約 */
@@ -292,17 +318,19 @@ export class IllegalMoveStandardTree {
       event,
       recordState
     );
+    const { endSources, ...fields } = ended;
     return {
       ...this.base(),
       kind: "recommendation",
-      ...ended,
+      ...fields,
       intervention: "no-intervention",
       penalties: [],
       sources: cite(
         "FIDE_7_5_1",
         "MANUAL_7_5_GAME_OVER",
         "FIDE_8_7",
-        "JCF_NA_P47_GAME_OVER"
+        "JCF_NA_P47_GAME_OVER",
+        ...endSources
       ),
     };
   }

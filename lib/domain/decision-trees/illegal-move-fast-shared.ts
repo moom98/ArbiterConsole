@@ -273,7 +273,7 @@ export function evaluateFastPreliminaries(
 
   // 終了は観察した出来事から求める（握手だけでは終了としない。ADR-014 §3）
   if (gameEndedFromEvent(input.endEvent)) {
-    const ended = gameEndedFields(
+    const { endSources, ...ended } = gameEndedFields(
       `${COLOR_JA[color]}の違法手（${SUBTYPE_LABELS[subtype]}）`,
       input.endEvent as GameEndEvent,
       input.recordState
@@ -284,7 +284,12 @@ export function evaluateFastPreliminaries(
       conclusion: `${label}: ${ended.conclusion}`,
       intervention: "no-intervention",
       penalties: [],
-      sources: cite(...regimeSources, "MANUAL_7_5_GAME_OVER", "FIDE_8_7"),
+      sources: cite(
+        ...regimeSources,
+        "MANUAL_7_5_GAME_OVER",
+        "FIDE_8_7",
+        ...endSources
+      ),
     });
   }
 

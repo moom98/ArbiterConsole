@@ -11,6 +11,7 @@ import { QUESTIONS, type FollowUpQuestion } from "@/lib/domain/follow-up";
 import type { MatePossibility } from "@/lib/domain/services/mate-possibility";
 import type { DecisionTreeResult } from "./dt-001-illegal-move-standard";
 import { COLOR_JA, TreeOutput, opponentOf } from "./tree-support";
+import { endEventCheck } from "./dt-001-illegal-move-standard";
 import {
   ENDED_BEFORE_FLAG_LABELS,
   endedBeforeFlagFromEvent,
@@ -85,12 +86,14 @@ export class FlagFallTree {
     // 終了は観察した出来事から求める（握手だけでは終了としない。ADR-014 §3）
     if (endedBeforeFlagFromEvent(input.endedBeforeFlag)) {
       const event = input.endedBeforeFlag as EndedBeforeFlag;
+      const end = endEventCheck(event);
       return this.out.decided({
         kind: "recommendation",
         conclusion: `フラッグが確定する前に対局は終了していた（${ENDED_BEFORE_FLAG_LABELS[event]}）ため、その結果がそのまま有効です。`,
         actions: [
           "時間切れとしての裁定は行わない",
           "終了時点の結果（チェックメイト・投了・ドロー等）を記録する",
+          ...(end ? [end.action] : []),
           ...(event === "other"
             ? [
                 "対局を終わらせた出来事（終了の根拠）を確認し、明確でなければCAへ確認する",
@@ -104,9 +107,10 @@ export class FlagFallTree {
           "MANUAL_6_8_NOTICED",
           "FIDE_6_9",
           "MANUAL_6_9_AND_9_6",
-          "JCF_NA_P39_FLAG_NOTICED"
+          "JCF_NA_P39_FLAG_NOTICED",
+          ...(end?.sources ?? [])
         ),
-        confidence: event === "other" ? "medium" : "high",
+        confidence: event === "other" || end ? "medium" : "high",
         escalationRecommended: false,
       });
     }

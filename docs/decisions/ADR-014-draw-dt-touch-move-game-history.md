@@ -78,6 +78,7 @@ The clock state (`dr.clock-state`) is recorded, but **never** used to derive the
   - DT-004 asks `ct.ended-before-flag` (the event before the flag was established, catalogue) rather than `game.end-event`, because the time-out itself is not an earlier end.
   - Stored yes/no answers from before J1b-8 are not used: an old "yes" may rest on a handshake, so the event is asked again.
   - `game.record-state` is asked as an optional, record-only question in the same round; it never changes the ruling.
+  - Checkmate and stalemate end the game only if the move that produced them was legal (FIDE 5.1.1 / 5.2.1). For these events, the "result stands" decision asks the arbiter to check that move and has confidence medium.
 
 ### 4. Local game history (`game.history`)
 

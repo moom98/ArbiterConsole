@@ -131,6 +131,7 @@ type FactAnswer = { value: string | number | string[] } | { unknown: true };
   | -------------------------------------- | ---------------------------------------------------------------------------------------- |
     | `positionBlocked`, `lastMoveCheckmate` | removed as questions; decided by code from `game.history` / `game.position` (§3.5, §3.7) |
   | `competitionType`, `supervisionRegime` | game context from the tournament profile                                                 |
+  | `gameRecordState`                      | optional record question; `game.record-state` is required only by its `appliesWhen` (§3.9) |
 
 - **Draw (ADR-014 §1).** The threefold and 50-move claims are both in DT-005 Draw Claim, so they share the claim facts, including `dr.claim-timing` and `dr.next-move-written` (R7). Fivefold and 75 moves are DT-006. Only agreement, stalemate, dead position and "other" use a fact plan.
 - **The side to move is never derived from the clock** (ADR-014 §2). It comes from `game.history`, otherwise from `dr.last-mover`. `dr.clock-state` is recorded only.
@@ -182,7 +183,7 @@ When a DT meets `unknown` on a fact it needs, it applies `resolveUnknown` (a new
 - **(a) Branches that need more input.** If evaluating a value gives `needs-input` (for example `claimMode = about-to-appear` leads to `moveWritten`), that branch counts as **disagreeing**. The enumeration does not recurse.
 - **(b) "Same decision"** means the same `kind`, the same `intervention`, and the same penalties (type, side and time). The conclusion text, ids and timestamps are ignored. `buildDecision` creates a new id and time on each branch, which is harmless.
 - **(c) Count, duration and text facts** (material, remaining time, positions) cannot be enumerated. `unknown` on them goes straight to manual-review.
-- **(d) Limit.** At most 2 unknown facts are enumerated together, which is at most 9 branches with yes/no/choice facts. With more, the result goes straight to manual-review.
+- **(d) Limit.** At most 2 unknown facts are enumerated together. With more, the result goes straight to manual-review. Since J1b-8 the largest product is `gameEndEvent` (7 values) × `subtype` (4 enumerated values) = 28 branches. Each branch is a pure tree evaluation; the mate search is not re-run (only a stored line is re-verified), so this stays cheap.
 - **(e) Parsing.** `parseBoolean` in `follow-up.ts` turns `"unknown"` into `undefined` today, which would loop on `needs-input`. It must return an explicit `unknown` value, and `applyIncidentAnswers` must keep it.
 
 **Implementation (J1b-2, 2026-10-08).** These details were decided while implementing; they refine the rules above.
@@ -381,6 +382,9 @@ See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §6.
 - **Decision text.** The "result stands" decision names the event. "Other" gives confidence medium and the action "check what ended the game; if unclear, consult the CA".
 - **Record state.** `gameRecordState` (`game.record-state`) is an **optional** question in the same round, shown only when the event is not "in progress". It is stored as `IllegalMoveFacts.recordState`, adds "check the signatures" to the "result stands" decision when both signatures are not confirmed, and never changes the ruling. Its "unknown" is not stored. In the catalogue it keeps no DT mapping (required only by its `appliesWhen`, §3.1).
 - **Legacy data.** Stored booleans (`illegalMoveFacts.gameEnded`, `flagFallFacts.gameEndedBeforeFlag`) are `@deprecated`. The engine strips them, so the trees ask the event again: an old "yes" may have come from a handshake. Answering the new question deletes the legacy value and a legacy unknown entry.
+- **Illegal mating moves (FIDE 5.1.1 / 5.2.1).** Checkmate and stalemate end the game only when the move that produced the position was legal. Both help texts say so, and a "result stands" decision for checkmate or stalemate (DT-001…004) adds the check "was that move legal?", cites 5.1.1 / 5.2.1 and has confidence medium.
+- **Legacy "no" answers.** A stored `gameEnded: false` is also asked again, on purpose: it is simpler and costs one tap, and it keeps a single rule (the trees read only the events).
+- **Required facts.** `game.record-state` stays `conditional` in the catalogue (required once an end event other than "in progress" is answered), as the catalogue review decided, while the DT question is optional. J1c must treat it as a record fact: it can appear in the missing-facts list, but it never blocks a ruling.
 - **Unknown answers.** When a question's `showWhen` parent was answered unknown, `resolveUnknown` no longer returns it among the other questions (the UI would hide it anyway).
 
 ## 4. Presence check with Jev (R1, R2, R3)

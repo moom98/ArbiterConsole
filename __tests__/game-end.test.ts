@@ -106,6 +106,11 @@ describe("questions: a handshake alone never ends the game", () => {
     }
   });
 
+  it("says that an illegal mating or stalemating move does not end the game", () => {
+    for (const q of [QUESTIONS.gameEndEvent, QUESTIONS.endedBeforeFlag])
+      expect(q.help).toContain("5.1.1 / 5.2.1");
+  });
+
   it("the record state is optional and shown only once the game has ended", () => {
     const q = QUESTIONS.gameRecordState;
     expect(q.optional).toBe(true);
@@ -166,10 +171,11 @@ describe("answers", () => {
   });
 
   it("does not record an unknown record state, and keeps no unknown for it", () => {
-    const inc = applyIncidentAnswers(incident(), {
+    const signed = applyIncidentAnswers(incident(), {
       gameEndEvent: "resignation",
-      gameRecordState: "unknown",
+      gameRecordState: "both-signed",
     });
+    const inc = applyIncidentAnswers(signed, { gameRecordState: "unknown" });
     expect(inc.illegalMoveFacts?.recordState).toBeUndefined();
     expect(inc.unknownAnswers).toBeUndefined();
   });
@@ -227,8 +233,11 @@ describe("DT-001: game ended from the observed event", () => {
       expect(r.decision.intervention).toBe("no-intervention");
       expect(r.decision.penalties).toEqual([]);
       expect(r.decision.conclusion).toContain("対局終了後");
+      // その他・チェックメイト・ステイルメイトは終了の根拠（手の合法性）を確認する
       expect(r.decision.confidence).toBe(
-        endEvent === "other" ? "medium" : "high"
+        ["other", "checkmate", "stalemate"].includes(endEvent)
+          ? "medium"
+          : "high"
       );
     }
   );
@@ -241,6 +250,18 @@ describe("DT-001: game ended from the observed event", () => {
     });
     expect(r.decision.conclusion).toContain("チェックメイト");
     expect(r.decision.actions).toContain("両プレーヤーの署名を確認する");
+  });
+
+  it("checkmate / stalemate: asks whether the final move was legal (5.1.1 / 5.2.1)", () => {
+    const mate = tree().evaluate({ ...base, endEvent: "checkmate" });
+    expect(mate.decision.actions.join()).toContain("合法だったか確認する");
+    expect(mate.decision.sources.map((s) => s.article)).toContain("FIDE 5.1.1");
+    const stale = tree().evaluate({ ...base, endEvent: "stalemate" });
+    expect(stale.decision.sources.map((s) => s.article)).toContain(
+      "FIDE 5.2.1"
+    );
+    const resign = tree().evaluate({ ...base, endEvent: "resignation" });
+    expect(resign.decision.actions.join()).not.toContain("合法だったか");
   });
 
   it("'other' asks the arbiter to confirm what ended the game", () => {
@@ -304,11 +325,18 @@ describe("DT-004: ended before the flag was established", () => {
     ]);
   });
 
-  it("a checkmate before the flag was established stands (6.8)", () => {
+  it("a checkmate before the flag was established stands (6.8), if the mating move was legal (5.1.1)", () => {
     const r = tree().evaluate({ ...base, endedBeforeFlag: "checkmate" });
     expect(r.status).toBe("decided");
     expect(r.decision.intervention).toBe("no-intervention");
     expect(r.decision.conclusion).toContain("チェックメイト");
+    expect(r.decision.confidence).toBe("medium");
+    expect(r.decision.actions.join()).toContain("合法だったか確認する");
+    expect(r.decision.sources.map((s) => s.article)).toContain("FIDE 5.1.1");
+  });
+
+  it("a resignation before the flag stands with high confidence", () => {
+    const r = tree().evaluate({ ...base, endedBeforeFlag: "resignation" });
     expect(r.decision.confidence).toBe("high");
   });
 

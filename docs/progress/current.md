@@ -1,6 +1,6 @@
 # Current Progress
 
-**Last updated:** 2026-10-09 (J1a-3)
+**Last updated:** 2026-10-09 (incident log AI retry)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
@@ -11,11 +11,12 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
 - the fact catalogue and ADR-014 (J1b-1…J1b-8, all done);
 - the pure privacy package (J1a-1, done);
 - the external-AI guard on every client route with the arbiter's mandatory confirmation (J1a-2, done, review MERGE);
-- the server re-check L5 and minimized shapes only (J1a-3, done; see `milestones/j1a-3-server-recheck.md`).
+- the server re-check L5 and minimized shapes only (J1a-3, done; see `milestones/j1a-3-server-recheck.md`);
+- retrying and confirming the AI reference from the incident log detail (done, review MERGE; see `milestones/log-ai-retry.md`).
 
 J1a is complete, so the earlier block on deploying is lifted. **Next:** with the user's go-ahead, open a PR from `feature/fact-catalog` to `main`, merge it, then deploy (`npm run cf:deploy` from `main`; deploying is outward-facing).
 - After the first deploy, 「意味検索用データを作成」 rebuilds every vector once (key `+deid1`).
-- Then: the AI-send retry from the incident log detail, or J1c.
+- Then: J1c. (The AI-send retry from the incident log detail is done.)
 `docs/IMPLEMENTATION_STATUS.md` is a stale 2024 snapshot. Use this file and `docs/progress/milestones/` instead.
 
 ## Completed work
@@ -172,6 +173,14 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 
 ## Tests and verification performed
 
+**Incident log AI retry (2026-10-09, `feature/fact-catalog`):**
+
+- tsc is clean.
+- eslint reports 0 problems.
+- 75 files / 1453 tests pass. New: `__tests__/incident-log-ai-retry.component.test.tsx` and `__tests__/incident-store-supersede.test.ts`.
+- `next build` succeeds.
+- Review: FIX REQUIRED (shared store race) → fixed (epoch, `useIncidentLogStore`) → re-review MERGE.
+
 **J1a-3 server re-check (2026-10-09, `feature/fact-catalog`):**
 
 - tsc is clean; eslint reports 0 problems; 73 files / 1444 tests pass; `npm run build` and `npm run cf:build` succeed.
@@ -293,7 +302,9 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
   - FIDE/JCF labels such as 「FIDE 2023」 are matched by rule 5 and not sent. They are still shown on the device.
   - `generateEmbeddings` cuts documents with `slice(0, 2000)` and can split a placeholder (pre-existing; use `truncate`).
 - **J1a-2:**
-  - The incident log detail has no "retry / confirm AI send" for decisions left `offline`, `unavailable` or `awaiting-confirmation` (the report screen does). This is an existing limitation, now more frequent.
+  - ~~The incident log detail has no retry / confirm AI send.~~ **Done 2026-10-09** (`milestones/log-ai-retry.md`). What remains:
+    - re-evaluating an old incident counts later records too. It is unreachable for AI decisions today; see the `retryIncident` JSDoc;
+    - overlapping actions on the same incident in the log can send the same confirmed payload twice.
   - Fact answers are not sent to `/reason` (§5.3 would allow codes).
   - Semantic search on the rule search screen needs one extra tap (by design).
   - The first 「意味検索用データを作成」 after deploying rebuilds every vector (key `+deid1`).
@@ -442,7 +453,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 1. Read `CLAUDE.md`, this file, `docs/progress/milestones/*`, then the design docs and ADRs for the next task.
 2. The current work branch is `feature/fact-catalog` (pushed to `origin`, latest J1a-1 at `52d7ebb` or later; `main` has the deployed app). Check `git log --oneline -15` on it, and `git worktree list`.
-   - **Next task:** with the user's go-ahead, PR `feature/fact-catalog` to `main`, then deploy. After that: re-evaluate / confirm the AI send from the incident log detail (decisions left `awaiting-confirmation`, `offline` or `unavailable` cannot be retried there; see Known issues J1a-2). Then J1c (Jev port, adapter, `/api/llm/facts`; also wire `deriveTimeControlFacts` and `assessRecordingObligation`, and treat `game.record-state` as a non-blocking record fact).
+   - **Next task:** with the user's go-ahead, PR `feature/fact-catalog` to `main`, then deploy. (The incident-log AI retry is done: `milestones/log-ai-retry.md`.) Then J1c (Jev port, adapter, `/api/llm/facts`; also wire `deriveTimeControlFacts` and `assessRecordingObligation`, and treat `game.record-state` as a non-blocking record fact).
    - The privacy package's reviews used independent reviewer agents that wrote their own synthetic sensitive phrases; keep doing that for any change to `lib/domain/privacy/` (the author's own fixtures say little).
    - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/<slice>-*.md` and update this file.
    - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (73 files / 1444 tests at J1a-3; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.

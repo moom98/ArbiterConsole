@@ -18,16 +18,16 @@ This replaces the first idea in jev-classifier-design §5.2 ("show the top 5 mis
 
 ## 1. User decisions (catalogue review, 2026-10-08)
 
-| # | Decision |
-| --- | --- |
-| R1 | Do not show "the top 5 missing items of the category". **The Decision Tree decides which facts the current branch needs.** Jev only checks whether each of those facts is already in the report. |
-| R2 | Ask Jev, as a yes/no (`noul`) question, **"Is this fact explicitly stated in the report?"**, not "Is it missing?". Only explicitly stated facts count as present, never inferred ones. |
-| R3 | Do not use 0.5 as a fixed threshold. The thresholds are **set from the evaluation dataset**. Anything in the uncertain range counts as **missing**, so the arbiter is asked. |
-| R4 | Every fact has a level: **blocking**, **conditional** or **optional**, plus an applicability condition. A conditional fact is asked only when the Decision Tree reaches a branch that needs it. |
-| R5 | Answers are **yes / no / unknown** in principle. Every Decision Tree must keep working when an answer is unknown. |
-| R6 | Ask the arbiter for **observed facts**, not legal or ruling judgments. For example, ask "what was said or done", not "was the resignation clear". |
-| R7 | Add `dr.claim-timing`, which separates a threefold or 50-move claim that is **already established** from one that is **established by the intended next move**. Ask `next-move-written` only in the second case. |
-| R8 | `ss.low-time` (now `ss.remaining-time`) records the **remaining time**. Ordinary code compares it with 5 minutes. |
+| #   | Decision                                                                                                                                                                                                         |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | Do not show "the top 5 missing items of the category". **The Decision Tree decides which facts the current branch needs.** Jev only checks whether each of those facts is already in the report.                 |
+| R2  | Ask Jev, as a yes/no (`noul`) question, **"Is this fact explicitly stated in the report?"**, not "Is it missing?". Only explicitly stated facts count as present, never inferred ones.                           |
+| R3  | Do not use 0.5 as a fixed threshold. The thresholds are **set from the evaluation dataset**. Anything in the uncertain range counts as **missing**, so the arbiter is asked.                                     |
+| R4  | Every fact has a level: **blocking**, **conditional** or **optional**, plus an applicability condition. A conditional fact is asked only when the Decision Tree reaches a branch that needs it.                  |
+| R5  | Answers are **yes / no / unknown** in principle. Every Decision Tree must keep working when an answer is unknown.                                                                                                |
+| R6  | Ask the arbiter for **observed facts**, not legal or ruling judgments. For example, ask "what was said or done", not "was the resignation clear".                                                                |
+| R7  | Add `dr.claim-timing`, which separates a threefold or 50-move claim that is **already established** from one that is **established by the intended next move**. Ask `next-move-written` only in the second case. |
+| R8  | `ss.low-time` (now `ss.remaining-time`) records the **remaining time**. Ordinary code compares it with 5 minutes.                                                                                                |
 
 ## 2. Concepts
 
@@ -40,29 +40,37 @@ type FactLevel = "blocking" | "conditional" | "optional";
 
 /** the question itself; shared facts (game.*) have one definition */
 interface FactDefinition {
-  id: FactId;                       // e.g. "dr.claim-timing"
+  id: FactId; // e.g. "dr.claim-timing"
   /** local-only facts are never sent externally, not even as codes */
   localOnly: boolean;
   /** the observation the arbiter is asked about (R6); never a ruling */
-  question: string;                 // Japanese, fixed wording
-  answer: FactAnswerSpec;           // §2.2
+  question: string; // Japanese, fixed wording
+  answer: FactAnswerSpec; // §2.2
   /** whether Jev may be asked if it is stated in the report (§4); false for facts from app settings */
   presenceCheckable: boolean;
   /** where the value comes from when the app already knows it (never asked then) */
-  derivedFrom?: "tournament.timeControl" | "tournament.competitionType" | "incidentLog" | "game.history";
-  source: SourceRef[];              // requirements §, IC§, DT ids, FIDE article
+  derivedFrom?:
+    | "tournament.timeControl"
+    | "tournament.profile"
+    | "incidentLog"
+    | "game.history";
+  source: SourceRef[]; // requirements §, IC§, DT ids, FIDE article
 }
 
 /** how one category (or subtype) uses a fact; a shared fact has several usages */
 interface FactUsage {
   factId: FactId;
   category: IncidentCategory;
-  subtype?: string;                 // e.g. "touch-move"
-  level: FactLevel;                 // R4
+  subtypes?: readonly string[]; // e.g. ["touch-move"]; undefined = every subtype
+  level: FactLevel; // R4
   /** when the fact applies; data, evaluated by a pure function (§3.2) */
   appliesWhen?: FactCondition;
-  /** the existing follow-up question it feeds, for DT categories */
-  dtQuestionId?: IncidentQuestionId;
+  /** the existing follow-up questions it feeds, for DT categories */
+  dtQuestionIds?: readonly IncidentQuestionId[];
+  /** fact value → DT question value; "computed" = derived from other answers */
+  dtValues?: Readonly<Record<string, string>> | "computed";
+  /** fact values the mapped DT does not handle (routed to another tree) */
+  dtUnhandled?: readonly string[];
 }
 ```
 
@@ -70,11 +78,11 @@ interface FactUsage {
 
 ```ts
 type FactAnswerSpec =
-  | { kind: "yes-no" }                                   // yes / no / unknown
-  | { kind: "choice"; options: Option[]; multiple?: boolean }  // + "unknown" is always added
-  | { kind: "duration" }                                 // m:ss, or unknown
-  | { kind: "count"; min: number; max: number }          // or unknown
-  | { kind: "text"; maxChars: number };                  // optional free observation; empty = unknown
+  | { kind: "yes-no" } // yes / no / unknown
+  | { kind: "choice"; options: Option[]; multiple?: boolean } // + "unknown" is always added
+  | { kind: "duration" } // m:ss, or unknown
+  | { kind: "count"; min: number; max: number } // or unknown
+  | { kind: "text"; maxChars: number }; // optional free observation; empty = unknown
 
 type FactAnswer = { value: string | number | string[] } | { unknown: true };
 ```
@@ -91,11 +99,11 @@ type FactAnswer = { value: string | number | string[] } | { unknown: true };
 
 ### 2.3 Levels (R4)
 
-| Level | Meaning | Unanswered (`undefined`) | Answer `unknown` |
-| --- | --- | --- | --- |
-| **blocking** | The Decision Tree cannot choose a branch without it. | DT returns `needs-input` (as today). | The DT continues on the **unknown path** (§3.3). |
-| **conditional** | Required only when `appliesWhen` holds **and** the DT has reached the branch that needs it. | Same as blocking, but only while it applies. | Same as blocking. |
-| **optional** | Helps the arbiter or AI reasoning. Never needed for a decision. | Never asked as required. It is shown under "追加の情報（任意）". | Ignored by the DT. Sent to reasoning as `unknown`. |
+| Level           | Meaning                                                                                     | Unanswered (`undefined`)                                         | Answer `unknown`                                   |
+| --------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------- |
+| **blocking**    | The Decision Tree cannot choose a branch without it.                                        | DT returns `needs-input` (as today).                             | The DT continues on the **unknown path** (§3.3).   |
+| **conditional** | Required only when `appliesWhen` holds **and** the DT has reached the branch that needs it. | Same as blocking, but only while it applies.                     | Same as blocking.                                  |
+| **optional**    | Helps the arbiter or AI reasoning. Never needed for a decision.                             | Never asked as required. It is shown under "追加の情報（任意）". | Ignored by the DT. Sent to reasoning as `unknown`. |
 
 ## 3. Who decides which facts are required (R1, R4)
 
@@ -110,17 +118,20 @@ type FactAnswer = { value: string | number | string[] } | { unknown: true };
   - DT-004: flag fall;
   - **DT-005: Draw Claim**, with `claimBasis` threefold or fifty-move;
   - **DT-006: Automatic Draw** (fivefold, 75 moves).
+- **Facts the tree does not use.** A DT category may also hold fact-plan facts that the tree does not need but the record does, for example `game.record-state` after the game has ended. They have no DT mapping, are required only by their `appliesWhen`, and never change the tree's decision.
+- **Derived facts.** The caller passes values derived from settings and records as `context.derivedValues`. They are never asked, and conditions use them before the answers. A fact that is only ever derived (`im.count`, `ss.current-period`, `pb.tournament-device-rule`) is `optional`, so it is never asked.
 - **Mapping:** each DT question maps to **at most one** fact. Some facts cover several questions:
-  - `game.history` / `game.position` cover the material counts, `positionFen`, `positionsText` and the condition checks;
+  - `game.history` covers the position inputs of the trees, with `dtValues: "computed"`: `opponentCanCheckmate` (DT-001…003, until J1b-4 removes it), `positionFen` and `materialConfirmed` (DT-004), and `positionsText` (DT-005). `game.position` has no DT mapping. The tree requests it through `requestedFactIds` only when there is no valid history;
   - `game.end-event` covers `gameEnded` and `gameEndedBeforeFlag`;
-  - `ct.period` (from settings) covers `lastPeriod` and `quickplayGuidelinesApply`.
+  - `ct.last-period` and `ct.quickplay-guidelines` (yes/no, derived from settings when possible) cover `lastPeriod` and `quickplayGuidelinesApply`.
+- **Values.** Fact values use the DT question values where they map, for example `opponent-claim`, `white-first` and `threefold-repetition-claim`. Where the shapes differ, `dtValues` converts them, for example `game.end-event` → `gameEnded` (true/false). The new draw kinds map to `other` until J1b-5. A test checks that every value converts to a valid DT option.
 - **DT questions with no fact.** They are never presence-checked and never shown in the missing-facts list:
 
-  | Question | Why it has no fact |
-  | --- | --- |
-  | `materialConfirmed` | removed together with the count input (ADR-014 §5) |
-  | `positionBlocked`, `lastMoveCheckmate`, `opponentCanCheckmate` | removed as questions; decided by code from `game.history` / `game.position` (§3.5, §3.7) |
-  | `competitionType`, `supervisionRegime` | game context from the tournament profile |
+  | Question                               | Why it has no fact                                                                       |
+  | -------------------------------------- | ---------------------------------------------------------------------------------------- |
+  | `materialConfirmed`                    | removed together with the count input (ADR-014 §5)                                       |
+  | `positionBlocked`, `lastMoveCheckmate` | removed as questions; decided by code from `game.history` / `game.position` (§3.5, §3.7) |
+  | `competitionType`, `supervisionRegime` | game context from the tournament profile                                                 |
 
 - **Draw (ADR-014 §1).** The threefold and 50-move claims are both in DT-005 Draw Claim, so they share the claim facts, including `dr.claim-timing` and `dr.next-move-written` (R7). Fivefold and 75 moves are DT-006. Only agreement, stalemate, dead position and "other" use a fact plan.
 - **The side to move is never derived from the clock** (ADR-014 §2). It comes from `game.history`, otherwise from `dr.last-mover`. `dr.clock-state` is recorded only.
@@ -138,10 +149,13 @@ These are player-behavior, team, board-piece, game-result, scoresheet, tournamen
 
 ```ts
 type FactCondition =
-  | { fact: FactId; in: string[] }          // another fact's answer is one of
+  | { fact: FactId; in: string[] } // another fact's answer is one of
   | { context: "competitionType"; in: CompetitionType[] }
-  | { incident: "arbiterObserved"; is: boolean }   // Incident fields used as conditions
-  | { all: FactCondition[] } | { any: FactCondition[] };
+  | { incident: "arbiterObserved"; is: boolean } // Incident fields used as conditions
+  | { fact: FactId; range: { gte?: number; lt?: number } } // numbers; durations in seconds
+  | { notDerived: FactId } // the app could not derive this fact
+  | { all: FactCondition[] }
+  | { any: FactCondition[] };
 ```
 
 - An unknown answer never satisfies `in`. So a conditional fact that depends on an unknown answer is **not** required, and the unknown is carried to reasoning instead.
@@ -181,16 +195,16 @@ When a DT meets `unknown` on a fact it needs, it applies `resolveUnknown` (a new
 
 These existing questions ask for a judgment. They are reworded, or replaced by an observation plus code:
 
-| Question | Today | Change |
-| --- | --- | --- |
-| `opponentCanCheckmate` | "相手はチェックメイトできますか" (judgment) | Removed. `assessMatePossibility(position)` decides it (§3.7). Counts alone never give "can-mate". |
-| `gameEnded` | "対局はすでに終了していますか" | Derived from `game.end-event` (the observed event that ended the game). `game.record-state` is a separate fact. A handshake alone never ends the game. |
-| `gameEndedBeforeFlag` | "フラッグの前に対局は終了していましたか" | The new fact `ct.ended-before-flag`: "**before the flag was established** (noticed by the arbiter or validly claimed), was there an event that ended the game?". Under 6.8 / 5.1.1, a checkmate made after the display reached 0, but before the flag is established, still stands. |
-| `repetitionCheck`, `fivefoldCheck`, `seventyFiveCheck` | "成立していますか" (met / not-met / unknown / auto) | Computed from `game.history` (§3.5). Without a valid history: `dr.manual-reconstruction`, the arbiter's result of replaying on the board. Free text is never used. |
-| `claimantHasMove` | "手番ですか" | Derived from `game.history` (side to move), otherwise from `dr.last-mover`. **Never from the clock.** |
-| `positionBlocked` | "閉塞局面の可能性" (judgment) | Removed. It is part of `assessMatePossibility` (§3.7). |
-| `touchedPiece` | the wording mentions intent | "クレームの前に、動かす・取る意思で盤上の駒に触れましたか（駒を整える目的・偶然を除く）" (`dr.piece-touched`). |
-| `lastMoveCheckmate` | "最後の手はチェックメイトでしたか" (judgment) | Removed. Computed from `game.history` with chess.js (DT-006). |
+| Question                                               | Today                                               | Change                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------ | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `opponentCanCheckmate`                                 | "相手はチェックメイトできますか" (judgment)         | Removed. `assessMatePossibility(position)` decides it (§3.7). Counts alone never give "can-mate".                                                                                                                                                                                   |
+| `gameEnded`                                            | "対局はすでに終了していますか"                      | Derived from `game.end-event` (the observed event that ended the game). `game.record-state` is a separate fact. A handshake alone never ends the game.                                                                                                                              |
+| `gameEndedBeforeFlag`                                  | "フラッグの前に対局は終了していましたか"            | The new fact `ct.ended-before-flag`: "**before the flag was established** (noticed by the arbiter or validly claimed), was there an event that ended the game?". Under 6.8 / 5.1.1, a checkmate made after the display reached 0, but before the flag is established, still stands. |
+| `repetitionCheck`, `fivefoldCheck`, `seventyFiveCheck` | "成立していますか" (met / not-met / unknown / auto) | Computed from `game.history` (§3.5). Without a valid history: `dr.manual-reconstruction`, the arbiter's result of replaying on the board. Free text is never used.                                                                                                                  |
+| `claimantHasMove`                                      | "手番ですか"                                        | Derived from `game.history` (side to move), otherwise from `dr.last-mover`. **Never from the clock.**                                                                                                                                                                               |
+| `positionBlocked`                                      | "閉塞局面の可能性" (judgment)                       | Removed. It is part of `assessMatePossibility` (§3.7).                                                                                                                                                                                                                              |
+| `touchedPiece`                                         | the wording mentions intent                         | "クレームの前に、動かす・取る意思で盤上の駒に触れましたか（駒を整える目的・偶然を除く）" (`dr.piece-touched`).                                                                                                                                                                      |
+| `lastMoveCheckmate`                                    | "最後の手はチェックメイトでしたか" (judgment)       | Removed. Computed from `game.history` with chess.js (DT-006).                                                                                                                                                                                                                       |
 
 ### 3.5 Local game history (`game.history`)
 
@@ -273,12 +287,17 @@ See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §6.
 
 ```ts
 interface JevCalibration {
-  model: string;                  // must equal the resolved model of each response
-  dataset: { id: string; version: string; tuningSize: number; heldOutSize: number };
+  model: string; // must equal the resolved model of each response
+  dataset: {
+    id: string;
+    version: string;
+    tuningSize: number;
+    heldOutSize: number;
+  };
   createdAt: string;
-  category: { medium: number; prefill: number };        // jev-classifier-design §5.4
-  presence: Partial<Record<FactId, number>>;            // per fact; absent = never present
-  metrics: Record<string, number>;                      // held-out precision etc. (record only)
+  category: { medium: number; prefill: number }; // jev-classifier-design §5.4
+  presence: Partial<Record<FactId, number>>; // per fact; absent = never present
+  metrics: Record<string, number>; // held-out precision etc. (record only)
 }
 ```
 
@@ -304,17 +323,17 @@ The script is `scripts/eval-classifier.mjs`, extended. It uses synthetic data on
 
 ## 6. Code layout
 
-| File | Layer | Content |
-| --- | --- | --- |
-| `lib/domain/facts/types.ts`, `catalog.ts` | domain | Fact types and the catalogue data ([jev-missing-info-catalog.md](./jev-missing-info-catalog.md)). |
-| `lib/domain/facts/required-facts.ts` | domain | `requiredFacts()` for categories without a DT; mapping of DT `needs-input` questions to facts; `appliesWhen` evaluation. |
-| `lib/domain/facts/computed.ts` | domain | The comparisons (remaining time < limit, minutes late > default time), with rule parameters from `rulesVersion` and the tournament profile. |
-| `lib/domain/decision-trees/tree-support.ts` | domain | `resolveUnknown()`; every DT uses it. |
-| `lib/domain/follow-up.ts` | domain | Every question gets `unknown`; `parseBoolean` keeps `unknown` (§3.3 e); the wording from §3.4. `isQuestionVisible` and `showWhen` are already here. The remaining completeness check and the dropping of answers to hidden questions move here from `FollowUpQuestions.tsx`. |
-| `lib/domain/llm/presence.ts` | domain | Parses the presence answers using the calibration. |
-| `lib/domain/llm/calibration/*` | domain (data) | §5. |
-| `app/api/llm/facts/route.ts`, `lib/infrastructure/llm/server/jev-presence.ts` | infra | The route. The questions are built from the catalogue on the server. |
-| `components/features/FollowUpQuestions.tsx` | UI | Groups the questions (missing first), shows `unknown`, and gets its logic from the domain. |
+| File                                                                          | Layer         | Content                                                                                                                                                                                                                                                                      |
+| ----------------------------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/domain/facts/types.ts`, `catalog.ts`                                     | domain        | Fact types and the catalogue data ([jev-missing-info-catalog.md](./jev-missing-info-catalog.md)).                                                                                                                                                                            |
+| `lib/domain/facts/required-facts.ts`                                          | domain        | `requiredFacts()` for categories without a DT; mapping of DT `needs-input` questions to facts; `appliesWhen` evaluation.                                                                                                                                                     |
+| `lib/domain/facts/computed.ts`                                                | domain        | The comparisons (remaining time < limit, minutes late > default time), with rule parameters from `rulesVersion` and the tournament profile.                                                                                                                                  |
+| `lib/domain/decision-trees/tree-support.ts`                                   | domain        | `resolveUnknown()`; every DT uses it.                                                                                                                                                                                                                                        |
+| `lib/domain/follow-up.ts`                                                     | domain        | Every question gets `unknown`; `parseBoolean` keeps `unknown` (§3.3 e); the wording from §3.4. `isQuestionVisible` and `showWhen` are already here. The remaining completeness check and the dropping of answers to hidden questions move here from `FollowUpQuestions.tsx`. |
+| `lib/domain/llm/presence.ts`                                                  | domain        | Parses the presence answers using the calibration.                                                                                                                                                                                                                           |
+| `lib/domain/llm/calibration/*`                                                | domain (data) | §5.                                                                                                                                                                                                                                                                          |
+| `app/api/llm/facts/route.ts`, `lib/infrastructure/llm/server/jev-presence.ts` | infra         | The route. The questions are built from the catalogue on the server.                                                                                                                                                                                                         |
+| `components/features/FollowUpQuestions.tsx`                                   | UI            | Groups the questions (missing first), shows `unknown`, and gets its logic from the domain.                                                                                                                                                                                   |
 
 ## 7. Tests
 

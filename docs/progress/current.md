@@ -187,7 +187,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
     - Q-DP2: the review of the doubtful vocabulary;
     - Q-F1: value suggestion (not planned);
     - Q-F2: the 0.97 precision target.
-  - No code has been changed yet.
+  - Code so far: J1b-1 (`lib/domain/facts/`, pure; no Decision Tree changed yet).
   - The key must never go into `.env*` (`cf:deploy` refuses to run). Keep it in `~/.config/arbiter-console/typesafe.key` for J0 and J3.
 
 - Whether the user's federation applies 1 or 2 minutes for Blitz B.2 (adequate supervision).
@@ -214,7 +214,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
    - J0: check the official API with a real key;
    - J1a: data protection for all routes;
    - J1b: the fact model and ADR-014, in slices:
-     - J1b-1: the catalogue data, types and `requiredFacts` (pure, no tree changes);
+     - J1b-1: the catalogue data, types and `requiredFacts` (pure, no tree changes). **Done 2026-10-08**, on branch `feature/fact-catalog` (stacked on `design/jev-classifier`). See `milestones/j1b-1-fact-catalogue.md`;
      - J1b-2: `unknown` and `resolveUnknown`;
      - J1b-3: `game.history`;
      - J1b-4: mate possibility;

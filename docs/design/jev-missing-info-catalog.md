@@ -86,14 +86,15 @@
 
 | ID | 質問（観測事実） | 回答 | 区分 | 適用条件 | Jev | 根拠 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `im.action` | 何が起きましたか（違法な位置へ駒を動かした・両手で指した・昇格の駒を置かずに時計を押した・手を指さずに時計を押した） | 選択 | B | — | ○ | §16, DT:subtype |
+| `im.action` | 何が起きましたか（違法な位置へ駒を動かした・両手で指した・昇格の駒を置かずに時計を押した・手を指さずに時計を押した・**触れた駒を動かさなかった等（触れた駒の規則）**）。回答がサブタイプになります。touch-move は DT-007 へ振り分けます | 選択 | B | — | ○ | §16, DT:subtype |
 | `im.player` | 違法な動作をしたのはどちらですか（白・黒） | 選択 | B | — | ○ | DT:playerColor |
 | `im.clock-pressed` | その後、その選手は時計を押しましたか | YN | B | — | ○ | §12, DT:clockPressed |
 | `game.end-event` | （共通 fact）違法手に気づいた時点で、対局を終わらせる出来事があったか | — | B | — | ○ | §12, DT:gameEnded（「まだ対局中」以外なら終了とする。握手だけでは終了としない） |
+| `game.record-state` | （共通 fact）結果の記入・署名の状態 | — | C | `game.end-event` が「まだ対局中」以外 | ○ | §20 |
 | `im.opponent-moved` | 相手はその後、次の手を指しましたか | YN | C | Rapid/Blitz で、DT が要求したとき | ○ | §17（A.5）, DT:opponentMadeNextMove |
 | `im.noticed-by` | 違法手を最初に指摘したのは誰ですか（アービター・相手・その他） | 選択 | C | DT が要求したとき | ○ | §12, DT:detectedBy |
 | `game.history` / `game.position` | （共通 fact）メイト可能性の判定に使う局面。**違法手を取り消して、違法手の直前に戻した局面**（7.5.1〜7.5.4 で再開する局面）を使います。現在の局面ではありません | — | C | 処置が対局の終了につながる分岐（相手がメイトできるかの判断が必要なとき） | — | FIDE 7.5.5 / 6.9、ADR-014 §5。**旧 `opponentCanCheckmate` の直接質問と駒数による判定は廃止** |
-| `im.count` | 同じ選手のこの対局での、7.5 の違法手の回数 | 設定 | — | Incident Log から取得（**touch-move は数えない**） | — | §16 |
+| `im.count` | 同じ選手のこの対局での、7.5 の違法手の回数 | 設定 | O | Incident Log から取得し、質問しない（**touch-move は数えない**） | — | §16 |
 
 ## 2. touch-move（触れた駒の規則。Article 4）— DT-007（新規）
 
@@ -109,7 +110,8 @@
 | `tch.special` | 特別な手の途中でしたか（キャスリング：キングを先に触れた／ルークを先に触れた・昇格：駒を置いた／まだ置いていない・該当なし） | 選択 | C | `tch.touched` にキングとルーク、または最終段のポーンを含む | ○ | FIDE 4.4 |
 | `tch.released` | 動かした駒を、マスの上で手から離しましたか | YN | C | `tch.what-next` = その駒を動かした | ○ | FIDE 4.7（離した駒は別のマスへ動かせない） |
 | `tch.what-next` | 触れた後に何をしましたか（その駒を動かした・別の駒を動かした・まだ動かしていない） | 選択 | B | — | ○ | FIDE 4.3 / 4.7 |
-| `tch.claim-timing` | 相手が申し立てたのは、自分が**動かす・取る意思で駒に触れる前**でしたか | YN | C | 相手からの申し立てで始まった場合 | ○ | FIDE 4.8 |
+| `tch.claimed-by-opponent` | 相手からの申し立てで始まりましたか | YN | O | — | ○ | FIDE 4.8（`tch.claim-timing` の条件に使う） |
+| `tch.claim-timing` | 相手が申し立てたのは、自分が**動かす・取る意思で駒に触れる前**でしたか | YN | C | `tch.claimed-by-opponent` = はい | ○ | FIDE 4.8 |
 | 🔒 `game.position` | 触れた時点の局面（触れた駒で指せる合法手があるかの判定に使う） | — | C | `tch.what-next` が「別の駒を動かした」「まだ動かしていない」のとき | — | FIDE 4.3 / 4.5。局面がない場合は「盤上で確認」 |
 
 ## 3. clock-time（時計・時間）— DT-004（フラッグ）
@@ -121,7 +123,8 @@
 | `ct.zero-order` | 両方の場合、先に0になったのはどちらか分かりますか（白・黒） | 選択 | C | `ct.zero-side` = 両方 | ○ | DT:bothFlagsOrder |
 | `ct.ended-before-flag`（新規） | **フラッグが確定する前に**（アービターが気付く、または有効な主張がされる前に）、対局を終わらせる出来事がありましたか（なし・チェックメイト・投了・ドローの合意・ステイルメイト・その他）。表示が0になった後でも、フラッグ確定前のチェックメイトは有効です | 選択 | C | `ct.event` = 0になった | ○ | FIDE 6.8 / 5.1.1, DT:gameEndedBeforeFlag |
 | `game.history` / `game.position` | （共通 fact）相手がメイトできるかの判定に使う局面。**フラッグ確定時の局面**で、手番も正しいものを使います | — | C | DT が要求したとき（`movesNotCompleted` の分岐） | — | FIDE 6.9、ADR-014 §5。**駒数による「メイト可能」の確定は廃止** |
-| `ct.period` | 現在のピリオド・加算 | 設定 | — | Tournament Profile の持ち時間（ピリオド付き）と手数から求める。求められない場合のみ質問 | — | DT:lastPeriod, DT:quickplayGuidelinesApply |
+| `ct.last-period` | 残りの全ての手を指し切る最終ピリオドですか | YN（設定） | C | DT が要求したとき。ピリオドが1つの持ち時間、または対局履歴で手数が分かる場合だけ設定から求め、それ以外は質問 | — | DT:lastPeriod |
+| `ct.quickplay-guidelines` | 大会規定でクイックプレイ・フィニッシュの指針が適用されますか | YN（設定） | C | DT が要求したとき。大会規定から求められない場合のみ質問 | — | DT:quickplayGuidelinesApply |
 | `ct.clock-observed` | 時計で何が見えましたか（表示が消えた・時間が増えた/減った・押しても切り替わらない・設定と違う時間・その他） | 選択・複数 | C | `ct.event` = その他 | ○ | §18 |
 | `ct.stopped-by` | 時計を止めたのは誰ですか（白・黒・アービター・止まっていない） | 選択 | O | `ct.event` = その他 | ○ | §18 |
 
@@ -175,9 +178,9 @@
 | `ss.moves-behind` | 何手遅れていますか | 数 | C | `ss.issue` = 遅れている | ○ | §20 |
 | `ss.remaining-time` | 記入していない側の時計の、今の残り時間（m:ss） | 時間 | C | `ss.issue` が記入していない・遅れている。**8.1.1 の記録義務がある対局（Standard）のみ** | ○ | FIDE 8.4。5分未満かどうかはコードで比べる |
 | `ss.below-five-in-period`（新規） | このピリオドの中で、残り時間が一度でも5分を下回ったことがありましたか | YN | C | `ss.remaining-time` が5分以上で、加算が30秒未満のとき | ○ | FIDE 8.4（「ピリオドのある時点で5分未満になった場合、そのピリオドの残り」。加算で5分以上に戻っても免除は続く） |
-| `ss.increment` | 現在のピリオドの1手ごとの加算（秒） | 設定 | — | Tournament Profile の持ち時間（ピリオド付き）と、現在のピリオドから求める。求められない場合のみ質問 | — | FIDE 8.4（加算が30秒以上なら記録義務は免除されない） |
-| `ss.current-period` | 現在のピリオド | 設定 | — | Tournament Profile のピリオドと手数（`game.history`、または `ss.move-number`）から求める | — | FIDE 8.4 |
-| `ss.move-number` | 現在の手数（何手目か） | 数 | C | ピリオドが複数あり、`game.history` から手数が求められないとき | ○ | FIDE 8.4（現在のピリオドを求めるため） |
+| `ss.increment` | 現在のピリオドの1手ごとの加算（秒） | 設定 | C | `ss.issue` が記入していない・遅れている、かつ Standard。持ち時間の設定から求められない場合のみ質問 | — | FIDE 8.4（加算が30秒以上なら記録義務は免除されない） |
+| `ss.current-period` | 現在のピリオド | 設定 | O | Tournament Profile のピリオドと手数から求めるだけで、質問しない | — | FIDE 8.4 |
+| `ss.move-number` | 現在の手数（何手目か） | 数 | C | `ss.issue` が記入していない・遅れている、かつ Standard、かつ `ss.current-period` を求められないとき | ○ | FIDE 8.4（現在のピリオドを求めるため） |
 
 ## 7. player-behavior（選手の行動・電子機器）— fact plan
 
@@ -193,7 +196,7 @@
 | `pb.bag-access`（新規） | 対局中に、その選手がバッグに触れた・開けた・中の物を取り出したことがありましたか | YN | C | `pb.behavior` に電子機器、またはバッグに触れた・開けたを含む（**機器の場所に関係なく**尋ねる） | ○ | §21, FIDE 11.3.2.2（アービターの許可なしにバッグに触れない） |
 | `pb.bag-access-permission`（新規） | そのとき、アービターの許可を得ていましたか | YN | C | `pb.bag-access` = はい | ○ | §21 |
 | `pb.went-where` | どこへ行きましたか（席を離れた・対局エリアの外に出た） | 選択 | C | `pb.behavior` に離席・退出を含む | ○ | §21 |
-| `pb.tournament-device-rule` | 電子機器に関する大会規定 | 設定 | — | Tournament Profile。質問しない | — | §21 |
+| `pb.tournament-device-rule` | 電子機器に関する大会規定 | 設定 | O | Tournament Profile から求めるだけで、質問しない | — | §21 |
 
 ## 8. team（団体戦）— fact plan
 

@@ -63,13 +63,14 @@ export function IncidentTextClassifier({
   const requestIdRef = useRef(0);
   const clear = () => {
     requestIdRef.current++;
+    setLoading(false);
     setResult(null);
     setPending(null);
   };
 
   const handleClassify = async () => {
-    setLoading(true);
     clear();
+    setLoading(true);
     const id = requestIdRef.current;
     try {
       const step = await prepareIncidentClassification(text, { doNotSend });
@@ -77,7 +78,8 @@ export function IncidentTextClassifier({
       if (step.status === "done") setResult(step.result);
       else setPending(step);
     } finally {
-      setLoading(false);
+      // 新しい要求の処理中は loading を解除しない
+      if (id === requestIdRef.current) setLoading(false);
     }
   };
 
@@ -92,7 +94,8 @@ export function IncidentTextClassifier({
       setPending(null);
       setResult(r);
     } finally {
-      setLoading(false);
+      // 新しい要求の処理中は loading を解除しない
+      if (id === requestIdRef.current) setLoading(false);
     }
   };
 

@@ -751,12 +751,7 @@ export default function ReportPage() {
               )}
               <DecisionDisplay
                 decision={currentDecision}
-                // 確認画面を出している間は再取得ボタンを出さない（確認ボタンと重複する）
-                onRetry={
-                  externalAiConfirmation
-                    ? undefined
-                    : () => void retryEvaluation()
-                }
+                onRetry={() => void retryEvaluation()}
                 retrying={isProcessing}
               />
               {currentDecision.llm?.errorCode === "unauthorized" && (

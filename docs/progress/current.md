@@ -1,13 +1,23 @@
 # Current Progress
 
-**Last updated:** 2026-10-08 (J1a-1)
+**Last updated:** 2026-10-09 (J1a-2)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
 
 This file is the handoff for a fresh Claude session. Do not rely on conversation history.
 
-**Current state in one paragraph (2026-10-08):** all work since PR #3 is on `feature/fact-catalog` (pushed, not merged, **not deployable yet**). It holds the fact catalogue and ADR-014 (J1b-1…J1b-8, all done) and the pure privacy package (J1a-1, done, review MERGE). **Next task: J1a-2**, connecting the privacy package to every external-AI call plus the arbiter's mandatory confirmation; the step-by-step plan with the code survey is in [`next-j1a-2-plan.md`](./next-j1a-2-plan.md). Until J1a-2 and J1a-3 are done, the app still sends the raw description to Gemini, so `feature/fact-catalog` must not be deployed or merged into `main`.
+**Current state in one paragraph (2026-10-09):** all work since PR #3 is on `feature/fact-catalog` (pushed, not merged, **not deployable yet**). It holds:
+- the fact catalogue and ADR-014 (J1b-1…J1b-8, all done);
+- the pure privacy package (J1a-1, done);
+- the external-AI guard on every client route with the arbiter's mandatory confirmation (J1a-2, done, review MERGE).
+
+**Next task: J1a-3**, the server re-check (L5):
+- the gate and the pattern rules again on incident-derived text;
+- 400 for unknown fields and for the old `{ text }` classify shape;
+- no silent rewrite.
+
+Until J1a-3 is done, `feature/fact-catalog` must not be deployed or merged into `main`.
 `docs/IMPLEMENTATION_STATUS.md` is a stale 2024 snapshot. Use this file and `docs/progress/milestones/` instead.
 
 ## Completed work
@@ -28,6 +38,12 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
 - **On `feature/fact-catalog` (not merged):**
   - **J1b-1…J1b-8:** fact catalogue, `unknown` answers, `game.history`, mate possibility (ADR-015), draw trees DT-005/006, touch move DT-007, time-control periods (Dexie v8), game end. ADR-014 is fully implemented. See `milestones/j1b-*.md`.
   - **J1a-1:** `lib/domain/privacy/` (Sensitive Gate with the known-vocabulary layer, PII redaction, residual check, minimization, re-identification, `protectIncidentText`) and the synthetic evaluation fixtures. See `milestones/j1a-1-privacy-package.md`.
+  - **J1a-2:** `lib/application/external-ai-guard.ts` (the only caller of `callLlmApi`).
+    - Classification, AI reasoning and search queries are sent only after the arbiter confirms the de-identified preview (D13).
+    - 「外部AIに送らない」 switch.
+    - AI output is re-identified on the device.
+    - Tournament regulations are de-identified for reasoning and embeddings; embedding key `+deid1`.
+    - See `milestones/j1a-2-external-ai-guard.md` and design §11.
 
 ## User decisions (2026-10-07)
 
@@ -104,6 +120,16 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - **D12 (user):** a known-vocabulary allow-list layer (L3v) decides `clear`; the term lists only give `blocked` reasons.
   - **D13 (user):** the arbiter confirms **every** external send; the gate is a filter, not a guarantee. Release condition: held-out false-negative rate measured and minimized, 0 on the regression sets, no covered identifier in a sent payload.
   - `protectIncidentText` runs steps A–E; unregistered names and words swallowed by pattern rules always go local.
+- **ADR-012 in the app (J1a-2, design §11):**
+  - Reasoning: the port returns `needs-confirmation` (preview plus `approvalKey` = the de-identified payload) before any search or send.
+    - The engine stores a manual-review decision `awaiting-confirmation` in the meantime.
+    - `confirmExternalAiSend()` re-evaluates. The port sends only if the freshly prepared key is identical.
+    - `retryEvaluation` reuses the approval only for the same incident.
+  - Rule search: keyword results first. Semantic search runs only after the de-identified query is confirmed (user approved 2026-10-09).
+  - Gate results `not-sent` → local manual review with reason codes (`Decision.llm.gateReasons`).
+  - No `tournamentId` in any request. Tournament articles are redacted with `sourceName: "大会規定"` and no version. Citations show the local source name (`localSourceLabels`).
+  - Unknown placeholders in AI output → `llm.needsReview`, escalation, 「要確認」.
+  - Accepted exception: tournament regulation text attached to reasoning is not shown in the preview (chosen after confirmation; narrow redaction only).
 - **ADR-015:** mate-possibility search in infrastructure (own 0x88 generator + best-first portfolio, Web Worker, 1.5 s), result stored on the incident and re-verified by the domain through `ChessPositionPort` every time. A search bug can only cause "unknown".
 - **ADR-009:** Cloudflare Workers through OpenNext.
   - Next.js 14.2.35 with `@opennextjs/cloudflare@~1.15.1`. Do not bump to 1.16+ without moving to Next 15.5+/16.
@@ -122,15 +148,16 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `lib/domain/llm/` (output validator, quote match, keyword classifier, ports)
   - `lib/domain/services/` (incident-counter, touch-move, mate-material, mate-possibility, game-history, time-control, position-analysis, fair-play, round-checklist, round-planning, game-context, …)
   - `lib/domain/rules/citations.ts`
-- **Application:** `lib/application/` (rule-ingestion, rule-library, csv-export, llm-classification, round-checklist, tournament-management)
+- **Application:** `lib/application/` (rule-ingestion, rule-library, csv-export, llm-classification, round-checklist, tournament-management, **external-ai-guard**, **llm-assist** (the reasoning port, moved from infrastructure in J1a-2))
 - **Infrastructure:**
   - `lib/infrastructure/db/schema.ts` (Dexie v1–v3, v5, v7, v8 on `feature/fact-catalog`)
-  - `lib/infrastructure/llm/` (client, assist port, `server/` config, handler, rate limiter, Gemini client)
+  - `lib/infrastructure/llm/` (client, contract, `server/` config, handler, prompts, request validation, rate limiter, Gemini client)
   - `lib/infrastructure/ai/`
   - `lib/infrastructure/chess/` (chess.js port; `helpmate/` search, worker and port)
 - **Privacy (J1a-1):**
   - `lib/domain/privacy/` (`normalize`, `sensitive-terms` (L2 + L3 registry), `known-vocabulary` (L3v), `sensitive-gate`, `placeholders`, `pii-redaction`, `residual-check`, `minimization`, `reidentify`, `protect`)
-  - `lib/infrastructure/privacy/known-identifiers.ts` (untested; J1a-2)
+  - `lib/infrastructure/privacy/known-identifiers.ts` (tested in `__tests__/privacy/external-ai-guard.test.ts`)
+  - J1a-2: `lib/application/external-ai-guard.ts`, `lib/domain/llm/external-ai.ts` (reason labels), `components/features/{ExternalAiSendConfirmation,ExternalAiOptOutSwitch}.tsx`
   - fixtures `__tests__/fixtures/privacy/*.json`, tests `__tests__/privacy/*.test.ts`
 - **API:** `app/api/llm/{reason,classify,embed}/route.ts`
 - **Semantic search (ADR-010):**
@@ -146,6 +173,16 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `scripts/check-cf-env.mjs` (`cf:build` env-file guard)
 
 ## Tests and verification performed
+
+**J1a-2 external-AI guard (2026-10-09, `feature/fact-catalog`):**
+
+- tsc is clean; eslint 0 errors / 0 warnings; 72 files / 1377 tests pass; `next build` succeeds.
+- New and extended tests:
+  - `__tests__/privacy/external-ai-guard.test.ts`: only-importer check, bodies, fail closed, document redaction, reasoning payload, `loadKnownIdentifiers`;
+  - `__tests__/rule-search/search-semantic-confirmation.test.tsx`;
+  - the store flow in `__tests__/llm/llm-incident-flow.integration.test.ts`: confirmation, approval scoping, names, unknown placeholders, opt-out, gate;
+  - engine outcome mapping, re-identification in `buildLlmDecision`, classifier confirmation and stale responses.
+- Independent read-only review: MERGE (no critical or major findings). Its minor findings and nits were fixed in `43b61e4`, then re-reviewed.
 
 **J1a-1 privacy package (2026-10-08, `feature/fact-catalog`):**
 
@@ -245,7 +282,13 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 - **J1a-1:**
   - Sentences deliberately built from vocabulary words can still pass the gate; the arbiter's confirmation (D13, J1a-2) is the final defense. Every miss found must become a regression case in `__tests__/fixtures/privacy/`.
-  - Nothing calls the privacy package yet: the app still sends the raw description to Gemini until J1a-2/J1a-3 land. **Do not deploy `feature/fact-catalog` before J1a-2 and J1a-3.**
+  - Since J1a-2 the client sends only de-identified, confirmed payloads, but the server does not re-check them yet. **Do not deploy `feature/fact-catalog` before J1a-3.**
+- **J1a-2:**
+  - The server still accepts `tournamentId` and other unknown fields silently (ignored, not forwarded). J1a-3 makes them 400 and adds L5.
+  - The incident log detail has no "retry / confirm AI send" for decisions left `offline`, `unavailable` or `awaiting-confirmation` (the report screen does). This is an existing limitation, now more frequent.
+  - Fact answers are not sent to `/reason` (§5.3 would allow codes).
+  - Semantic search on the rule search screen needs one extra tap (by design).
+  - The first 「意味検索用データを作成」 after deploying rebuilds every vector (key `+deid1`).
 - **J1b-8:**
   - Whether the mating/stalemating move was legal is the arbiter's check; there is no automatic check from `game.history` yet (J2).
   - `game.record-state` is `conditional` in the catalogue while the DT question is optional; J1c must treat it as a non-blocking record fact.
@@ -350,7 +393,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
    - J0: **done 2026-10-08**. The real API was checked with synthetic text (`scripts/jev-probe.mjs`, jev-classifier-design §2.1). `noul` returns its probability in the field `noul`; pinned `jev-1.13.0` works; 422 errors echo the input.
    - J1a: data protection for all routes, in slices:
      - J1a-1: the pure privacy package and its evaluation. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1a-1-privacy-package.md`.
-     - J1a-2: `lib/application/external-ai-guard.ts` (only importer of `callLlmApi`), every client route through `protectIncidentText`, the mandatory confirmation UI (D13), the 外部AIに送らない switch, re-identification of AI output, embedding key `+deid1`. `lib/infrastructure/privacy/known-identifiers.ts` exists (untested).
+     - J1a-2: **done 2026-10-09**, on `feature/fact-catalog`. See `milestones/j1a-2-external-ai-guard.md`.
      - J1a-3: server re-check of the minimized shapes (L5).
    - J1b: the fact model and ADR-014, in slices:
      - J1b-1: the catalogue data, types and `requiredFacts` (pure, no tree changes). **Done 2026-10-08**, on branch `feature/fact-catalog` (stacked on `design/jev-classifier`). See `milestones/j1b-1-fact-catalogue.md`;
@@ -388,10 +431,10 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 1. Read `CLAUDE.md`, this file, `docs/progress/milestones/*`, then the design docs and ADRs for the next task.
 2. The current work branch is `feature/fact-catalog` (pushed to `origin`, latest J1a-1 at `52d7ebb` or later; `main` has the deployed app). Check `git log --oneline -15` on it, and `git worktree list`.
-   - **Next task:** J1a-2 — follow [`next-j1a-2-plan.md`](./next-j1a-2-plan.md) (code survey, work items, open decision about confirming search queries). Then J1a-3, then J1c (Jev port, adapter, `/api/llm/facts`; also wire `deriveTimeControlFacts` and `assessRecordingObligation`, and treat `game.record-state` as a non-blocking record fact).
+   - **Next task:** J1a-3 (server L5 re-check, see design §7 and §11.5). Candidate after it: re-evaluate / confirm the AI send from the incident log detail (decisions left `awaiting-confirmation`, `offline` or `unavailable` cannot be retried there; see Known issues J1a-2). Then J1c (Jev port, adapter, `/api/llm/facts`; also wire `deriveTimeControlFacts` and `assessRecordingObligation`, and treat `game.record-state` as a non-blocking record fact).
    - The privacy package's reviews used independent reviewer agents that wrote their own synthetic sensitive phrases; keep doing that for any change to `lib/domain/privacy/` (the author's own fixtures say little).
    - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/<slice>-*.md` and update this file.
-   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (70 files / 1339 tests at J1a-1; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
+   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (72 files / 1377 tests at J1a-2; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
    - The project tsconfig has no `target` (tsc treats it as ES5): avoid regex-literal flags such as `/u` or `/s` and `matchAll`; use `new RegExp(source, flags)` and `exec` loops, as `lib/domain/privacy/` does.
    - In a nested worktree, run eslint as `npx eslint --no-eslintrc -c .eslintrc.json --ext .ts,.tsx app components lib __tests__`.
 3. Do not edit `docs/requirements/product-requirements.md` for implementation convenience.

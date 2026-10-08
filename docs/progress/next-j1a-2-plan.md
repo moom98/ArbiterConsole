@@ -1,6 +1,6 @@
 # Plan for J1a-2: the external-AI guard on every client route
 
-**Status:** Not started (as of 2026-10-08). Written at the end of J1a-1 so that a fresh session can start without redoing the code survey. Read it together with [external-ai-data-protection.md](../design/external-ai-data-protection.md) (§2, §3, §4.3, §5.3, §6, D12, D13) and [ADR-012](../decisions/ADR-012-external-ai-data-protection.md) with both amendments.
+**Status:** Done 2026-10-09 (see `milestones/j1a-2-external-ai-guard.md` and design §11). Kept for reference. Originally: Written at the end of J1a-1 so that a fresh session can start without redoing the code survey. Read it together with [external-ai-data-protection.md](../design/external-ai-data-protection.md) (§2, §3, §4.3, §5.3, §6, D12, D13) and [ADR-012](../decisions/ADR-012-external-ai-data-protection.md) with both amendments.
 
 **Branch:** `feature/fact-catalog`. **Do not deploy it** until J1a-2 and J1a-3 are done: today the app still sends the raw incident description to Gemini.
 

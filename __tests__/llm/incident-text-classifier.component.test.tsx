@@ -102,6 +102,14 @@ describe("IncidentTextClassifier", () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.queryByText("AI分類（提案）")).toBeNull();
     expect(onApply).not.toHaveBeenCalled();
+    // 古い要求が終わった後も、新しい記述で分類できる
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "カテゴリを提案",
+        }) as HTMLButtonElement
+      ).disabled
+    ).toBe(false);
   });
 
   it("declining sends nothing", async () => {

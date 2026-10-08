@@ -81,10 +81,7 @@ export function DecisionDisplay({
     : undefined;
   const canRetry =
     onRetry !== undefined &&
-    (llmStatus === "offline" ||
-      llmStatus === "unavailable" ||
-      // 確認画面を閉じた（画面を離れた）後でも、送る内容の確認からやり直せる
-      llmStatus === "awaiting-confirmation");
+    (llmStatus === "offline" || llmStatus === "unavailable");
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
@@ -172,11 +169,7 @@ export function DecisionDisplay({
               disabled={retrying}
               className="mt-2 w-full min-h-12 px-4 bg-gray-800 text-white rounded-lg font-semibold disabled:bg-gray-300"
             >
-              {retrying
-                ? "取得中..."
-                : llmStatus === "awaiting-confirmation"
-                  ? "AIに送る内容を確認する"
-                  : "AI参考情報を再取得"}
+              {retrying ? "取得中..." : "AI参考情報を再取得"}
             </button>
           )}
         </div>

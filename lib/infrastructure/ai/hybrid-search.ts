@@ -4,10 +4,7 @@ import {
   orderByRulePriority,
 } from "@/lib/domain/services/rule-priority";
 import { db } from "@/lib/infrastructure/db";
-import {
-  EMBEDDING_MODEL_ID,
-  generateQueryEmbedding,
-} from "@/lib/infrastructure/embeddings/generator";
+import { EMBEDDING_MODEL_ID } from "@/lib/infrastructure/embeddings/generator";
 import { getFulltextIndex, type FulltextHit } from "./fulltext-search";
 import { scoreByVector, type VectorHit } from "./vector-search";
 
@@ -52,6 +49,11 @@ export interface HybridSearchOptions {
    * （同一ドメインの無関係な条文でも0.3〜0.5程度の類似度になるため）
    */
   vectorMinSimilarity?: number;
+  /**
+   * 検索語の埋め込みを取得する（外部AIガードで置き換え、アービターが送信内容を確認したもの。
+   * ADR-012 D13）。未指定なら意味検索を行わず、キーワード検索のみ（検索語は外部へ送らない）
+   */
+  queryEmbedding?: () => Promise<number[]>;
 }
 
 export interface SearchCorpus {
@@ -62,7 +64,11 @@ export interface SearchCorpus {
 export interface HybridSearchDeps {
   loadCorpus(): Promise<SearchCorpus>;
   fulltext(query: string, candidates: readonly Rule[]): Promise<FulltextHit[]>;
-  vector(query: string, candidates: readonly Rule[]): Promise<VectorHit[]>;
+  /** queryEmbedding は HybridSearchOptions.queryEmbedding（検索語そのものは渡さない） */
+  vector(
+    queryEmbedding: () => Promise<number[]>,
+    candidates: readonly Rule[]
+  ): Promise<VectorHit[]>;
 }
 
 export interface FusedHit {
@@ -244,6 +250,7 @@ export async function hybridSearch(
     fulltextWeight = 0.4,
     minScore = 0.25,
     vectorMinSimilarity = DEFAULT_VECTOR_MIN_SIMILARITY,
+    queryEmbedding,
   } = options;
 
   if (!query.trim()) {
@@ -256,8 +263,11 @@ export async function hybridSearch(
     return { results: [], related: [], failures: {} };
   }
 
+  // 意味検索は確認済みの検索語の埋め込みがある場合のみ（ない場合は失敗ではなく、キーワード検索のみ）
   const [vectorOutcome, fulltextOutcome] = await Promise.allSettled([
-    deps.vector(query, candidates),
+    queryEmbedding
+      ? deps.vector(queryEmbedding, candidates)
+      : Promise.resolve(null),
     deps.fulltext(query, candidates),
   ]);
 
@@ -318,6 +328,13 @@ export async function hybridSearch(
 
 const RELATED_LIMIT = 3;
 
+/** 現行モデルの意味検索用データ（条文の埋め込み）があるか。ないときは検索語を送る意味がない */
+export async function hasSemanticSearchData(): Promise<boolean> {
+  return (
+    (await db.embeddings.where("model").equals(EMBEDDING_MODEL_ID).count()) > 0
+  );
+}
+
 /**
  * ベクトル類似度の既定の下限（Gemini Embedding, ADR-010）。
  * 同じ分野の無関係な条文でも類似度が高めに出るため、旧モデル（0.5）より高くしている。
@@ -370,7 +387,7 @@ const defaultDeps: HybridSearchDeps = {
     return index.search(query).filter((hit) => allowed.has(hit.ruleId));
   },
 
-  async vector(query, candidates) {
+  async vector(queryEmbedding, candidates) {
     // 意味検索用データが無い場合は検索語を送らない（不要な通信・費用を避ける）
     const embeddings = await db.embeddings
       .where("model")
@@ -379,8 +396,8 @@ const defaultDeps: HybridSearchDeps = {
     if (embeddings.length === 0) {
       throw new Error("意味検索用データがありません");
     }
-    // オフライン・未認証・フェアプレー関連の検索語などは例外 → キーワード検索のみで継続する
-    const queryVector = await generateQueryEmbedding(query);
+    // オフライン・未認証・送らなかった検索語などは例外 → キーワード検索のみで継続する
+    const queryVector = await queryEmbedding();
     return scoreByVector(
       queryVector,
       candidates,

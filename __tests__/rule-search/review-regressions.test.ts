@@ -205,7 +205,7 @@ describe("Japanese natural-language queries (offline / weak vector)", () => {
   const search = (query: string, vector: HybridSearchDeps["vector"]) =>
     hybridSearch(
       query,
-      { tournamentId: undefined },
+      { tournamentId: undefined, queryEmbedding: async () => [1] },
       {
         loadCorpus: async () => ({ rules: corpusRules, sources: [] }),
         vector,

@@ -1,31 +1,74 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+
+const LLM_RESULT = {
+  classification: {
+    category: "player-behavior",
+    missingInformation: [],
+    followUpQuestions: ["電源は切れていましたか？"],
+    needsTournamentRules: true,
+    confidence: "medium",
+    method: "llm",
+  },
+};
+
+const send = vi.fn(async () => LLM_RESULT);
+const decline = vi.fn(() => ({
+  classification: null,
+  notice: "外部AIには送信していません。端末内のキーワード分類を表示しています",
+}));
+const prepare = vi.fn(async (_text: string, _options: unknown) => ({
+  status: "needs-confirmation" as const,
+  preview: {
+    destination: "カテゴリの提案（Gemini（Google））",
+    fields: [{ label: "送る記述", text: "〈選手A〉のスマホが鳴った" }],
+    notes: [],
+  },
+  send,
+  decline,
+}));
 
 vi.mock("@/lib/application/llm-classification", () => ({
-  classifyIncidentText: vi.fn(async () => ({
-    classification: {
-      category: "player-behavior",
-      missingInformation: [],
-      followUpQuestions: ["電源は切れていましたか？"],
-      needsTournamentRules: true,
-      confidence: "medium",
-      method: "llm",
-    },
-  })),
+  prepareIncidentClassification: (text: string, options: unknown) =>
+    prepare(text, options),
 }));
 
 import { IncidentTextClassifier } from "@/components/features/IncidentTextClassifier";
 
 describe("IncidentTextClassifier", () => {
-  it("shows the suggestion as a pre-fill only and applies it on confirmation", async () => {
+  beforeEach(() => {
+    send.mockClear();
+    decline.mockClear();
+    prepare.mockClear();
+  });
+  afterEach(cleanup);
+
+  function renderClassifier(doNotSend = false) {
     const onApply = vi.fn();
-    render(<IncidentTextClassifier onApply={onApply} />);
+    const onDoNotSendChange = vi.fn();
+    render(
+      <IncidentTextClassifier
+        onApply={onApply}
+        doNotSend={doNotSend}
+        onDoNotSendChange={onDoNotSendChange}
+      />
+    );
     fireEvent.change(screen.getByLabelText("状況を入力して分類（任意）"), {
-      target: { value: "黒がスマートウォッチを着けている" },
+      target: { value: "田中太郎のスマホが鳴った" },
     });
     fireEvent.click(screen.getByRole("button", { name: "カテゴリを提案" }));
+    return { onApply, onDoNotSendChange };
+  }
+
+  it("shows the de-identified payload and sends only after confirmation; the suggestion is a pre-fill only", async () => {
+    const { onApply } = renderClassifier();
+
+    expect(await screen.findByText("〈選手A〉のスマホが鳴った")).toBeTruthy();
+    expect(send).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "確認してAIで分類" }));
 
     expect(await screen.findByText("AI分類（提案）")).toBeTruthy();
+    expect(send).toHaveBeenCalledTimes(1);
     expect(screen.getByText("プレイヤー行動")).toBeTruthy();
     expect(screen.getByText("大会規定を確認")).toBeTruthy();
     expect(screen.getByText("電源は切れていましたか？")).toBeTruthy();
@@ -36,7 +79,25 @@ describe("IncidentTextClassifier", () => {
     );
     expect(onApply).toHaveBeenCalledWith(
       expect.objectContaining({ category: "player-behavior" }),
-      "黒がスマートウォッチを着けている"
+      "田中太郎のスマホが鳴った"
     );
+  });
+
+  it("declining sends nothing", async () => {
+    renderClassifier();
+    fireEvent.click(await screen.findByRole("button", { name: "送らない" }));
+    expect(send).not.toHaveBeenCalled();
+    expect(decline).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/外部AIには送信していません/)).toBeTruthy();
+  });
+
+  it("passes the opt-out switch to the guard", async () => {
+    const { onDoNotSendChange } = renderClassifier(true);
+    await screen.findByText("〈選手A〉のスマホが鳴った");
+    expect(prepare).toHaveBeenCalledWith("田中太郎のスマホが鳴った", {
+      doNotSend: true,
+    });
+    fireEvent.click(screen.getByRole("switch", { name: /外部AIに送らない/ }));
+    expect(onDoNotSendChange).toHaveBeenCalledWith(false);
   });
 });

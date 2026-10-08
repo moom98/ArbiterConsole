@@ -1,19 +1,27 @@
+import type { IncidentCategory } from "@/lib/domain/entities";
 import { parseLlmClassification } from "@/lib/domain/llm/classification";
+import { notSentNotice } from "@/lib/domain/llm/external-ai";
 import {
   classifyByKeywords,
   mentionsFairPlay,
 } from "@/lib/domain/llm/keyword-classifier";
-import type { IncidentClassification } from "@/lib/domain/llm/types";
-import { LLM_LIMITS } from "@/lib/infrastructure/llm/contract";
+import type {
+  ExternalAiPreview,
+  IncidentClassification,
+} from "@/lib/domain/llm/types";
+import { browserIsOnline } from "@/lib/infrastructure/llm/llm-api-client";
 import {
-  callLlmApi,
-  type LlmApiClientDeps,
-} from "@/lib/infrastructure/llm/llm-api-client";
+  prepareClassification,
+  type ExternalAiGuardDeps,
+} from "./external-ai-guard";
 
 /**
- * 自由記述のインシデント分類（要件 §11, ADR-007）。
- * オンラインでは Gemini（分類用の低コストモデル）を使い、オフライン・失敗・不正な出力の場合は
- * 端末内のキーワード分類にフォールバックする。
+ * 自由記述のインシデント分類（要件 §11, ADR-007, ADR-012）。
+ *
+ * 1. 外部AIガードが記述を確認する。止まった場合（機微な内容の可能性・「外部AIに送らない」）は
+ *    端末内のキーワード分類と「外部AIには送信していません（理由: …）」を返す
+ * 2. 通った場合は送信内容のプレビューを返す。アービターが確認してから send() で Gemini に送る（D13）
+ * 3. オフライン・失敗・不正な出力の場合はキーワード分類にフォールバックする
  *
  * 結果は**カテゴリ選択の提案（プレフィル）のみ**に使う。決定木の対象となる事象は、
  * 決定木の質問と判断が優先される（ADR-002）。
@@ -26,18 +34,33 @@ export interface ClassifyTextResult {
   notice?: string;
 }
 
-export interface ClassifyTextDeps extends LlmApiClientDeps {
-  call?: typeof callLlmApi;
+export type ClassificationStep =
+  /** 外部へ送らずに結果が決まった（キーワード分類） */
+  | { status: "done"; result: ClassifyTextResult }
+  /** 送信内容の確認が必要。send() で送り、decline() で送らずにキーワード分類にする */
+  | {
+      status: "needs-confirmation";
+      preview: ExternalAiPreview;
+      send(): Promise<ClassifyTextResult>;
+      decline(): ClassifyTextResult;
+    };
+
+export interface ClassifyTextOptions {
+  /** アービターが選んでいるカテゴリ（fair-play なら送らない） */
+  category?: IncidentCategory;
+  /** 「外部AIに送らない」 */
+  doNotSend?: boolean;
 }
 
-export async function classifyIncidentText(
+export async function prepareIncidentClassification(
   text: string,
-  deps: ClassifyTextDeps = {}
-): Promise<ClassifyTextResult> {
-  const input = text.trim().slice(0, LLM_LIMITS.maxClassifyTextChars);
-  if (!input) return { classification: null };
+  options: ClassifyTextOptions = {},
+  deps: ExternalAiGuardDeps = {}
+): Promise<ClassificationStep> {
+  const input = text.trim();
+  if (!input) return { status: "done", result: { classification: null } };
 
-  const fallback = (notice: string): ClassifyTextResult => ({
+  const keyword = (notice: string): ClassifyTextResult => ({
     classification: classifyByKeywords(input),
     notice,
   });
@@ -46,26 +69,55 @@ export async function classifyIncidentText(
   const local = classifyByKeywords(input);
   if (local?.category === "fair-play" || mentionsFairPlay(input)) {
     return {
-      classification: local,
-      notice:
-        "フェアプレー関連の可能性があるため、端末内のキーワード分類のみを使用しています（AIへは送信しません）",
+      status: "done",
+      result: {
+        classification: local,
+        notice:
+          "フェアプレー関連の可能性があるため、端末内のキーワード分類のみを使用しています（AIへは送信しません）",
+      },
     };
   }
 
-  const call = deps.call ?? callLlmApi;
-  const res = await call("classify", { text: input }, deps);
-  if (!res.ok) {
-    return fallback(
-      res.error.code === "offline"
-        ? "オフラインのため端末内のキーワード分類を表示しています（AI分類はオンライン時のみ）"
-        : `AI分類を利用できないため、キーワード分類を表示しています（${res.error.message}）`
-    );
-  }
-  const parsed = parseLlmClassification(res.result);
-  if (!parsed) {
-    return fallback(
-      "AIの分類結果を解釈できないため、キーワード分類を表示しています"
-    );
-  }
-  return { classification: parsed };
+  const guarded = await prepareClassification(input, options, deps);
+  if (guarded.status === "local")
+    return {
+      status: "done",
+      result: keyword(
+        `${notSentNotice(guarded.reasons)}。端末内のキーワード分類を表示しています`
+      ),
+    };
+
+  if (!(deps.isOnline ?? browserIsOnline)())
+    return {
+      status: "done",
+      result: keyword(
+        "オフラインのため端末内のキーワード分類を表示しています（AI分類はオンライン時のみ）"
+      ),
+    };
+
+  return {
+    status: "needs-confirmation",
+    preview: guarded.preview,
+    decline: () =>
+      keyword(
+        "外部AIには送信していません。端末内のキーワード分類を表示しています"
+      ),
+    async send() {
+      const res = await guarded.send();
+      if (!res.ok) {
+        return keyword(
+          res.error.code === "offline"
+            ? "オフラインのため端末内のキーワード分類を表示しています（AI分類はオンライン時のみ）"
+            : `AI分類を利用できないため、キーワード分類を表示しています（${res.error.message}）`
+        );
+      }
+      const parsed = parseLlmClassification(res.result);
+      if (!parsed) {
+        return keyword(
+          "AIの分類結果を解釈できないため、キーワード分類を表示しています"
+        );
+      }
+      return { classification: parsed };
+    },
+  };
 }

@@ -406,6 +406,11 @@ export interface Incident {
   rulesetSnapshot?: RulesetSnapshot;
   /** 自由記述（メモ）。判断には使用しない */
   description: string;
+  /**
+   * 「外部AIに送らない」（external-ai-data-protection.md §4.4）。オンなら、この事象の内容は
+   * 分類・AI参考情報・検索語のどれでも外部へ送らない（Sensitive Gate の L1）。索引なし
+   */
+  externalAiOptOut?: boolean;
   arbiterObserved: boolean;
   reportedBy: "arbiter" | "player-white" | "player-black";
   reportedAt: Date;

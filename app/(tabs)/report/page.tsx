@@ -10,6 +10,8 @@ import {
 import { DecisionDisplay } from "@/components/features/DecisionDisplay";
 import { FollowUpQuestions } from "@/components/features/FollowUpQuestions";
 import { IncidentTextClassifier } from "@/components/features/IncidentTextClassifier";
+import { ExternalAiOptOutSwitch } from "@/components/features/ExternalAiOptOutSwitch";
+import { ExternalAiSendConfirmation } from "@/components/features/ExternalAiSendConfirmation";
 import { LlmAccessTokenField } from "@/components/features/LlmAccessTokenField";
 import type { IncidentClassification } from "@/lib/domain/llm/types";
 import type {
@@ -72,6 +74,8 @@ export default function ReportPage() {
   const [selectedCategory, setSelectedCategory] =
     useState<IncidentCategory | null>(null);
   const [description, setDescription] = useState("");
+  /** 「外部AIに送らない」（§4.4）。分類と報告で共有し、Incident に保存する */
+  const [externalAiOptOut, setExternalAiOptOut] = useState(false);
   const [draft, setDraft] = useState<ContextDraft>({});
 
   // 大会の対局（ADR-006）。大会がない場合・暫定を選んだ場合は draft（ADR-004）を使う
@@ -102,6 +106,8 @@ export default function ReportPage() {
     submitIncident,
     answerFollowUp,
     retryEvaluation,
+    externalAiConfirmation,
+    confirmExternalAiSend,
     reset,
   } = useIncidentStore();
 
@@ -221,6 +227,7 @@ export default function ReportPage() {
       category: quick.category,
       subtype: quick.subtype,
       description: "",
+      externalAiOptOut,
       arbiterObserved: true,
     });
     if (res.ok) setStep("result");
@@ -254,6 +261,7 @@ export default function ReportPage() {
       ...target,
       category: selectedCategory,
       description,
+      externalAiOptOut,
       arbiterObserved: true,
     });
     if (res.ok) setStep("result");
@@ -270,6 +278,7 @@ export default function ReportPage() {
     setStep("context");
     setSelectedCategory(null);
     setDescription("");
+    setExternalAiOptOut(false);
     setSelectedGame(null);
     reset();
   };
@@ -597,6 +606,8 @@ export default function ReportPage() {
           )}
           <IncidentTextClassifier
             disabled={isProcessing || contextErrors.length > 0}
+            doNotSend={externalAiOptOut}
+            onDoNotSendChange={setExternalAiOptOut}
             onApply={handleApplySuggestion}
           />
           <p className="text-gray-600 mb-4">
@@ -644,6 +655,10 @@ export default function ReportPage() {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="例: Nf3 の後、キングがチェックのまま"
               className="w-full h-28 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <ExternalAiOptOutSwitch
+              checked={externalAiOptOut}
+              onChange={setExternalAiOptOut}
             />
             {!descriptionRequired && (
               <p className="text-sm text-gray-500 mt-2">
@@ -724,6 +739,16 @@ export default function ReportPage() {
             </div>
           ) : (
             <>
+              {externalAiConfirmation && (
+                <div className="mb-4">
+                  <ExternalAiSendConfirmation
+                    preview={externalAiConfirmation.preview}
+                    onConfirm={() => void confirmExternalAiSend()}
+                    disabled={isProcessing}
+                    confirmLabel="確認してAI参考情報を取得"
+                  />
+                </div>
+              )}
               <DecisionDisplay
                 decision={currentDecision}
                 onRetry={() => void retryEvaluation()}

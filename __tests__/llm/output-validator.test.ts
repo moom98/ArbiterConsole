@@ -455,4 +455,86 @@ describe("buildLlmDecision", () => {
     });
     expect(d.actions.at(-1)).toBe("確認が必要な情報: 着用に気付いた時刻");
   });
+
+  describe("re-identification on the device (external-ai-data-protection.md §6)", () => {
+    // 送った大会規定（置き換え後）。引用の照合と前後の文脈の切り出しはこの本文で行う
+    const SENT_TOURNAMENT = {
+      ...ARTICLES[0],
+      content:
+        "対局中、選手はスマートウォッチを含む電子機器を身に着けてはならない（担当: 〈人物1〉さん）。違反した場合、その対局は負けとする。",
+      sourceName: "大会規定",
+      sourceVersion: undefined,
+    };
+    const MAP: Record<string, string> = {
+      "〈選手A〉": "田中 太郎",
+      "〈人物1〉": "佐藤",
+    };
+    const reidentify = (text: string) => {
+      const unknown: string[] = [];
+      const out = text.replace(/〈[^〉]+〉/g, (ph) => {
+        if (MAP[ph] !== undefined) return MAP[ph];
+        unknown.push(ph);
+        return ph;
+      });
+      return { text: out, unknownPlaceholders: unknown };
+    };
+
+    it("validates and extracts quote context on the sent text, then re-identifies the displayed fields", () => {
+      const d = buildLlmDecision(fixedProviders(), {
+        ...input,
+        articles: [SENT_TOURNAMENT, ARTICLES[1]],
+        reidentify,
+        localSourceLabels: {
+          "rule-tournament-5": {
+            sourceName: "第1回テスト大会 大会規定",
+            sourceVersion: "2026",
+          },
+        },
+        raw: validDraft({
+          conclusion: "〈選手A〉は大会規定第5条により負けとなる。",
+          actions: ["〈選手A〉に確認する", "〈人物1〉さんへ連絡する"],
+          penalties: [
+            {
+              type: "game-loss",
+              playerColor: "black",
+              description: "〈選手A〉の電子機器の着用",
+              sourceArticleIds: ["rule-tournament-5"],
+            },
+          ],
+          escalationRecommended: true,
+          escalationReason: "〈選手A〉の負けはCAが確認する",
+          citations: [
+            {
+              articleId: "rule-tournament-5",
+              quote:
+                "対局中、選手はスマートウォッチを含む電子機器を身に着けてはならない",
+              relevance: "x",
+            },
+          ],
+        }),
+      });
+      expect(d.validationPassed).toBe(true);
+      expect(d.conclusion).toBe("田中 太郎は大会規定第5条により負けとなる。");
+      expect(d.actions).toEqual(["田中 太郎に確認する", "佐藤さんへ連絡する"]);
+      expect(d.penalties[0].description).toBe("田中 太郎の電子機器の着用");
+      expect(d.escalationReason).toBe("田中 太郎の負けはCAが確認する");
+      expect(d.sources[0].edition).toBe("第1回テスト大会 大会規定 2026");
+      expect(d.sources[0].quoteContext?.after).toBe("（担当: 佐藤さん）。");
+      expect(d.llm?.needsReview).toBeUndefined();
+    });
+
+    it("an unknown placeholder is kept, and the decision needs review with a CA escalation", () => {
+      const d = buildLlmDecision(fixedProviders(), {
+        ...input,
+        reidentify,
+        raw: validDraft({ conclusion: "〈選手B〉に確認する。" }),
+      });
+      expect(d.validationPassed).toBe(true);
+      expect(d.conclusion).toBe("〈選手B〉に確認する。");
+      expect(d.llm?.needsReview).toBe(true);
+      expect(d.llm?.message).toMatch(/〈選手B〉/);
+      expect(d.escalationRecommended).toBe(true);
+      expect(d.escalationReason).toMatch(/置き換え記号/);
+    });
+  });
 });

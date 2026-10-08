@@ -6,6 +6,7 @@ import type {
   RuleSourceType,
 } from "@/lib/domain/entities";
 import { validateDecision } from "@/lib/domain/decision-trees/validation";
+import type { ReidentifyResult } from "@/lib/domain/privacy";
 import type { DomainProviders } from "@/lib/domain/providers";
 import { validateLlmDecisionDraft } from "./output-validator";
 import { extractQuoteContext } from "./quote-match";
@@ -20,13 +21,24 @@ const SOURCE_LABELS: Record<RuleSourceType, string> = {
 
 export const LLM_REJECTED_CONCLUSION = "裁定を確定できません。";
 
-/** LLM に提示した条文を、表示用の引用（RuleSource の資料名・版・ページ付き）に変換する */
+/** 端末での表示に使う資料名・版（外部へは送っていないもの。例: 大会規定の資料名） */
+export interface LocalSourceLabel {
+  sourceName?: string;
+  sourceVersion?: string;
+}
+
+/**
+ * LLM に提示した条文を、表示用の引用（RuleSource の資料名・版・ページ付き）に変換する。
+ * 引用の前後の文脈は送った本文で切り出す（§6.1）。local があれば資料名・版はそれを使う
+ */
 export function citationFromArticle(
   article: LlmArticle,
-  quote: string
+  quote: string,
+  local?: LocalSourceLabel
 ): RuleCitation {
-  const edition = article.sourceName
-    ? [article.sourceName, article.sourceVersion].filter(Boolean).join(" ")
+  const names = local ?? article;
+  const edition = names.sourceName
+    ? [names.sourceName, names.sourceVersion].filter(Boolean).join(" ")
     : undefined;
   return {
     article: `${SOURCE_LABELS[article.source]} ${article.article}`.trim(),
@@ -49,7 +61,47 @@ export interface BuildLlmDecisionInput {
   model?: string;
   articles: readonly LlmArticle[];
   storedArticleIds?: readonly string[];
+  /**
+   * プレースホルダーを元の表記へ戻す（このリクエストの対応表。端末のメモリ内だけ）。
+   * 検証・引用の照合・前後の文脈の切り出しは送った本文で行い、その後に適用する（§6.1）
+   */
+  reidentify?: (text: string) => ReidentifyResult;
+  /** 条文 ID → 端末での表示用の資料名・版（送った条文では大会規定の資料名を伏せている） */
+  localSourceLabels?: Readonly<Record<string, LocalSourceLabel>>;
 }
+
+/** 元の表記への復元。対応表にないプレースホルダーを集める */
+class Reidentifier {
+  readonly unknown = new Set<string>();
+  constructor(private readonly fn?: (text: string) => ReidentifyResult) {}
+
+  text(value: string): string {
+    if (!this.fn) return value;
+    const r = this.fn(value);
+    for (const ph of r.unknownPlaceholders) this.unknown.add(ph);
+    return r.text;
+  }
+
+  optional(value: string | undefined): string | undefined {
+    return value === undefined ? undefined : this.text(value);
+  }
+
+  citation(c: RuleCitation): RuleCitation {
+    return {
+      ...c,
+      article: this.text(c.article),
+      text: this.optional(c.text),
+      quoteContext: c.quoteContext && {
+        before: this.text(c.quoteContext.before),
+        match: this.text(c.quoteContext.match),
+        after: this.text(c.quoteContext.after),
+      },
+    };
+  }
+}
+
+const NEEDS_REVIEW_REASON =
+  "AIの出力に、送信内容にない置き換え記号（〈…〉）が含まれています。記号はそのまま表示しています。原文と報告内容を確認し、CAへ確認してください。";
 
 /**
  * LLM の下書きを検証し、Decision を組み立てる（純粋関数。LLM は呼び出さない）。
@@ -90,7 +142,11 @@ export function buildLlmDecision(
     if (seen.has(c.articleId)) continue;
     seen.add(c.articleId);
     sources.push(
-      citationFromArticle(articleById.get(c.articleId) as LlmArticle, c.quote)
+      citationFromArticle(
+        articleById.get(c.articleId) as LlmArticle,
+        c.quote,
+        input.localSourceLabels?.[c.articleId]
+      )
     );
   }
 
@@ -116,28 +172,45 @@ export function buildLlmDecision(
     return rejected(base, generic.errors, input.model, candidateArticleIds);
   }
 
+  // 検証・照合の後に、表示する欄だけを元の表記へ戻す（§6.1, §6.2）
+  const re = new Reidentifier(input.reidentify);
+  const shown = {
+    conclusion: re.text(draft.conclusion),
+    actions: actions.map((a) => re.text(a)),
+    penalties: penalties.map((p) => ({
+      ...p,
+      description: re.text(p.description),
+    })),
+    sources: sources.map((c) => re.citation(c)),
+    escalationReason: draft.escalationRecommended
+      ? re.text(draft.escalationReason ?? "CAへ確認してください")
+      : undefined,
+  };
+  const needsReview = re.unknown.size > 0;
+  const messages = [
+    ...result.adjustments,
+    ...(needsReview
+      ? [`対応のない置き換え記号: ${Array.from(re.unknown).join("、")}`]
+      : []),
+  ];
+
   return {
     ...base,
     kind: "recommendation",
-    conclusion: draft.conclusion,
-    actions,
+    ...shown,
     intervention: draft.intervention,
-    penalties,
-    sources,
     confidence: draft.confidence,
-    escalationRecommended: draft.escalationRecommended,
-    escalationReason: draft.escalationRecommended
-      ? (draft.escalationReason ?? "CAへ確認してください")
-      : undefined,
+    escalationRecommended: draft.escalationRecommended || needsReview,
+    escalationReason: needsReview
+      ? [shown.escalationReason, NEEDS_REVIEW_REASON].filter(Boolean).join(" ")
+      : shown.escalationReason,
     validationPassed: true,
     llm: {
       status: "passed",
       model: input.model,
       candidateArticleIds,
-      message:
-        result.adjustments.length > 0
-          ? result.adjustments.join(" / ")
-          : undefined,
+      message: messages.length > 0 ? messages.join(" / ") : undefined,
+      ...(needsReview ? { needsReview: true } : {}),
     },
   };
 }

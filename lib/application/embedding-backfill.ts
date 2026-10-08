@@ -1,10 +1,11 @@
 import type { Embedding, Rule } from "@/lib/domain/entities";
 import { db, type ArbiterDatabase } from "@/lib/infrastructure/db";
+import { EMBEDDING_MODEL_ID } from "@/lib/infrastructure/embeddings/generator";
 import {
-  EMBEDDING_MODEL_ID,
-  generateEmbeddings,
-  type GenerateEmbeddingsOptions,
-} from "@/lib/infrastructure/embeddings/generator";
+  embedRuleDocuments,
+  type EmbedDocumentsOptions,
+  type EmbeddingDocument,
+} from "./external-ai-guard";
 import { LLM_LIMITS } from "@/lib/infrastructure/llm/contract";
 
 /**
@@ -17,9 +18,10 @@ import { LLM_LIMITS } from "@/lib/infrastructure/llm/contract";
 
 export interface BackfillDeps {
   database: ArbiterDatabase;
+  /** 外部AIガード経由の条文の埋め込み（大会規定は置き換えてから送る。ADR-012） */
   embed(
-    texts: readonly string[],
-    options: GenerateEmbeddingsOptions
+    documents: readonly EmbeddingDocument[],
+    options: EmbedDocumentsOptions
   ): Promise<number[][]>;
   modelId: string;
   now: () => Date;
@@ -28,7 +30,7 @@ export interface BackfillDeps {
 
 const defaultDeps: BackfillDeps = {
   database: db,
-  embed: generateEmbeddings,
+  embed: embedRuleDocuments,
   modelId: EMBEDDING_MODEL_ID,
   now: () => new Date(),
   newId: () => crypto.randomUUID(),
@@ -48,6 +50,13 @@ export function embeddingTextForRule(
   rule: Pick<Rule, "article" | "title" | "content">
 ): string {
   return `${rule.article} ${rule.title}\n${rule.content}`;
+}
+
+/** 埋め込みに送る条文（種別で外部AIガードの置き換えが変わる: 大会規定のみ置き換える） */
+export function embeddingDocumentForRule(
+  rule: Pick<Rule, "article" | "title" | "content" | "source">
+): EmbeddingDocument {
+  return { text: embeddingTextForRule(rule), sourceType: rule.source };
 }
 
 /** 検索対象（有効な資料・出典情報のない旧データ）のうち、現行モデルの埋め込みがない条文 */
@@ -105,7 +114,7 @@ async function run(
     const batch = missing.slice(start, start + LLM_LIMITS.maxEmbedTexts);
     let vectors: number[][];
     try {
-      vectors = await deps.embed(batch.map(embeddingTextForRule), {});
+      vectors = await deps.embed(batch.map(embeddingDocumentForRule), {});
     } catch (error) {
       return {
         created,

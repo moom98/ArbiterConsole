@@ -29,15 +29,16 @@ export interface LlmArticle {
   sourceVersion?: string;
   page?: number;
   priority: number;
-  tournamentId?: string;
 }
 
-/** 推論に渡す構造化コンテキスト（規則セットは明示的な入力: domain.md rule 5） */
+/**
+ * 推論に渡す構造化コンテキスト（規則セットは明示的な入力: domain.md rule 5）。
+ * 大会 ID は送らない（external-ai-data-protection.md §5.3）
+ */
 export interface LlmReasoningContext {
   competitionType: CompetitionType;
   supervisionRegime?: SupervisionRegime;
   rulesVersion: string;
-  tournamentId?: string;
 }
 
 export interface LlmIncidentSummary {
@@ -111,9 +112,34 @@ export interface LlmCitationDraft {
 // 分類（§11）
 // ---------------------------------------------------------------------------
 
-/** /api/llm/classify へのリクエスト本文 */
+/**
+ * /api/llm/classify へのリクエスト本文。narrative は外部AIガードで置き換え・最小化した記述
+ * （external-ai-data-protection.md §5.3。最大 500 文字）
+ */
 export interface LlmClassificationRequest {
+  narrative: string;
+}
+
+// ---------------------------------------------------------------------------
+// 外部AIへの送信前の確認（D13, external-ai-data-protection.md §3 F）
+// ---------------------------------------------------------------------------
+
+/** 送信前にアービターへ示す1項目（置き換え後の本文、またはコード） */
+export interface ExternalAiPreviewField {
+  label: string;
   text: string;
+}
+
+/**
+ * 外部AIへ送る内容のプレビュー。アービターが確認するまで何も送らない（D13）。
+ * 置き換え後の本文だけを含む（元の本文・対応表は含めない）
+ */
+export interface ExternalAiPreview {
+  /** 送り先の説明（例: "AI参考情報（Gemini）"） */
+  destination: string;
+  fields: ExternalAiPreviewField[];
+  /** 本文以外に添える内容の説明（例: 候補条文） */
+  notes: string[];
 }
 
 /**

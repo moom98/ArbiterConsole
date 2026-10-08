@@ -10,6 +10,7 @@ import type {
 import {
   DecisionEngine,
   type DecisionEngineResult,
+  type EvaluateOptions,
 } from "@/lib/domain/decision-engine";
 import {
   applyIncidentAnswers,
@@ -28,7 +29,8 @@ import { incidentStatusAfterDecision } from "@/lib/domain/services/incident-stat
 import { db as defaultDb, type ArbiterDatabase } from "@/lib/infrastructure/db";
 import { chessJsPositionPort } from "@/lib/infrastructure/chess/chess-js-position-port";
 import type { LlmAssistPort } from "@/lib/domain/llm/ports";
-import { createLlmAssistPort } from "@/lib/infrastructure/llm/llm-assist-port";
+import type { ExternalAiPreview } from "@/lib/domain/llm/types";
+import { createLlmAssistPort } from "@/lib/application/llm-assist";
 import {
   mateSearchNeeded,
   type HelpmateSearchPort,
@@ -57,6 +59,14 @@ export interface SubmitIncidentParams {
   subtype?: string;
   description: string;
   arbiterObserved: boolean;
+  /** 「外部AIに送らない」（external-ai-data-protection.md §4.4）。既定 false */
+  externalAiOptOut?: boolean;
+}
+
+/** 外部AIへ送る前の確認待ち（D13）。まだ何も送っていない */
+export interface ExternalAiConfirmation {
+  preview: ExternalAiPreview;
+  approvalKey: string;
 }
 
 export interface IncidentStore {
@@ -70,6 +80,8 @@ export interface IncidentStore {
   mateSearchPending: boolean;
   error: string | null;
   lastContext: ReportContext | null;
+  /** 外部AIへ送る内容の確認待ち（現在の Incident の AI 参考情報） */
+  externalAiConfirmation: ExternalAiConfirmation | null;
 
   loadLastContext: () => Promise<void>;
   /** 新しい Incident を登録し、判断支援を評価する */
@@ -78,8 +90,13 @@ export interface IncidentStore {
   answerFollowUp: (
     answers: Partial<Record<IncidentQuestionId, string>>
   ) => Promise<SubmitResult>;
-  /** 現在の Incident を再評価する（例: オフラインだった AI 参考情報をオンラインで再取得） */
+  /**
+   * 現在の Incident を再評価する（例: オフラインだった AI 参考情報をオンラインで再取得）。
+   * この Incident でアービターが確認済みの送信内容と同じなら、もう一度確認を求めずに送る
+   */
   retryEvaluation: () => Promise<SubmitResult>;
+  /** アービターが確認した内容（externalAiConfirmation）で AI 参考情報を取得する（D13） */
+  confirmExternalAiSend: () => Promise<SubmitResult>;
   reset: () => void;
 }
 
@@ -111,11 +128,11 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
   let inFlight = 0;
   const llm: LlmAssistPort | undefined = deps.llm
     ? {
-        assist: async (request) => {
+        assist: async (request, options) => {
           inFlight++;
           setLlmPending(true);
           try {
-            return await deps.llm!.assist(request);
+            return await deps.llm!.assist(request, options);
           } finally {
             inFlight--;
             setLlmPending(inFlight > 0);
@@ -164,7 +181,10 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
     }
   }
 
-  async function evaluate(input: Incident): Promise<DecisionEngineResult> {
+  async function evaluate(
+    input: Incident,
+    options: EvaluateOptions = {}
+  ): Promise<DecisionEngineResult> {
     const incident = await withMateSearch(input);
     const game = await db.games.get(incident.gameId);
     const ruleset = await rulesetFor(incident, game);
@@ -181,13 +201,16 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
     );
 
     // 決定木を優先し、対象外の事象のみ AI 参考情報を取得する（DecisionEngine.evaluate）
-    const result = await engine.evaluate({
-      incident,
-      ruleset,
-      illegalMoveHistory,
-      touchMoveViolations,
-      tournamentId: game?.tournamentId,
-    });
+    const result = await engine.evaluate(
+      {
+        incident,
+        ruleset,
+        illegalMoveHistory,
+        touchMoveViolations,
+        tournamentId: game?.tournamentId,
+      },
+      options
+    );
 
     const now = providers.now();
     if (result.requiresFollowUp) {
@@ -252,6 +275,8 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
 
   return create<IncidentStore>((set, get) => {
     setLlmPending = (pending) => set({ llmPending: pending });
+    /** アービターが確認した送信内容（Incident ごと。メモリ内だけ） */
+    let approved: { incidentId: string; approvalKey: string } | null = null;
     setMateSearchPending = (pending) => set({ mateSearchPending: pending });
     async function run(
       fn: () => Promise<{ incident: Incident; result: DecisionEngineResult }>,
@@ -264,6 +289,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
           currentIncident: null,
           currentDecision: null,
           followUpQuestions: [],
+          externalAiConfirmation: null,
         });
       }
       try {
@@ -272,6 +298,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
           currentIncident: incident,
           currentDecision: result.decision,
           followUpQuestions: result.followUpQuestions,
+          externalAiConfirmation: result.externalAiConfirmation ?? null,
         });
         return { ok: true, result };
       } catch (error) {
@@ -293,6 +320,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
       mateSearchPending: false,
       error: null,
       lastContext: null,
+      externalAiConfirmation: null,
 
       loadLastContext: async () => {
         try {
@@ -325,6 +353,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
               subtype: params.subtype,
               rulesetSnapshot: ruleset,
               description: params.description,
+              ...(params.externalAiOptOut ? { externalAiOptOut: true } : {}),
               arbiterObserved: params.arbiterObserved,
               reportedBy: "arbiter",
               reportedAt: now,
@@ -365,7 +394,12 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
             const current = get().currentIncident;
             if (!current) throw new Error("再評価するIncidentがありません");
             const stored = (await db.incidents.get(current.id)) ?? current;
-            const result = await evaluate(stored);
+            const result = await evaluate(stored, {
+              approvalKey:
+                approved?.incidentId === stored.id
+                  ? approved.approvalKey
+                  : undefined,
+            });
             return {
               incident: (await db.incidents.get(stored.id)) ?? stored,
               result,
@@ -374,13 +408,40 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
           { clearPrevious: false }
         ),
 
-      reset: () =>
+      confirmExternalAiSend: () =>
+        run(
+          async () => {
+            const current = get().currentIncident;
+            const confirmation = get().externalAiConfirmation;
+            if (!current || !confirmation)
+              throw new Error("確認する送信内容がありません");
+            const stored = (await db.incidents.get(current.id)) ?? current;
+            approved = {
+              incidentId: stored.id,
+              approvalKey: confirmation.approvalKey,
+            };
+            // 送る直前の内容が確認した内容と違えば、ポートは送らずにもう一度確認を求める
+            const result = await evaluate(stored, {
+              approvalKey: confirmation.approvalKey,
+            });
+            return {
+              incident: (await db.incidents.get(stored.id)) ?? stored,
+              result,
+            };
+          },
+          { clearPrevious: false }
+        ),
+
+      reset: () => {
+        approved = null;
         set({
           currentIncident: null,
           currentDecision: null,
           followUpQuestions: [],
+          externalAiConfirmation: null,
           error: null,
-        }),
+        });
+      },
     };
   });
 }

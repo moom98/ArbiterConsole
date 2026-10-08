@@ -397,23 +397,31 @@ describe("LLM route handler – reason", () => {
 });
 
 describe("LLM route handler – classify", () => {
-  it("uses the classifier model and validates the text", async () => {
+  it("uses the classifier model and validates the narrative", async () => {
     const generate = vi.fn<GenerateJsonFn>(async () => ({
       text: JSON.stringify({ category: "player-behavior" }),
     }));
     const handler = createLlmRouteHandler("classify", makeDeps(generate));
     const res = await handler(
-      request({ text: "スマートウォッチを着けている" })
+      request({ narrative: "スマートウォッチを着けている" })
     );
     expect(res.status).toBe(200);
     expect(generate.mock.calls[0][0].model).toBe("gemini-flash-lite-latest");
 
-    const bad = await handler(request({ text: "" }));
+    const bad = await handler(request({ narrative: "" }));
     expect(bad.status).toBe(400);
+    // 最小化した narrative の上限（500 文字。§5.3）
     const long = await handler(
-      request({ text: "x".repeat(LLM_LIMITS.maxClassifyTextChars + 1) })
+      request({
+        narrative: "x".repeat(LLM_LIMITS.maxClassifyNarrativeChars + 1),
+      })
     );
     expect(long.status).toBe(400);
+    // 旧クライアントの { text } は narrative がないため 400
+    const old = await handler(
+      request({ text: "スマートウォッチを着けている" })
+    );
+    expect(old.status).toBe(400);
   });
 });
 
@@ -567,9 +575,9 @@ describe("access control and cost caps (S-H1)", () => {
     expect((await reason(request(reasonBody()))).status).toBe(200);
     expect((await reason(request(reasonBody()))).status).toBe(429);
     // 分類は別のバケット
-    expect((await classify(request({ text: "スマホ" }))).status).toBe(200);
-    expect((await classify(request({ text: "スマホ" }))).status).toBe(200);
-    expect((await classify(request({ text: "スマホ" }))).status).toBe(429);
+    expect((await classify(request({ narrative: "スマホ" }))).status).toBe(200);
+    expect((await classify(request({ narrative: "スマホ" }))).status).toBe(200);
+    expect((await classify(request({ narrative: "スマホ" }))).status).toBe(429);
   });
 
   it("fails closed in production when no access token is configured", async () => {
@@ -651,7 +659,8 @@ describe("access control and cost caps (S-H1)", () => {
     expect(res2.status).toBe(400);
     const classify = createLlmRouteHandler("classify", makeDeps(generate));
     expect(
-      (await classify(request({ text: "Suspected engine assistance" }))).status
+      (await classify(request({ narrative: "Suspected engine assistance" })))
+        .status
     ).toBe(400);
     expect(generate).not.toHaveBeenCalled();
   });

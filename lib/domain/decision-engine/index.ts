@@ -61,6 +61,8 @@ import {
 import { touchObligation } from "@/lib/domain/services/touch-move";
 import { lastPeriodFromTimeControl } from "@/lib/domain/services/time-control";
 import type { LlmAssistOutcome, LlmAssistPort } from "@/lib/domain/llm/ports";
+import type { ExternalAiPreview } from "@/lib/domain/llm/types";
+import { notSentNotice } from "@/lib/domain/llm/external-ai";
 import { buildLlmDecision } from "@/lib/domain/llm/llm-decision";
 import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
 import {
@@ -97,6 +99,8 @@ function isUncovered(
 }
 
 const OFFLINE_AI_NOTE = "オンライン時にAI参考情報を取得できます。";
+const AWAITING_CONFIRMATION_NOTE =
+  "AI参考情報が必要な場合は、外部AIへ送る内容を確認してください。";
 
 /**
  * 判断に用いる規則セット。すべて明示的に与えること（既定値を仮定しない）。
@@ -141,6 +145,19 @@ export interface DecisionEngineResult {
   requiresFollowUp: boolean;
   /** requiresFollowUp の場合に回答が必要な質問 */
   followUpQuestions: FollowUpQuestion[];
+  /**
+   * AI 参考情報を取得する前に、アービターが外部AIへ送る内容を確認する必要がある（D13）。
+   * decision は手動確認（まだ何も送っていない）。確認後に approvalKey を付けて evaluate する
+   */
+  externalAiConfirmation?: {
+    preview: ExternalAiPreview;
+    approvalKey: string;
+  };
+}
+
+export interface EvaluateOptions {
+  /** アービターが確認した外部AIへの送信内容（LlmAssistPort の approvalKey） */
+  approvalKey?: string;
 }
 
 /**
@@ -169,7 +186,8 @@ export class DecisionEngine {
    * 決定木の対象外の事象のみ、LLM ポートが注入されていれば AI 参考情報を取得する。
    */
   async evaluate(
-    context: DecisionEngineContext
+    context: DecisionEngineContext,
+    options: EvaluateOptions = {}
   ): Promise<DecisionEngineResult> {
     const routed = this.routeResolvingUnknown(context);
     if (!isUncovered(routed)) return routed;
@@ -180,21 +198,25 @@ export class DecisionEngine {
 
     let outcome: LlmAssistOutcome;
     try {
-      outcome = await this.deps.llm.assist({
-        incident: {
-          category: incident.category,
-          subtype: incident.subtype,
-          playerColor: incident.playerColor,
-          description: incident.description,
-          arbiterObserved: incident.arbiterObserved,
-        },
-        context: {
-          competitionType: routed.ruleset.competitionType,
-          supervisionRegime: routed.ruleset.supervisionRegime,
-          rulesVersion: routed.rulesVersion,
+      outcome = await this.deps.llm.assist(
+        {
+          incident: {
+            category: incident.category,
+            subtype: incident.subtype,
+            playerColor: incident.playerColor,
+            description: incident.description,
+            arbiterObserved: incident.arbiterObserved,
+          },
+          context: {
+            competitionType: routed.ruleset.competitionType,
+            supervisionRegime: routed.ruleset.supervisionRegime,
+            rulesVersion: routed.rulesVersion,
+          },
           tournamentId: context.tournamentId,
+          doNotSend: incident.externalAiOptOut === true,
         },
-      });
+        { approvalKey: options.approvalKey }
+      );
     } catch (error) {
       outcome = {
         status: "error",
@@ -220,8 +242,37 @@ export class DecisionEngine {
           model: outcome.model,
           articles: outcome.articles,
           storedArticleIds: outcome.storedArticleIds,
+          reidentify: outcome.reidentify,
+          localSourceLabels: outcome.localSourceLabels,
         });
         return { decision, requiresFollowUp: false, followUpQuestions: [] };
+      }
+      case "needs-confirmation":
+        // まだ何も送っていない。手動確認の判断を先に示し、確認後に AI 参考情報で置き換える
+        return {
+          ...this.manualReview(incident, rulesVersion, {
+            extraAction: AWAITING_CONFIRMATION_NOTE,
+            escalationReason:
+              "AI参考情報は、外部AIへ送る内容をアービターが確認した後に取得します。CAへ確認してください。",
+            llm: { status: "awaiting-confirmation" },
+          }),
+          externalAiConfirmation: {
+            preview: outcome.preview,
+            approvalKey: outcome.approvalKey,
+          },
+        };
+      case "not-sent": {
+        // 機微な内容の可能性: 外部へ送らずローカルで処理する（D10, §4.3）
+        const notice = notSentNotice(outcome.reasons);
+        return this.manualReview(incident, rulesVersion, {
+          extraAction: notice,
+          escalationReason: `${notice}。CAへ確認してください。`,
+          llm: {
+            status: "not-sent",
+            message: notice,
+            gateReasons: [...outcome.reasons],
+          },
+        });
       }
       case "offline":
         return this.manualReview(incident, rulesVersion, {

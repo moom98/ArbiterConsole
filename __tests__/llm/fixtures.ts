@@ -25,7 +25,6 @@ export const ARTICLE_TOURNAMENT_5: LlmArticle = {
   sourceVersion: "2026",
   page: 2,
   priority: 1000,
-  tournamentId: "t1",
 };
 
 export const ARTICLES = [ARTICLE_TOURNAMENT_5, ARTICLE_FIDE_11_3];

@@ -7,6 +7,10 @@ import type {
   RuleSearchResult,
 } from "@/lib/infrastructure/ai";
 import type { RuleSource, RuleSourceType } from "@/lib/domain/entities";
+import type { ExternalAiPreview } from "@/lib/domain/llm/types";
+import { notSentNotice } from "@/lib/domain/llm/external-ai";
+import { prepareEmbeddingQuery } from "@/lib/application/external-ai-guard";
+import { ExternalAiSendConfirmation } from "@/components/features/ExternalAiSendConfirmation";
 
 const SOURCE_LABEL: Record<RuleSourceType, string> = {
   tournament: "大会規定",
@@ -28,12 +32,28 @@ function sourceLine(result: RuleSearchResult): string {
   return parts.filter(Boolean).join(" ");
 }
 
+/**
+ * 意味検索（検索語を外部AIへ送る）の状態。キーワード検索の結果は先に表示し、意味検索は
+ * 置き換えた検索語をアービターが確認してから行う（ADR-012 改訂2, D13）
+ */
+type SemanticState =
+  | { status: "none" }
+  | { status: "not-sent"; notice: string }
+  | {
+      status: "needs-confirmation";
+      query: string;
+      preview: ExternalAiPreview;
+      embed: () => Promise<number[]>;
+    }
+  | { status: "done" };
+
 export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [response, setResponse] = useState<HybridSearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<RuleSearchResult | null>(null);
+  const [semantic, setSemantic] = useState<SemanticState>({ status: "none" });
   const requestIdRef = useRef(0);
   const { active: activeTournament, load: loadTournaments } =
     useTournamentStore();
@@ -52,17 +72,35 @@ export default function SearchPage() {
     setLoading(true);
     setError(null);
     setSelected(null);
+    setSemantic({ status: "none" });
 
     try {
-      const { hybridSearch } = await import("@/lib/infrastructure/ai");
+      const { hybridSearch, hasSemanticSearchData } =
+        await import("@/lib/infrastructure/ai");
       // 選択中の大会の大会固有規定を検索対象に含め、最優先で表示する（大会 > JCF > FIDE）。
       // 大会未選択の場合、大会固有規定は対象外。
+      // まずキーワード検索のみ（検索語は端末の外へ出さない）
       const searchResponse = await hybridSearch(trimmed, {
         tournamentId: activeTournament?.id,
         limit: 10,
       });
       if (requestId !== requestIdRef.current) return;
       setResponse(searchResponse);
+      // 意味検索用データがある場合だけ、送る検索語を用意する（確認するまで送らない）
+      if (await hasSemanticSearchData()) {
+        const guarded = await prepareEmbeddingQuery(trimmed);
+        if (requestId !== requestIdRef.current) return;
+        setSemantic(
+          guarded.status === "local"
+            ? { status: "not-sent", notice: notSentNotice(guarded.reasons) }
+            : {
+                status: "needs-confirmation",
+                query: trimmed,
+                preview: guarded.preview,
+                embed: guarded.send,
+              }
+        );
+      }
     } catch (err) {
       if (requestId !== requestIdRef.current) return;
       console.error("Search error:", err);
@@ -74,6 +112,30 @@ export default function SearchPage() {
       if (requestId === requestIdRef.current) {
         setLoading(false);
       }
+    }
+  };
+
+  const handleSemanticSearch = async () => {
+    if (semantic.status !== "needs-confirmation" || loading) return;
+    const requestId = ++requestIdRef.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const { hybridSearch } = await import("@/lib/infrastructure/ai");
+      const searchResponse = await hybridSearch(semantic.query, {
+        tournamentId: activeTournament?.id,
+        limit: 10,
+        queryEmbedding: semantic.embed,
+      });
+      if (requestId !== requestIdRef.current) return;
+      setResponse(searchResponse);
+      setSemantic({ status: "done" });
+    } catch (err) {
+      if (requestId !== requestIdRef.current) return;
+      console.error("Search error:", err);
+      setError("意味検索中にエラーが発生しました。");
+    } finally {
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   };
 
@@ -146,6 +208,24 @@ export default function SearchPage() {
               意味検索を利用できないため、キーワード一致の結果のみ表示しています（
               {response.failures.vector}）。
               オフライン・AIのアクセストークン未入力・意味検索用データ未作成の場合はキーワード検索のみになります（設定画面で確認できます）
+            </p>
+          )}
+          {semantic.status === "needs-confirmation" && (
+            <div className="mb-3">
+              <ExternalAiSendConfirmation
+                preview={semantic.preview}
+                onConfirm={() => void handleSemanticSearch()}
+                disabled={loading}
+                confirmLabel="確認して意味検索も行う"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                下はキーワード一致の結果です。意味検索は、送る検索語を確認した後に行います。
+              </p>
+            </div>
+          )}
+          {semantic.status === "not-sent" && (
+            <p className="mb-3 text-sm bg-gray-50 border border-gray-200 text-gray-700 rounded-lg p-3">
+              {semantic.notice}。キーワード一致の結果のみ表示しています。
             </p>
           )}
           {response.failures.fulltext && (

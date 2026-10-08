@@ -105,11 +105,18 @@ export function validateClassificationRequest(
       errors: ["本文はJSONオブジェクトである必要があります"],
     };
   const c = new Checker();
-  const text = c.str(body, "text", "text", LLM_LIMITS.maxClassifyTextChars);
-  if (typeof text === "string" && mentionsFairPlay(text))
+  // 外部AIガードで置き換え・最小化した narrative のみ（ADR-012 §5.3）。
+  // 旧クライアントの { text } の拒否と L5 の再確認は J1a-3 で追加する
+  const narrative = c.str(
+    body,
+    "narrative",
+    "narrative",
+    LLM_LIMITS.maxClassifyNarrativeChars
+  );
+  if (typeof narrative === "string" && mentionsFairPlay(narrative))
     c.errors.push(FAIR_PLAY_NOT_SENT);
   if (c.errors.length > 0) return { ok: false, errors: c.errors };
-  return { ok: true, value: { text: text as string } };
+  return { ok: true, value: { narrative: narrative as string } };
 }
 
 /**
@@ -230,13 +237,6 @@ export function validateReasoningRequest(
     "context.rulesVersion",
     LLM_LIMITS.maxShortChars
   );
-  const tournamentId = c.str(
-    ctx,
-    "tournamentId",
-    "context.tournamentId",
-    LLM_LIMITS.maxIdChars,
-    true
-  );
   if (competitionType && competitionType !== "standard" && !supervisionRegime) {
     c.errors.push("Rapid / Blitz では context.supervisionRegime が必須です");
   }
@@ -290,13 +290,6 @@ export function validateReasoningRequest(
         LLM_LIMITS.maxShortChars,
         true
       );
-      const tId = c.str(
-        a,
-        "tournamentId",
-        `${p}.tournamentId`,
-        LLM_LIMITS.maxIdChars,
-        true
-      );
       const page = a.page;
       if (
         page !== undefined &&
@@ -324,7 +317,6 @@ export function validateReasoningRequest(
           sourceVersion,
           page: typeof page === "number" ? page : undefined,
           priority,
-          tournamentId: tId,
         });
       }
     });
@@ -345,7 +337,6 @@ export function validateReasoningRequest(
         competitionType: competitionType as CompetitionType,
         supervisionRegime,
         rulesVersion: rulesVersion as string,
-        tournamentId,
       },
       articles,
     },

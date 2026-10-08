@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import {
-  classifyIncidentText,
+  prepareIncidentClassification,
+  type ClassificationStep,
   type ClassifyTextResult,
 } from "@/lib/application/llm-classification";
+import { ExternalAiSendConfirmation } from "./ExternalAiSendConfirmation";
+import { ExternalAiOptOutSwitch } from "./ExternalAiOptOutSwitch";
 import { CATEGORY_LABELS } from "@/lib/application/incident-labels";
 import type { IncidentClassification } from "@/lib/domain/llm/types";
 import {
@@ -17,6 +20,9 @@ import { TOUCH_MOVE_SUBTYPE } from "@/lib/domain/entities";
 
 interface IncidentTextClassifierProps {
   disabled?: boolean;
+  /** 「外部AIに送らない」（報告画面で共有。external-ai-data-protection.md §4.4） */
+  doNotSend: boolean;
+  onDoNotSendChange: (value: boolean) => void;
   /** 提案を採用する（カテゴリ・subtype・説明文のプレフィル） */
   onApply: (classification: IncidentClassification, text: string) => void;
 }
@@ -40,20 +46,52 @@ function subtypeLabel(c: IncidentClassification): string | undefined {
  */
 export function IncidentTextClassifier({
   disabled,
+  doNotSend,
+  onDoNotSendChange,
   onApply,
 }: IncidentTextClassifierProps) {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ClassifyTextResult | null>(null);
+  /** 外部AIへ送る内容の確認待ち（まだ送っていない。D13） */
+  const [pending, setPending] = useState<Extract<
+    ClassificationStep,
+    { status: "needs-confirmation" }
+  > | null>(null);
+
+  const clear = () => {
+    setResult(null);
+    setPending(null);
+  };
 
   const handleClassify = async () => {
     setLoading(true);
-    setResult(null);
+    clear();
     try {
-      setResult(await classifyIncidentText(text));
+      const step = await prepareIncidentClassification(text, { doNotSend });
+      if (step.status === "done") setResult(step.result);
+      else setPending(step);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSend = async () => {
+    if (!pending) return;
+    setLoading(true);
+    try {
+      const r = await pending.send();
+      setPending(null);
+      setResult(r);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDecline = () => {
+    if (!pending) return;
+    setResult(pending.decline());
+    setPending(null);
   };
 
   const c = result?.classification ?? null;
@@ -71,10 +109,17 @@ export function IncidentTextClassifier({
         value={text}
         onChange={(e) => {
           setText(e.target.value);
-          setResult(null);
+          clear();
         }}
         placeholder="例: 黒がスマートウォッチを着けている"
         className="w-full h-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <ExternalAiOptOutSwitch
+        checked={doNotSend}
+        onChange={(v) => {
+          onDoNotSendChange(v);
+          clear();
+        }}
       />
       <button
         type="button"
@@ -84,6 +129,18 @@ export function IncidentTextClassifier({
       >
         {loading ? "分類中..." : "カテゴリを提案"}
       </button>
+
+      {pending && (
+        <div className="mt-3">
+          <ExternalAiSendConfirmation
+            preview={pending.preview}
+            onConfirm={() => void handleSend()}
+            onDecline={handleDecline}
+            disabled={disabled || loading}
+            confirmLabel="確認してAIで分類"
+          />
+        </div>
+      )}
 
       {result && !c && (
         <p role="status" className="mt-3 text-sm text-gray-700">

@@ -20,6 +20,8 @@ import {
 import { getRuleStatistics } from "@/lib/application/rule-library";
 import { ArbiterDatabase, db } from "@/lib/infrastructure/db";
 import { hybridSearch } from "@/lib/infrastructure/ai/hybrid-search";
+import { prepareEmbeddingQuery } from "@/lib/application/external-ai-guard";
+import { NO_IDENTIFIERS } from "@/lib/domain/privacy";
 import { clearFulltextIndex } from "@/lib/infrastructure/ai/fulltext-search";
 import type { Embedding } from "@/lib/domain/entities";
 import { makeRule, makeSource } from "./fixtures";
@@ -239,7 +241,7 @@ describe("generateMissingEmbeddings (backfill)", () => {
     const { rules } = await seed(2);
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => (release = r));
-    const embed = vi.fn(async (texts: readonly string[]) => {
+    const embed = vi.fn(async (texts: readonly unknown[]) => {
       await gate;
       return texts.map(() => vec(1));
     });
@@ -288,7 +290,7 @@ describe("rule statistics and search with Gemini embeddings", () => {
     expect(stats.sources[0].embeddingCount).toBe(1);
   });
 
-  it("does not call the server when no embeddings exist, and uses the query vector when they do", async () => {
+  it("sends nothing without a confirmed query, nothing without embeddings, and the de-identified query vector when both exist", async () => {
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
       const body = JSON.parse(String(init.body)) as { texts: string[] };
       return new Response(
@@ -311,8 +313,23 @@ describe("rule statistics and search with Gemini embeddings", () => {
     await db.ruleSources.add(source);
     await db.rules.add(rule);
 
+    // 確認済みの検索語がなければ意味検索はしない（キーワード検索のみ。失敗でもない）
+    const unconfirmed = await hybridSearch("illegal", {
+      tournamentId: undefined,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(unconfirmed.failures).toEqual({});
+
+    const guarded = await prepareEmbeddingQuery(
+      "違法な手を指した",
+      {},
+      { identifiers: async () => NO_IDENTIFIERS }
+    );
+    if (guarded.status !== "needs-confirmation") throw new Error("not clear");
+
     const keywordOnly = await hybridSearch("illegal", {
       tournamentId: undefined,
+      queryEmbedding: guarded.send,
     });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(keywordOnly.failures.vector).toMatch(/意味検索用データがありません/);
@@ -326,8 +343,12 @@ describe("rule statistics and search with Gemini embeddings", () => {
     });
     const both = await hybridSearch("違法な手を指した", {
       tournamentId: undefined,
+      queryEmbedding: guarded.send,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0][1].body)) as unknown
+    ).toEqual({ taskType: "query", texts: ["違法な手を指した"] });
     expect(both.failures.vector).toBeUndefined();
     expect(both.results[0]?.rule.id).toBe(rule.id);
     expect(both.results[0]?.methods).toContain("vector");

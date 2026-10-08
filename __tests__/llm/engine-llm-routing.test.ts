@@ -118,21 +118,26 @@ describe("DecisionEngine.evaluate – LLM routing", () => {
       },
       tournamentId: "t1",
     });
-    expect(assist).toHaveBeenCalledWith({
-      incident: {
-        category: "player-behavior",
-        subtype: undefined,
-        playerColor: "black",
-        description: "黒がスマートウォッチを着けている",
-        arbiterObserved: true,
-      },
-      context: {
-        competitionType: "blitz",
-        supervisionRegime: "competition-rules",
-        rulesVersion: "FIDE-2023",
+    expect(assist).toHaveBeenCalledWith(
+      {
+        incident: {
+          category: "player-behavior",
+          subtype: undefined,
+          playerColor: "black",
+          description: "黒がスマートウォッチを着けている",
+          arbiterObserved: true,
+        },
+        // 大会 ID は送る context に入れない（端末内の規則検索の範囲としてだけ渡す。§5.3）
+        context: {
+          competitionType: "blitz",
+          supervisionRegime: "competition-rules",
+          rulesVersion: "FIDE-2023",
+        },
         tournamentId: "t1",
+        doNotSend: false,
       },
-    });
+      { approvalKey: undefined }
+    );
     expect(r.requiresFollowUp).toBe(false);
     expect(r.decision.generatedBy).toBe("llm");
     expect(r.decision.validationPassed).toBe(true);
@@ -238,5 +243,76 @@ describe("DecisionEngine.evaluate – LLM routing", () => {
     });
     expect(r.decision.kind).toBe("manual-review");
     expect(r.decision.llm).toBeUndefined();
+  });
+});
+
+describe("DecisionEngine.evaluate – external AI confirmation and the Sensitive Gate (ADR-012)", () => {
+  const PREVIEW = {
+    destination: "AI参考情報（Gemini（Google））",
+    fields: [{ label: "送る記述", text: "黒のスマホが鳴った" }],
+    notes: [],
+  };
+
+  it("needs-confirmation → a manual-review decision now, with the preview and approval key for the store", async () => {
+    const { port: p, assist } = port({
+      status: "needs-confirmation",
+      preview: PREVIEW,
+      approvalKey: "key-1",
+    });
+    const engine = new DecisionEngine(fixedProviders(), { llm: p });
+    const r = await engine.evaluate({
+      incident: incident(),
+      ruleset: STANDARD,
+    });
+    expect(r.decision.kind).toBe("manual-review");
+    expect(r.decision.generatedBy).toBe("decision-tree");
+    expect(r.decision.llm?.status).toBe("awaiting-confirmation");
+    expect(r.decision.intervention).toBe("consult-ca");
+    expect(r.externalAiConfirmation).toEqual({
+      preview: PREVIEW,
+      approvalKey: "key-1",
+    });
+
+    // 確認後の評価では approvalKey をポートへ渡す
+    await engine.evaluate(
+      { incident: incident(), ruleset: STANDARD },
+      { approvalKey: "key-1" }
+    );
+    expect(assist).toHaveBeenLastCalledWith(expect.anything(), {
+      approvalKey: "key-1",
+    });
+  });
+
+  it("not-sent → local manual review with the reason codes and the notice (no text)", async () => {
+    const { port: p } = port({
+      status: "not-sent",
+      reasons: ["health", "context-uncertain"],
+    });
+    const r = await new DecisionEngine(fixedProviders(), { llm: p }).evaluate({
+      incident: incident(),
+      ruleset: STANDARD,
+    });
+    expect(r.externalAiConfirmation).toBeUndefined();
+    expect(r.decision.kind).toBe("manual-review");
+    expect(r.decision.llm).toMatchObject({
+      status: "not-sent",
+      gateReasons: ["health", "context-uncertain"],
+    });
+    expect(r.decision.actions.join()).toContain(
+      "外部AIには送信していません（理由: 健康・医療に関する記述、機微な内容か判断できない記述）"
+    );
+    expect(r.decision.escalationRecommended).toBe(true);
+  });
+
+  it("passes the opt-out switch to the port", async () => {
+    const { port: p, assist } = port(OK);
+    await new DecisionEngine(fixedProviders(), { llm: p }).evaluate({
+      incident: incident({ externalAiOptOut: true }),
+      ruleset: STANDARD,
+    });
+    expect(assist).toHaveBeenCalledWith(
+      expect.objectContaining({ doNotSend: true }),
+      { approvalKey: undefined }
+    );
   });
 });

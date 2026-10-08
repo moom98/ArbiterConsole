@@ -96,9 +96,17 @@ export type DecisionKind =
  * - offline:     オフラインのため LLM を呼び出さなかった
  * - unavailable: LLM の呼び出しに失敗した（サーバー未設定・タイムアウト等）
  * - no-articles: 関連する登録規則が見つからなかった（LLM を呼び出さない）
+ * - awaiting-confirmation: 外部AIへ送る内容をアービターが確認していない（まだ送っていない。D13）
+ * - not-sent:    Sensitive Gate・残存チェックにより外部AIへ送らなかった（ADR-012）
  */
 export type LlmAssistStatus =
-  "passed" | "rejected" | "offline" | "unavailable" | "no-articles";
+  | "passed"
+  | "rejected"
+  | "offline"
+  | "unavailable"
+  | "no-articles"
+  | "awaiting-confirmation"
+  | "not-sent";
 
 export interface LlmDecisionMeta {
   status: LlmAssistStatus;
@@ -110,6 +118,13 @@ export interface LlmDecisionMeta {
   message?: string;
   /** 失敗時のエラーコード（例: "unauthorized" はアクセストークンの入力が必要） */
   errorCode?: string;
+  /** not-sent の理由（Sensitive Gate の理由コード。本文は含めない） */
+  gateReasons?: string[];
+  /**
+   * AI の出力に、このリクエストの対応表にないプレースホルダー（〈選手C〉など）があった。
+   * そのまま表示し、要確認とする（external-ai-data-protection.md §6.2）
+   */
+  needsReview?: boolean;
 }
 
 export interface Decision {

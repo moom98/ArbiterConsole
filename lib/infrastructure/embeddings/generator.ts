@@ -4,8 +4,11 @@
  * Gemini Embedding をサーバールート /api/llm/embed 経由で呼び出す（API キーはサーバーのみ）。
  * 端末内のモデル（Transformers.js）は使わない（ADR-003 の自前配信モデルを置き換え）。
  * - 条文（document）: PDF 取り込み時・「意味検索用データを作成」時に 16 件ずつ送る
- * - 検索語（query）: 検索のたびに1件送る。フェアプレーに触れる検索語は送らない（§23）
+ * - 検索語（query）: アービターが送信内容を確認した検索語を1件送る
  * オフライン・トークン未設定・失敗時は呼び出し側がキーワード検索のみで継続する。
+ *
+ * このモジュールは通信手段（call）を持たない。外部AIガード（lib/application/external-ai-guard.ts）
+ * が置き換え・確認をしたうえで call を渡す（ADR-012: callLlmApi を使うのはガードだけ）。
  */
 import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
 import {
@@ -14,10 +17,11 @@ import {
   type EmbeddingTaskType,
   type LlmApiErrorCode,
 } from "@/lib/infrastructure/llm/contract";
-import {
-  callLlmApi,
-  type LlmApiClientDeps,
-} from "@/lib/infrastructure/llm/llm-api-client";
+import type { LlmApiClientDeps } from "@/lib/infrastructure/llm/llm-api-client";
+import type {
+  LlmApiKind,
+  LlmApiResponse,
+} from "@/lib/infrastructure/llm/contract";
 
 /** Embedding.model に保存する識別子（モデルと次元の組）。これと一致するベクトルのみ比較する */
 export const EMBEDDING_MODEL_ID: string = EMBEDDING_MODEL.key;
@@ -28,7 +32,12 @@ export class EmbeddingUnavailableError extends Error {
   partialVectors: number[][] = [];
 
   constructor(
-    readonly code: LlmApiErrorCode | "fair-play" | "invalid-response",
+    readonly code:
+      | LlmApiErrorCode
+      | "fair-play"
+      | "invalid-response"
+      /** 外部AIガードが送らなかった（機微な内容の可能性・未確認） */
+      | "not-sent",
     message: string
   ) {
     super(message);
@@ -36,8 +45,15 @@ export class EmbeddingUnavailableError extends Error {
   }
 }
 
+/** /api/llm/embed を呼ぶ手段（外部AIガードが渡す） */
+export type EmbedCall = (
+  kind: Extract<LlmApiKind, "embed">,
+  body: { taskType: EmbeddingTaskType; texts: string[] },
+  deps: LlmApiClientDeps
+) => Promise<LlmApiResponse>;
+
 export interface EmbeddingClientDeps extends LlmApiClientDeps {
-  call?: typeof callLlmApi;
+  call: EmbedCall;
   sleep?: (ms: number) => Promise<void>;
 }
 
@@ -45,7 +61,7 @@ export interface GenerateEmbeddingsOptions {
   onProgress?: (done: number, total: number) => void;
   /** 一時的な失敗で待機する前に呼ぶ（画面に「再試行中」を表示するため） */
   onRetry?: (waitMs: number) => void;
-  deps?: EmbeddingClientDeps;
+  deps: EmbeddingClientDeps;
 }
 
 /** 一時的な失敗（レート制限・混雑・タイムアウト・通信断）。条文の取り込みでは待って再試行する */
@@ -88,7 +104,7 @@ async function embedBatch(
   deps: EmbeddingClientDeps,
   onRetry?: (waitMs: number) => void
 ): Promise<number[][]> {
-  const call = deps.call ?? callLlmApi;
+  const call = deps.call;
   const sleep = deps.sleep ?? defaultSleep;
   for (let attempt = 0; ; attempt++) {
     const res = await call("embed", { taskType, texts }, deps);
@@ -120,9 +136,9 @@ async function embedBatch(
  */
 export async function generateEmbeddings(
   texts: readonly string[],
-  options: GenerateEmbeddingsOptions = {}
+  options: GenerateEmbeddingsOptions
 ): Promise<number[][]> {
-  const { onProgress, onRetry, deps = {} } = options;
+  const { onProgress, onRetry, deps } = options;
   const embeddings: number[][] = [];
   for (let start = 0; start < texts.length; start += LLM_LIMITS.maxEmbedTexts) {
     const batch = texts
@@ -158,11 +174,11 @@ export async function generateEmbeddings(
 
 /**
  * 検索語（query）の埋め込み。検索の応答を待たせないよう再試行しない。
- * フェアプレーに触れる検索語は送らない（キーワード検索のみになる）。
+ * query は外部AIガードで置き換えた検索語。フェアプレーに触れる検索語は送らない（多重防御）。
  */
 export async function generateQueryEmbedding(
   query: string,
-  deps: EmbeddingClientDeps = {}
+  deps: EmbeddingClientDeps
 ): Promise<number[]> {
   // フェアプレーの確認は切り詰める前の全文で行う
   if (mentionsFairPlay(query))

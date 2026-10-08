@@ -21,6 +21,10 @@ const LLM_UNAVAILABLE_LABELS: Partial<Record<LlmAssistStatus, string>> = {
   offline: "オフラインのためAI参考情報を取得していません（オンライン必須）",
   unavailable: "AI参考情報を取得できませんでした",
   "no-articles": "登録済みの規則に関連する条文が見つかりませんでした",
+  "awaiting-confirmation":
+    "AI参考情報はまだ取得していません（外部AIへ送る内容の確認が必要です）",
+  "not-sent":
+    "機微な内容の可能性があるため、外部AIには送信していません（端末内で処理）",
 };
 
 const PENALTY_LABELS: Record<PenaltyType, string> = {
@@ -123,6 +127,11 @@ export function DecisionDisplay({
               <span className="px-3 py-1 rounded text-xs font-semibold bg-amber-200 text-amber-950">
                 AI参考
               </span>
+              {decision.llm?.needsReview && (
+                <span className="px-3 py-1 rounded text-xs font-semibold bg-red-100 text-red-800">
+                  要確認
+                </span>
+              )}
               <span
                 className={`px-3 py-1 rounded text-xs font-semibold ${
                   decision.validationPassed
@@ -150,9 +159,10 @@ export function DecisionDisplay({
           className="mb-4 p-3 bg-gray-50 border border-gray-300 rounded text-sm text-gray-800"
         >
           <p className="font-semibold">{unavailableLabel}</p>
-          {llmStatus === "unavailable" && decision.llm?.message && (
-            <p className="mt-1 text-gray-600">{decision.llm.message}</p>
-          )}
+          {(llmStatus === "unavailable" || llmStatus === "not-sent") &&
+            decision.llm?.message && (
+              <p className="mt-1 text-gray-600">{decision.llm.message}</p>
+            )}
           {canRetry && (
             <button
               type="button"

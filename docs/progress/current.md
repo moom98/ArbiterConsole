@@ -177,7 +177,7 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 - tsc is clean; eslint reports 0 problems; 73 files / 1444 tests pass; `npm run build` and `npm run cf:build` succeed.
 - New: `__tests__/privacy/server-recheck.test.ts`, which includes the client/server agreement on all fixture sets and real guard bodies through the server validators.
 - Extended: the route, embed and client tests.
-- Review: FIX REQUIRED (1 must-fix, 5 should-fix) → fixed → re-review (see the milestone file).
+- Review: FIX REQUIRED (1 must-fix, 5 should-fix) → fixed → re-review MERGE.
 
 **J1a-2 external-AI guard (2026-10-09, `feature/fact-catalog`):**
 
@@ -290,6 +290,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 - **J1a-3:**
   - The server cannot tell a tournament article mislabelled as FIDE, or which source a document embedding comes from; their text is not checked (§2, accepted).
   - An E2 failure shows the generic reason `residual`.
+  - FIDE/JCF labels such as 「FIDE 2023」 are matched by rule 5 and not sent. They are still shown on the device.
   - `generateEmbeddings` cuts documents with `slice(0, 2000)` and can split a placeholder (pre-existing; use `truncate`).
 - **J1a-2:**
   - The incident log detail has no "retry / confirm AI send" for decisions left `offline`, `unavailable` or `awaiting-confirmation` (the report screen does). This is an existing limitation, now more frequent.

@@ -504,7 +504,7 @@ The pure package is now used by every client path that reaches `/api/llm/*`. The
   - `toSentArticles` (`external-ai-guard.ts`) drops an article in two cases:
     - its id is not an identifier (`ARTICLE_ID`, shared with the server through the contract);
     - it is a tournament article whose number, title or content fails `recheckRegulationText`. Truncation at 4,000 characters can create a match; for example a 13-digit number cut to a phone-number shape.
-  - For FIDE, JCF and commentary articles, `toSentArticles` leaves out a `sourceName` or `sourceVersion` that fails the same check.
+  - For FIDE, JCF and commentary articles, `toSentArticles` leaves out a `sourceName` or `sourceVersion` that fails the same check. Rule 5 also matches labels such as 「FIDE 2023」 or 「JCF2024」, so they are left out of the request too. Citations on the device still use the local labels.
   - The guard sends `subtype` only if `isReportableSubtype` accepts it, so old data with a free-text subtype is not rejected.
   - On the synthetic fixture sets (benign, benign-review, pii; 4 routes), E2 stops nothing that A–E let through, so usefulness is unchanged. `__tests__/privacy/server-recheck.test.ts` locks this. It also builds real request bodies with the guard and checks that the server validators accept them.
 

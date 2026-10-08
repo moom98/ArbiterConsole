@@ -84,9 +84,11 @@
   - S4: docs and ADR.
   - S5: test gaps.
   - All were fixed in `99b4438`. The nit (E2 failures report the reason `residual`, not the gate codes) was accepted.
-- **Re-review:** see the follow-up commit.
+- **Re-review: MERGE.** No must-fix or should-fix items remain. The nits are recorded under Known issues.
 
 ## Known issues
+
+- FIDE/JCF source labels that rule 5 (labelled IDs) matches are not sent to the model, for example 「FIDE 2023」, 「JCF2024」 or 「No.3」. The citations on the device still show the local labels. This is fail-safe; if needed, exempt a leading FIDE/JCF token that matches the source type.
 
 - The server cannot tell a tournament article mislabelled as FIDE, or which source a document embedding comes from. Their text is not checked (rule text, §2). The client guard is the primary control.
 - An E2 failure shows the generic reason `residual`, even when the finding was a gate code.

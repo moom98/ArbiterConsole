@@ -22,6 +22,14 @@ import type {
   TouchWhatNext,
 } from "@/lib/domain/entities";
 import { TOUCH_MOVE_SUBTYPE } from "@/lib/domain/entities";
+import {
+  ENDED_BEFORE_FLAG_LABELS,
+  ENDED_BEFORE_FLAG_VALUES,
+  GAME_END_EVENT_LABELS,
+  GAME_END_EVENTS,
+  GAME_RECORD_STATE_LABELS,
+  GAME_RECORD_STATES,
+} from "@/lib/domain/services/game-end";
 
 /**
  * 追加確認質問（要件 §12）。
@@ -32,7 +40,8 @@ export type IncidentQuestionId =
   // 違法手（DT-001 / DT-002 / DT-003）
   | "playerColor"
   | "subtype"
-  | "gameEnded"
+  | "gameEndEvent"
+  | "gameRecordState"
   | "clockPressed"
   | "opponentMadeNextMove"
   | "detectedBy"
@@ -43,7 +52,7 @@ export type IncidentQuestionId =
   | "bothFlagsOrder"
   | "quickplayGuidelinesApply"
   | "lastPeriod"
-  | "gameEndedBeforeFlag"
+  | "endedBeforeFlag"
   | "movesNotCompleted"
   | "positionFen"
   // メイト可能性の局面（DT-001〜004。ADR-014 §5）
@@ -238,12 +247,35 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
       { value: TOUCH_MOVE_SUBTYPE, label: TOUCH_MOVE_LABEL, enumerate: false },
     ],
   },
-  gameEnded: {
-    id: "gameEnded",
+  gameEndEvent: {
+    id: "gameEndEvent",
     scope: "incident",
-    label: "対局はすでに終了していますか？",
-    help: "棋譜に署名済み、またはその他の方法で対局終了が明らかな場合は「はい」",
-    options: YES_NO,
+    label:
+      "違法手に気づいた時点で、対局を終わらせた出来事はありましたか？（観察したもの）",
+    help: "握手だけでは対局の終了として扱いません。投了やドローの合意の発言・動作、結果の記入などで終了を確認できない場合は「わからない・確認できない」を選んでください（ADR-014 §3）。",
+    options: GAME_END_EVENTS.map((value) => ({
+      value,
+      label: GAME_END_EVENT_LABELS[value],
+    })),
+  },
+  gameRecordState: {
+    id: "gameRecordState",
+    scope: "incident",
+    label: "（任意・記録用）結果の記入・署名の状態",
+    help: "判断には影響しません。記録と、署名の確認に使います。",
+    optional: true,
+    // 「わからない」は記録しない（未回答と同じ。判断には影響しない）
+    options: [
+      ...GAME_RECORD_STATES.map((value) => ({
+        value,
+        label: GAME_RECORD_STATE_LABELS[value],
+      })),
+      UNKNOWN_OPTION,
+    ],
+    showWhen: {
+      questionId: "gameEndEvent",
+      values: GAME_END_EVENTS.filter((v) => v !== "in-progress"),
+    },
   },
   clockPressed: {
     id: "clockPressed",
@@ -332,13 +364,16 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     label: "残りの全ての手を指し切る最終ピリオドですか？",
     options: YES_NO,
   },
-  gameEndedBeforeFlag: {
-    id: "gameEndedBeforeFlag",
+  endedBeforeFlag: {
+    id: "endedBeforeFlag",
     scope: "incident",
     label:
-      "フラッグに気付く（主張される）前に、対局はすでに終了していましたか？",
-    help: "チェックメイト・ステイルメイト・投了・合意によるドロー・デッドポジション・五回同一局面・75手ルールなど",
-    options: YES_NO,
+      "フラッグが確定する前に（アービターが気付く、または有効な主張がされる前に）、対局を終わらせる出来事がありましたか？",
+    help: "表示が 0 になった後でも、フラッグの確定前のチェックメイトは有効です（6.8 / 5.1.1）。握手だけでは対局の終了として扱いません。",
+    options: ENDED_BEFORE_FLAG_VALUES.map((value) => ({
+      value,
+      label: ENDED_BEFORE_FLAG_LABELS[value],
+    })),
   },
   movesNotCompleted: {
     id: "movesNotCompleted",
@@ -668,7 +703,7 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
 const ENUMERATED_UNKNOWN: readonly IncidentQuestionId[] = [
   "playerColor",
   "subtype",
-  "gameEnded",
+  "gameEndEvent",
   "clockPressed",
   "opponentMadeNextMove",
   "detectedBy",
@@ -676,7 +711,7 @@ const ENUMERATED_UNKNOWN: readonly IncidentQuestionId[] = [
   "flagFallen",
   "quickplayGuidelinesApply",
   "lastPeriod",
-  "gameEndedBeforeFlag",
+  "endedBeforeFlag",
   "drawSubtype",
   "claimant",
   "lastMover",
@@ -792,11 +827,15 @@ export function applyIncidentAnswers(
         playerColor = undefined;
         break;
       case "subtype":
-      case "gameEnded":
       case "clockPressed":
       case "opponentMadeNextMove":
       case "detectedBy":
         delete facts[id];
+        touchedIllegal = true;
+        break;
+      case "gameEndEvent":
+        delete facts.endEvent;
+        delete facts.recordState;
         touchedIllegal = true;
         break;
       case "clockTimeSubtype":
@@ -809,8 +848,11 @@ export function applyIncidentAnswers(
         break;
       case "quickplayGuidelinesApply":
       case "lastPeriod":
-      case "gameEndedBeforeFlag":
         delete flag[id];
+        touchedFlag = true;
+        break;
+      case "endedBeforeFlag":
+        delete flag.endedBeforeFlag;
         touchedFlag = true;
         break;
       case "drawSubtype":
@@ -891,7 +933,20 @@ export function applyIncidentAnswers(
           touchedIllegal = true;
         }
         break;
-      case "gameEnded":
+      case "gameEndEvent":
+        if (isOneOf(raw, GAME_END_EVENTS)) {
+          facts.endEvent = raw;
+          // 対局中なら結果の記入・署名の状態は意味を持たない
+          if (raw === "in-progress") delete facts.recordState;
+          touchedIllegal = true;
+        }
+        break;
+      case "gameRecordState":
+        if (isOneOf(raw, GAME_RECORD_STATES)) {
+          facts.recordState = raw;
+          touchedIllegal = true;
+        }
+        break;
       case "clockPressed":
       case "opponentMadeNextMove": {
         const b = parseBoolean(raw);
@@ -961,9 +1016,14 @@ export function applyIncidentAnswers(
           touchedFlag = true;
         }
         break;
+      case "endedBeforeFlag":
+        if (isOneOf(raw, ENDED_BEFORE_FLAG_VALUES)) {
+          flag.endedBeforeFlag = raw;
+          touchedFlag = true;
+        }
+        break;
       case "quickplayGuidelinesApply":
-      case "lastPeriod":
-      case "gameEndedBeforeFlag": {
+      case "lastPeriod": {
         const b = parseBoolean(raw);
         if (b !== undefined) {
           flag[id] = b;
@@ -1143,6 +1203,17 @@ export function applyIncidentAnswers(
         }
         break;
     }
+  }
+
+  // J1b-8 より前の「対局は終了していたか（はい/いいえ）」の回答と「わからない」は、
+  // 対局を終わらせた出来事の回答（unknown を含む）で置き換える（ADR-014 §3）
+  if (answers.gameEndEvent !== undefined) {
+    delete facts.gameEnded;
+    unknown.delete("gameEnded");
+  }
+  if (answers.endedBeforeFlag !== undefined) {
+    delete flag.gameEndedBeforeFlag;
+    unknown.delete("gameEndedBeforeFlag");
   }
 
   // 別の対局履歴に対する照合結果は引き継がない（ADR-014 §4）。同じ送信で新しい棋譜と

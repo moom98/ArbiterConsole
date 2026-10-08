@@ -8,7 +8,7 @@ import { fixedProviders, FIXED_NOW, mateOf } from "./helpers";
 const BASE: Partial<IllegalMoveFastInput> = {
   playerColor: "white",
   subtype: "illegal-move",
-  gameEnded: false,
+  endEvent: "in-progress",
   clockPressed: true,
   playerIncidentCount: 0,
 };
@@ -41,7 +41,8 @@ describe("DT-002 Illegal move — Rapid A.4 / Blitz B.2 (competition rules)", ()
     expect(r.questions.map((q) => q.id)).toEqual([
       "playerColor",
       "subtype",
-      "gameEnded",
+      "gameEndEvent",
+      "gameRecordState",
       "clockPressed",
     ]);
   });
@@ -134,7 +135,7 @@ describe("DT-002 Illegal move — Rapid A.4 / Blitz B.2 (competition rules)", ()
   });
 
   it("game already over → result stands", () => {
-    const r = a4().evaluate({ ...BASE, gameEnded: true });
+    const r = a4().evaluate({ ...BASE, endEvent: "resignation" });
     expect(r.decision.intervention).toBe("no-intervention");
     expect(r.decision.penalties).toHaveLength(0);
   });
@@ -176,7 +177,8 @@ describe("DT-003 Illegal move — Rapid A.5 / Blitz B.3 (basic rules)", () => {
     expect(r.questions.map((q) => q.id)).toEqual([
       "playerColor",
       "subtype",
-      "gameEnded",
+      "gameEndEvent",
+      "gameRecordState",
       "clockPressed",
       "opponentMadeNextMove",
       "detectedBy",
@@ -307,7 +309,7 @@ describe("DT-003 Illegal move — Rapid A.5 / Blitz B.3 (basic rules)", () => {
     const r = a5().evaluate({
       playerColor: "black",
       subtype: "clock-without-move",
-      gameEnded: false,
+      endEvent: "in-progress",
     });
     if (r.status !== "needs-input") throw new Error("expected questions");
     expect(r.questions.map((q) => q.id)).not.toContain("clockPressed");
@@ -318,7 +320,7 @@ describe("DT-003 Illegal move — Rapid A.5 / Blitz B.3 (basic rules)", () => {
       A5_BASE,
       { ...A5_BASE, opponentMadeNextMove: true },
       { ...A5_BASE, detectedBy: "other" },
-      { ...A5_BASE, gameEnded: true },
+      { ...A5_BASE, endEvent: "resignation" },
       { ...A5_BASE, playerIncidentCount: 1, ...mateOf("unknown") },
     ];
     for (const i of inputs) {

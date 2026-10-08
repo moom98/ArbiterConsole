@@ -24,7 +24,7 @@ const NOT_FOUND: MatePossibility = {
 const BASE: Partial<FlagFallInput> = {
   competitionType: "standard",
   flagFallen: "white",
-  gameEndedBeforeFlag: false,
+  endedBeforeFlag: "none",
   movesNotCompleted: true,
 };
 
@@ -46,7 +46,7 @@ describe("DT-004 Flag fall", () => {
   it("asks who flagged and whether the game had ended first", () => {
     expect(ids(run({ competitionType: "standard" }))).toEqual([
       "flagFallen",
-      "gameEndedBeforeFlag",
+      "endedBeforeFlag",
     ]);
   });
 
@@ -54,7 +54,7 @@ describe("DT-004 Flag fall", () => {
     const r = run({
       competitionType: "standard",
       flagFallen: "black",
-      gameEndedBeforeFlag: false,
+      endedBeforeFlag: "none",
     });
     expect(ids(r)).toEqual([
       "movesNotCompleted",
@@ -81,7 +81,7 @@ describe("DT-004 Flag fall", () => {
     const done = run({
       competitionType: "standard",
       flagFallen: "black",
-      gameEndedBeforeFlag: false,
+      endedBeforeFlag: "none",
       movesNotCompleted: false,
     });
     expect(done.status).toBe("decided");
@@ -92,13 +92,13 @@ describe("DT-004 Flag fall", () => {
     const r = run({
       competitionType: "standard",
       flagFallen: "both",
-      gameEndedBeforeFlag: false,
+      endedBeforeFlag: "none",
     });
     expect(ids(r)).toEqual(["bothFlagsOrder"]);
   });
 
   it("result reached before the flag was noticed stands", () => {
-    const r = run({ ...BASE, gameEndedBeforeFlag: true });
+    const r = run({ ...BASE, endedBeforeFlag: "checkmate" });
     expect(r.decision.intervention).toBe("no-intervention");
     expect(articles(r)).toContain("FIDE 6.8");
   });

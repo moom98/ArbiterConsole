@@ -18,7 +18,7 @@ const STANDARD_CTX: ReportContext = {
 const WHITE_COMPLETED: Partial<Record<IncidentQuestionId, string>> = {
   playerColor: "white",
   subtype: "illegal-move",
-  gameEnded: "false",
+  gameEndEvent: "in-progress",
   clockPressed: "true",
 };
 
@@ -321,7 +321,7 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
       await answer({ clockTimeSubtype: "flag-fall" });
       await answer({
         flagFallen: "white",
-        gameEndedBeforeFlag: "false",
+        endedBeforeFlag: "none",
         movesNotCompleted: "true",
       });
       // 黒は K+N のみ・白はキングのみ → 駒の構成上メイト不可能 → ドロー
@@ -350,9 +350,9 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
       if (!res.ok) throw new Error(res.error);
       expect(res.result.followUpQuestions.map((q) => q.id)).toEqual([
         "flagFallen",
-        "gameEndedBeforeFlag",
+        "endedBeforeFlag",
       ]);
-      await answer({ flagFallen: "white", gameEndedBeforeFlag: "false" });
+      await answer({ flagFallen: "white", endedBeforeFlag: "none" });
       // 規定手数と局面を同じラウンドで回答。黒は K+R → 端末内で手順を探して検証 → 白の負け
       const final = await answer({
         movesNotCompleted: "true",

@@ -144,7 +144,7 @@ export const FACT_DEFINITIONS: readonly FactDefinition[] = [
         ["other", "その他"]
       )
     ),
-    [req("§12"), fide("5"), fide("6.8")]
+    [req("§12"), fide("5"), fide("6.8"), dt("gameEndEvent")]
   ),
   observed(
     "game.record-state",
@@ -335,7 +335,7 @@ export const FACT_DEFINITIONS: readonly FactDefinition[] = [
         ["other", "その他"]
       )
     ),
-    [fide("6.8"), fide("5.1.1"), dt("gameEndedBeforeFlag")]
+    [fide("6.8"), fide("5.1.1"), dt("endedBeforeFlag")]
   ),
   derived(
     "ct.last-period",
@@ -867,16 +867,6 @@ const DRAW_POSITIONS = is(
   "75-move-rule"
 );
 
-/** はい/いいえの DT 質問へ変換（指定した値が false、他は true） */
-const toBoolean = (
-  falseValue: string,
-  trueValues: readonly string[]
-): Readonly<Record<string, string>> =>
-  Object.fromEntries([
-    [falseValue, "false"],
-    ...trueValues.map((v) => [v, "true"]),
-  ]);
-
 export const FACT_USAGES: readonly FactUsage[] = [
   // ---- 違法手（7.5）: DT-001/002/003
   {
@@ -903,18 +893,12 @@ export const FACT_USAGES: readonly FactUsage[] = [
     factId: "game.end-event",
     ...IM,
     level: "blocking",
-    dtQuestionIds: ["gameEnded"],
-    // 「まだ対局中」以外は終了（握手は選択肢にない）
-    dtValues: toBoolean("in-progress", [
-      "checkmate",
-      "resignation",
-      "stalemate",
-      "draw-agreement",
-      "time-out",
-      "other",
-    ]),
+    // 値は DT の質問と同じ。「まだ対局中」以外は終了（握手は選択肢にない。ADR-014 §3）
+    dtQuestionIds: ["gameEndEvent"],
   },
-  // DT は使わないが記録に残す fact（DT の判断には影響しない。fact-model §3.1）
+  // DT の判断には影響しないが記録に残す fact（fact-model §3.1）。DT は任意の質問
+  // gameRecordState として同じラウンドで尋ねるが、必要かどうかは appliesWhen だけで決まる
+  // （dtQuestionIds を持つと DT が尋ねただけで必要になるため、対応付けない）
   {
     factId: "game.record-state",
     ...IM,
@@ -1068,14 +1052,8 @@ export const FACT_USAGES: readonly FactUsage[] = [
     category: "clock-time",
     level: "conditional",
     appliesWhen: is("ct.event", "flag-fall"),
-    dtQuestionIds: ["gameEndedBeforeFlag"],
-    dtValues: toBoolean("none", [
-      "checkmate",
-      "resignation",
-      "draw-agreement",
-      "stalemate",
-      "other",
-    ]),
+    // 値は DT の質問と同じ。「なし」以外は終了（ADR-014 §3）
+    dtQuestionIds: ["endedBeforeFlag"],
   },
   // フラッグ確定時の局面でメイト可能性を判定する（ADR-014 §5、J1b-4）。
   // 局面は FEN で入力する（駒数の入力は廃止）。メイト可能性はコードが判定する

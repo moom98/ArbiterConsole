@@ -2,6 +2,8 @@ import type {
   CompetitionType,
   Decision,
   DrawSubtype,
+  FlagFallFacts,
+  IllegalMoveFacts,
   Incident,
   PlayerColor,
   RuleCitation,
@@ -429,7 +431,7 @@ export class DecisionEngine {
         return this.finish(
           incident,
           tree.evaluate({
-            ...incident.flagFallFacts,
+            ...currentFlagFallFacts(incident),
             // 最終ピリオド: アービターの明示的な回答を優先し、未回答・「わからない」の場合だけ
             // 設定から求める（確認済みの単一ピリオドなら常に最終。複数ピリオド・未確認の
             // 旧形式は質問する。ADR-014 §7）。設定が不完全でも、回答に反してドローにしない
@@ -572,7 +574,7 @@ export class DecisionEngine {
     const prior =
       color && illegalMoveHistory ? illegalMoveHistory[color] : undefined;
     const result = tree.evaluate({
-      ...incident.illegalMoveFacts,
+      ...currentIllegalMoveFacts(incident),
       playerColor: color,
       playerIncidentCount: Array.isArray(prior) ? prior.length : undefined,
       priorIllegalMoves: prior,
@@ -604,7 +606,7 @@ export class DecisionEngine {
     const prior =
       color && illegalMoveHistory ? illegalMoveHistory[color] : undefined;
     const input = {
-      ...incident.illegalMoveFacts,
+      ...currentIllegalMoveFacts(incident),
       playerColor: color,
       playerIncidentCount: Array.isArray(prior) ? prior.length : undefined,
       priorIllegalMoves: prior,
@@ -756,3 +758,24 @@ export { DT_004_ID } from "@/lib/domain/decision-trees/dt-004-flag-fall";
 export { DT_005_ID } from "@/lib/domain/decision-trees/dt-005-draw-claim";
 export { DT_006_ID } from "@/lib/domain/decision-trees/dt-006-automatic-draw";
 export { DT_007_ID } from "@/lib/domain/decision-trees/dt-007-touch-move";
+
+/**
+ * 違法手の事実から、J1b-8 より前の「対局は終了していたか（はい/いいえ）」を除く。
+ * 握手だけで「はい」と答えられたため判断に使わず、対局を終わらせた出来事を質問し直す
+ * （ADR-014 §3）
+ */
+function currentIllegalMoveFacts(
+  incident: Incident
+): Partial<Omit<IllegalMoveFacts, "gameEnded">> {
+  const { gameEnded: _legacy, ...facts } = incident.illegalMoveFacts ?? {};
+  return facts;
+}
+
+/** フラッグの事実から、J1b-8 より前の「フラッグの前に終了していたか」を除く（ADR-014 §3） */
+function currentFlagFallFacts(
+  incident: Incident
+): Partial<Omit<FlagFallFacts, "gameEndedBeforeFlag">> {
+  const { gameEndedBeforeFlag: _legacy, ...facts } =
+    incident.flagFallFacts ?? {};
+  return facts;
+}

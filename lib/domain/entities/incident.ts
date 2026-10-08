@@ -61,8 +61,19 @@ export interface IllegalMoveFacts {
   subtype: IllegalMoveSubtype;
   /** 違反したプレーヤーが時計を押したか */
   clockPressed: boolean;
-  /** 対局がすでに終了しているか（署名済み・結果確定など） */
-  gameEnded: boolean;
+  /**
+   * 違法手に気づいた時点で、対局を終わらせた出来事として観察されたもの（game.end-event。
+   * ADR-014 §3）。DT-001〜003 の「対局はすでに終了しているか」はここから求める
+   * （gameEndedFromEvent）。握手は選択肢にない（握手だけでは終了としない）
+   */
+  endEvent?: GameEndEvent;
+  /** 結果の記入・署名の状態（game.record-state。記録用で、判断には影響しない） */
+  recordState?: GameRecordState;
+  /**
+   * @deprecated J1b-8 より前の「対局はすでに終了していますか（はい/いいえ）」の回答。
+   * 握手だけで「はい」と答えられたため判断には使わず、endEvent を質問し直す（ADR-014 §3）
+   */
+  gameEnded?: boolean;
   /**
    * 7.5.5 ただし書き（相手がメイト不可能ならドロー）の判定に使う局面の入力方法。
    * メイト可能性は局面からコードが判定する（ADR-014 §5）。直接は質問しない。
@@ -80,6 +91,36 @@ export interface IllegalMoveFacts {
   /** Rapid / Blitz（A.5 / B.3）のみ: 違法手を誰が指摘したか（A.5.2） */
   detectedBy?: IllegalMoveDetection;
 }
+
+/**
+ * 対局を終わらせた出来事として観察されたもの（game.end-event。ADR-014 §3、FIDE 5 / 6.8）。
+ * 握手は含まない: 握手だけでは対局の終了としない。
+ * - in-progress:    まだ対局中
+ * - time-out:       時間切れの確定（アービターが確認、または有効な主張。6.8）
+ */
+export type GameEndEvent =
+  | "in-progress"
+  | "checkmate"
+  | "resignation"
+  | "stalemate"
+  | "draw-agreement"
+  | "time-out"
+  | "other";
+
+/**
+ * フラッグが確定する前に（アービターが気付く、または有効な主張がされる前に）対局を
+ * 終わらせた出来事（ct.ended-before-flag。ADR-014 §3、FIDE 6.8 / 5.1.1）。none は「なし」
+ */
+export type EndedBeforeFlag =
+  | "none"
+  | "checkmate"
+  | "resignation"
+  | "draw-agreement"
+  | "stalemate"
+  | "other";
+
+/** 結果の記入・署名の状態（game.record-state。要件 §20） */
+export type GameRecordState = "none" | "written" | "one-signed" | "both-signed";
 
 /**
  * A.5.2 における違法手の発見経路
@@ -157,10 +198,15 @@ export interface FlagFallFacts {
   /** 両フラッグの順序が不明な場合: 全手数を指し切る最終ピリオドか */
   lastPeriod?: boolean;
   /**
-   * フラッグに気付く（主張される）前に、チェックメイト・ステイルメイト・投了・合意・
-   * デッドポジション等で対局が終了していたか
+   * フラッグが確定する前に対局を終わらせた出来事（ct.ended-before-flag。ADR-014 §3）。
+   * DT-004 の「フラッグの前に対局は終了していたか」はここから求める
    */
-  gameEndedBeforeFlag: boolean;
+  endedBeforeFlag?: EndedBeforeFlag;
+  /**
+   * @deprecated J1b-8 より前の「フラッグの前に対局は終了していましたか（はい/いいえ）」の
+   * 回答。判断には使わず、endedBeforeFlag を質問し直す（ADR-014 §3）
+   */
+  gameEndedBeforeFlag?: boolean;
   /** 時間切れのプレーヤーは、そのピリオドの規定手数を完了していなかったか（6.4 / 6.9） */
   movesNotCompleted: boolean | "unknown";
   /**

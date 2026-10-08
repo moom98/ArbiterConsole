@@ -11,7 +11,7 @@ const base: IllegalMoveStandardInput = {
   playerColor: "white",
   subtype: "illegal-move",
   clockPressed: true,
-  gameEnded: false,
+  endEvent: "in-progress",
   playerIncidentCount: 0,
   ...mateOf("unknown"),
 };
@@ -32,14 +32,15 @@ function articles(d: Decision): string[] {
 
 describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
   describe("follow-up questions", () => {
-    it("asks colour, subtype, gameEnded and clockPressed in one round when nothing is known", () => {
+    it("asks colour, subtype, gameEndEvent (+ optional record state) and clockPressed in one round when nothing is known", () => {
       const r = run({});
       expect(r.status).toBe("needs-input");
       if (r.status !== "needs-input") return;
       expect(r.questions.map((q) => q.id)).toEqual([
         "playerColor",
         "subtype",
-        "gameEnded",
+        "gameEndEvent",
+        "gameRecordState",
         "clockPressed",
       ]);
       expect(r.decision.kind).toBe("follow-up-required");
@@ -52,7 +53,7 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       const r = run({
         playerColor: "black",
         subtype: "illegal-move",
-        gameEnded: false,
+        endEvent: "in-progress",
       });
       expect(r.status).toBe("needs-input");
       if (r.status !== "needs-input") return;
@@ -65,7 +66,8 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       if (r.status !== "needs-input") return;
       expect(r.questions.map((q) => q.id)).toEqual([
         "playerColor",
-        "gameEnded",
+        "gameEndEvent",
+        "gameRecordState",
       ]);
     });
 
@@ -73,7 +75,7 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       const d = decided({
         playerColor: "black",
         subtype: "clock-without-move",
-        gameEnded: false,
+        endEvent: "in-progress",
         playerIncidentCount: 0,
       });
       expect(d.penalties[0].type).toBe("time-addition-opponent");
@@ -83,7 +85,7 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       const d = decided({
         playerColor: "white",
         subtype: "illegal-move",
-        gameEnded: true,
+        endEvent: "resignation",
       });
       expect(d.intervention).toBe("no-intervention");
     });
@@ -91,7 +93,11 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
 
   describe("game already ended", () => {
     it("result stands, no correction, no penalty, regardless of history", () => {
-      const d = decided({ ...base, gameEnded: true, playerIncidentCount: 1 });
+      const d = decided({
+        ...base,
+        endEvent: "resignation",
+        playerIncidentCount: 1,
+      });
       expect(d.kind).toBe("recommendation");
       expect(d.penalties).toHaveLength(0);
       expect(d.conclusion).toContain("結果はそのまま確定");

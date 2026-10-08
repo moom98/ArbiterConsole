@@ -468,7 +468,7 @@ describe("DT-004 lastPeriod from the time control (ADR-014 §7)", () => {
   const BOTH = {
     flagFallen: "both",
     bothFlagsOrder: "unknown",
-    gameEndedBeforeFlag: "false",
+    endedBeforeFlag: "none",
     quickplayGuidelinesApply: "true",
   } as const;
 

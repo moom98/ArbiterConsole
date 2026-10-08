@@ -50,7 +50,7 @@ const fullFacts: Partial<Incident> = {
   playerColor: "white",
   illegalMoveFacts: {
     subtype: "illegal-move",
-    gameEnded: false,
+    endEvent: "in-progress",
     clockPressed: true,
   },
 };
@@ -182,7 +182,8 @@ describe("DecisionEngine", () => {
       expect(r.followUpQuestions.map((q) => q.id)).toEqual([
         "playerColor",
         "subtype",
-        "gameEnded",
+        "gameEndEvent",
+        "gameRecordState",
         "clockPressed",
         "opponentMadeNextMove",
         "detectedBy",
@@ -333,7 +334,8 @@ describe("DecisionEngine", () => {
       expect(r.followUpQuestions.map((q) => q.id)).toEqual([
         "playerColor",
         "subtype",
-        "gameEnded",
+        "gameEndEvent",
+        "gameRecordState",
         "clockPressed",
       ]);
       expect(r.decision.escalationRecommended).toBe(false);
@@ -354,7 +356,7 @@ describe("DecisionEngine", () => {
       inc = applyIncidentAnswers(inc, {
         playerColor: "white",
         subtype: "two-hands",
-        gameEnded: "false",
+        gameEndEvent: "in-progress",
         clockPressed: "true",
       });
       const second = engine.processIncident({
@@ -433,11 +435,11 @@ describe("DecisionEngine", () => {
 describe("applyIncidentAnswers", () => {
   it("ignores invalid values and keeps existing facts", () => {
     const inc = applyIncidentAnswers(
-      incident({ illegalMoveFacts: { gameEnded: false } }),
+      incident({ illegalMoveFacts: { endEvent: "in-progress" } }),
       { playerColor: "green", clockPressed: "maybe", subtype: "bogus" }
     );
     expect(inc.playerColor).toBeUndefined();
-    expect(inc.illegalMoveFacts).toEqual({ gameEnded: false });
+    expect(inc.illegalMoveFacts).toEqual({ endEvent: "in-progress" });
   });
 
   it("stores the reinstated position and ignores an unknown input method", () => {
@@ -458,7 +460,7 @@ describe("applyIncidentAnswers (M4 questions)", () => {
       incident({ category: "clock-time", subtype: "flag-fall" }),
       {
         flagFallen: "black",
-        gameEndedBeforeFlag: "false",
+        endedBeforeFlag: "none",
         movesNotCompleted: "true",
         matePosition: "fen",
         positionFen: "  ",

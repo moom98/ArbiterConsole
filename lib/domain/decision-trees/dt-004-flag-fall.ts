@@ -1,5 +1,6 @@
 import type {
   CompetitionType,
+  EndedBeforeFlag,
   FlagFallFacts,
   PlayerColor,
   SupervisionRegime,
@@ -10,10 +11,17 @@ import { QUESTIONS, type FollowUpQuestion } from "@/lib/domain/follow-up";
 import type { MatePossibility } from "@/lib/domain/services/mate-possibility";
 import type { DecisionTreeResult } from "./dt-001-illegal-move-standard";
 import { COLOR_JA, TreeOutput, opponentOf } from "./tree-support";
+import {
+  ENDED_BEFORE_FLAG_LABELS,
+  endedBeforeFlagFromEvent,
+} from "@/lib/domain/services/game-end";
 
 export const DT_004_ID = "DT-004-flag-fall" as const;
 
-export interface FlagFallInput extends FlagFallFacts {
+export interface FlagFallInput extends Omit<
+  FlagFallFacts,
+  "gameEndedBeforeFlag"
+> {
   competitionType: CompetitionType;
   /** Rapid / Blitz では必須 */
   supervisionRegime?: SupervisionRegime;
@@ -69,19 +77,25 @@ export class FlagFallTree {
     // 1. 基本事実
     const basic: FollowUpQuestion[] = [];
     if (input.flagFallen === undefined) basic.push(QUESTIONS.flagFallen);
-    if (input.gameEndedBeforeFlag === undefined)
-      basic.push(QUESTIONS.gameEndedBeforeFlag);
+    if (input.endedBeforeFlag === undefined)
+      basic.push(QUESTIONS.endedBeforeFlag);
     if (basic.length > 0) return this.out.needsInput(basic);
 
-    // 2. フラッグに気付く前に結果が出ていた → 結果は変わらない
-    if (input.gameEndedBeforeFlag) {
+    // 2. フラッグの確定前に対局を終わらせた出来事があった → 結果は変わらない。
+    // 終了は観察した出来事から求める（握手だけでは終了としない。ADR-014 §3）
+    if (endedBeforeFlagFromEvent(input.endedBeforeFlag)) {
+      const event = input.endedBeforeFlag as EndedBeforeFlag;
       return this.out.decided({
         kind: "recommendation",
-        conclusion:
-          "フラッグに気付く（主張される）前に対局は終了していたため、その結果がそのまま有効です。",
+        conclusion: `フラッグが確定する前に対局は終了していた（${ENDED_BEFORE_FLAG_LABELS[event]}）ため、その結果がそのまま有効です。`,
         actions: [
           "時間切れとしての裁定は行わない",
           "終了時点の結果（チェックメイト・投了・ドロー等）を記録する",
+          ...(event === "other"
+            ? [
+                "対局を終わらせた出来事（終了の根拠）を確認し、明確でなければCAへ確認する",
+              ]
+            : []),
         ],
         intervention: "no-intervention",
         penalties: [],
@@ -92,7 +106,7 @@ export class FlagFallTree {
           "MANUAL_6_9_AND_9_6",
           "JCF_NA_P39_FLAG_NOTICED"
         ),
-        confidence: "high",
+        confidence: event === "other" ? "medium" : "high",
         escalationRecommended: false,
       });
     }

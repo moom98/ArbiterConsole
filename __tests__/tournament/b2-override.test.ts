@@ -36,7 +36,7 @@ function illegalMove(): Incident {
     playerColor: "white",
     illegalMoveFacts: {
       subtype: "illegal-move",
-      gameEnded: false,
+      endEvent: "in-progress",
       clockPressed: true,
     },
   };

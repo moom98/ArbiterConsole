@@ -1,5 +1,7 @@
 import type {
   Decision,
+  GameEndEvent,
+  GameRecordState,
   IllegalMoveFacts,
   IllegalMoveSubtype,
   PlayerColor,
@@ -19,6 +21,11 @@ import {
 import { buildDecision, type DecisionFields } from "./build-decision";
 import type { MatePossibility } from "@/lib/domain/services/mate-possibility";
 import { mateStep, reinstatedPositionQuestions } from "./mate-position";
+import {
+  GAME_END_EVENT_LABELS,
+  gameEndedFromEvent,
+  recordStateAction,
+} from "@/lib/domain/services/game-end";
 
 export const DT_001_ID = "DT-001-illegal-move-standard" as const;
 export const DT_001_RULES_VERSION = "FIDE-2023";
@@ -27,7 +34,10 @@ export const DT_001_RULES_VERSION = "FIDE-2023";
  * DT-001 の入力。Standard（FIDE Laws of Chess 2023, Article 7.5）専用。
  * Rapid / Blitz の判断にはこの Tree を使用しない（要件 §17）。
  */
-export interface IllegalMoveStandardInput extends IllegalMoveFacts {
+export interface IllegalMoveStandardInput extends Omit<
+  IllegalMoveFacts,
+  "gameEnded"
+> {
   /** 違反したプレーヤー */
   playerColor: PlayerColor;
   /**
@@ -45,6 +55,34 @@ export interface IllegalMoveStandardInput extends IllegalMoveFacts {
    * ADR-014 §5）。matePosition = "fen" のときに使う
    */
   mate?: MatePossibility;
+}
+
+/**
+ * 対局終了後に判明した違法手（DT-001〜003 共通）の結論・対応・信頼度。
+ * 「その他」の出来事は終了の根拠をアービターが確かめる（ADR-014 §3）
+ */
+export function gameEndedFields(
+  what: string,
+  event: GameEndEvent,
+  recordState: GameRecordState | undefined
+): Pick<
+  DecisionFields,
+  "conclusion" | "actions" | "confidence" | "escalationRecommended"
+> {
+  const recordAction = recordStateAction(recordState);
+  return {
+    conclusion: `対局終了後（${GAME_END_EVENT_LABELS[event]}）に判明した${what}です。訂正はできず、結果はそのまま確定します。`,
+    actions: [
+      "局面・結果の訂正は行わない",
+      "結果をそのまま記録する",
+      ...(recordAction ? [recordAction] : []),
+      event === "other"
+        ? "対局を終わらせた出来事（終了の根拠）を確認し、明確でなければCAへ確認する"
+        : "対局終了の有無が明確でない場合はCAへ確認する",
+    ],
+    confidence: event === "other" ? "medium" : "high",
+    escalationRecommended: false,
+  };
 }
 
 /** これまでに違法手ペナルティが適用された Incident の要約 */
@@ -121,7 +159,8 @@ export class IllegalMoveStandardTree {
     const basic: FollowUpQuestion[] = [];
     if (input.playerColor === undefined) basic.push(QUESTIONS.playerColor);
     if (input.subtype === undefined) basic.push(QUESTIONS.subtype);
-    if (input.gameEnded === undefined) basic.push(QUESTIONS.gameEnded);
+    if (input.endEvent === undefined)
+      basic.push(QUESTIONS.gameEndEvent, QUESTIONS.gameRecordState);
     // 時計の質問も同じラウンドで行う（7.5.3 と分かっている場合は不要）
     if (
       basic.length > 0 &&
@@ -135,8 +174,17 @@ export class IllegalMoveStandardTree {
     const color = input.playerColor as PlayerColor;
     const subtype = input.subtype as IllegalMoveSubtype;
 
-    // 2. 対局終了後に判明 → 訂正不可、結果は確定
-    if (input.gameEnded) return this.decided(this.gameEnded(color, subtype));
+    // 2. 対局終了後に判明 → 訂正不可、結果は確定。終了は観察した出来事から求める
+    // （握手だけでは終了としない。ADR-014 §3）
+    if (gameEndedFromEvent(input.endEvent))
+      return this.decided(
+        this.gameEnded(
+          color,
+          subtype,
+          input.endEvent as GameEndEvent,
+          input.recordState
+        )
+      );
 
     // 3. 時計を押したか（7.5.3 は定義上押している）
     const clockPressed =
@@ -205,17 +253,19 @@ export class IllegalMoveStandardTree {
     conclusion = "判断に必要な情報が不足しています。以下の質問に回答してください。",
     sources: RuleCitation[] = []
   ): DecisionTreeResult {
+    // 任意の質問（結果の記入・署名の状態など）は不足項目に含めない
+    const labels = questions.filter((q) => !q.optional).map((q) => q.label);
     const decision = buildDecision(this.providers, {
       ...this.base(),
       kind: "follow-up-required",
       conclusion,
-      actions: questions.map((q) => q.label),
+      actions: labels,
       intervention: "consult-ca",
       penalties: [],
       sources,
       confidence: "low",
       escalationRecommended: false,
-      missingFields: questions.map((q) => q.label),
+      missingFields: labels,
     });
     return { status: "needs-input", decision, questions };
   }
@@ -233,17 +283,19 @@ export class IllegalMoveStandardTree {
 
   private gameEnded(
     color: PlayerColor,
-    subtype: IllegalMoveSubtype
+    subtype: IllegalMoveSubtype,
+    event: GameEndEvent,
+    recordState: GameRecordState | undefined
   ): DecisionFields {
+    const ended = gameEndedFields(
+      `${COLOR_JA[color]}の違法手（${SUBTYPE_LABELS[subtype]}）`,
+      event,
+      recordState
+    );
     return {
       ...this.base(),
       kind: "recommendation",
-      conclusion: `対局終了後に判明した${COLOR_JA[color]}の違法手（${SUBTYPE_LABELS[subtype]}）です。訂正はできず、結果はそのまま確定します。`,
-      actions: [
-        "局面・結果の訂正は行わない",
-        "結果をそのまま記録する",
-        "対局終了の有無が明確でない場合はCAへ確認する",
-      ],
+      ...ended,
       intervention: "no-intervention",
       penalties: [],
       sources: cite(
@@ -252,8 +304,6 @@ export class IllegalMoveStandardTree {
         "FIDE_8_7",
         "JCF_NA_P47_GAME_OVER"
       ),
-      confidence: "high",
-      escalationRecommended: false,
     };
   }
 

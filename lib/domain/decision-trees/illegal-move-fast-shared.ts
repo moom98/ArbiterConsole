@@ -1,5 +1,7 @@
 import type {
   CompetitionType,
+  GameEndEvent,
+  GameRecordState,
   IllegalMoveDetection,
   IllegalMoveSubtype,
   MatePositionInput,
@@ -23,6 +25,7 @@ import {
 } from "@/lib/domain/rules/time-penalty";
 import {
   describePriorIllegalMoves,
+  gameEndedFields,
   type DecisionTreeResult,
   type PriorIllegalMove,
 } from "./dt-001-illegal-move-standard";
@@ -34,6 +37,7 @@ import {
 } from "./tree-support";
 import type { MatePossibility } from "@/lib/domain/services/mate-possibility";
 import { mateStep, reinstatedPositionQuestions } from "./mate-position";
+import { gameEndedFromEvent } from "@/lib/domain/services/game-end";
 
 /**
  * Rapid / Blitz の違法手（DT-002 / DT-003）で共通のペナルティ判断。
@@ -218,7 +222,10 @@ export function evaluateFastPenalty(
 export interface IllegalMoveFastInput {
   playerColor: PlayerColor;
   subtype: IllegalMoveSubtype;
-  gameEnded: boolean;
+  /** 対局を終わらせた出来事（ADR-014 §3）。「まだ対局中」以外なら終了 */
+  endEvent: GameEndEvent;
+  /** 結果の記入・署名の状態（記録用） */
+  recordState?: GameRecordState;
   clockPressed: boolean;
   /** 7.5.5 ただし書きの判定に使う局面の入力方法 */
   matePosition: MatePositionInput;
@@ -252,7 +259,8 @@ export function evaluateFastPreliminaries(
   const basic: FollowUpQuestion[] = [];
   if (input.playerColor === undefined) basic.push(QUESTIONS.playerColor);
   if (input.subtype === undefined) basic.push(QUESTIONS.subtype);
-  if (input.gameEnded === undefined) basic.push(QUESTIONS.gameEnded);
+  if (input.endEvent === undefined)
+    basic.push(QUESTIONS.gameEndEvent, QUESTIONS.gameRecordState);
   if (
     input.clockPressed === undefined &&
     input.subtype !== "clock-without-move"
@@ -263,20 +271,20 @@ export function evaluateFastPreliminaries(
   const color = input.playerColor as PlayerColor;
   const subtype = input.subtype as IllegalMoveSubtype;
 
-  if (input.gameEnded) {
+  // 終了は観察した出来事から求める（握手だけでは終了としない。ADR-014 §3）
+  if (gameEndedFromEvent(input.endEvent)) {
+    const ended = gameEndedFields(
+      `${COLOR_JA[color]}の違法手（${SUBTYPE_LABELS[subtype]}）`,
+      input.endEvent as GameEndEvent,
+      input.recordState
+    );
     return out.decided({
       kind: "recommendation",
-      conclusion: `${label}: 対局終了後に判明した${COLOR_JA[color]}の違法手（${SUBTYPE_LABELS[subtype]}）です。訂正はできず、結果はそのまま確定します。`,
-      actions: [
-        "局面・結果の訂正は行わない",
-        "結果をそのまま記録する",
-        "対局終了の有無が明確でない場合はCAへ確認する",
-      ],
+      ...ended,
+      conclusion: `${label}: ${ended.conclusion}`,
       intervention: "no-intervention",
       penalties: [],
       sources: cite(...regimeSources, "MANUAL_7_5_GAME_OVER", "FIDE_8_7"),
-      confidence: "high",
-      escalationRecommended: false,
     });
   }
 

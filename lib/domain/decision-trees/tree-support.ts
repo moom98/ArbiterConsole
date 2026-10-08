@@ -156,6 +156,14 @@ export function resolveUnknown(params: {
       (q) => !q.optional && !(q.showWhen && unknown.has(q.showWhen.questionId))
     );
 
+  /** 他の質問として尋ねるもの（unknown の質問と、unknown の回答で非表示になる質問を除く） */
+  const others = (questions: FollowUpQuestion[]) =>
+    questions.filter(
+      (q) =>
+        !unknown.has(q.id) &&
+        !(q.showWhen && unknown.has(q.showWhen.questionId))
+    );
+
   const base = params.base ?? params.evaluate({});
   if (base.status !== "needs-input") return { kind: "not-needed" };
   const baseRequired = required(base.questions);
@@ -173,7 +181,7 @@ export function resolveUnknown(params: {
   if (baseRequired.some((q) => !unknown.has(q.id))) {
     return {
       kind: "ask-others",
-      questions: base.questions.filter((q) => !unknown.has(q.id)),
+      questions: others(base.questions),
     };
   }
 
@@ -246,7 +254,7 @@ export function resolveUnknown(params: {
       );
       return {
         kind: "ask-others",
-        questions: firstNeeds.questions.filter((x) => !unknown.has(x.id)),
+        questions: others(firstNeeds.questions),
         ...(sameConclusion ? { conclusion } : {}),
       };
     }

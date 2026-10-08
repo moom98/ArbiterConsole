@@ -59,7 +59,7 @@ describe("Incident store with tournament games (ADR-006)", () => {
     const answered = await store.getState().answerFollowUp({
       playerColor: "white",
       subtype: "illegal-move",
-      gameEnded: "false",
+      gameEndEvent: "in-progress",
       clockPressed: "true",
     });
     if (!answered.ok) throw new Error(answered.error);
@@ -165,7 +165,7 @@ describe("Incident store with tournament games (ADR-006)", () => {
     const answered = await store.getState().answerFollowUp({
       playerColor: "white",
       subtype: "illegal-move",
-      gameEnded: "false",
+      gameEndEvent: "in-progress",
       clockPressed: "true",
     });
     if (!answered.ok) throw new Error(answered.error);
@@ -217,7 +217,7 @@ describe("Incident store with tournament games (ADR-006)", () => {
     const answered = await store.getState().answerFollowUp({
       playerColor: "white",
       subtype: "illegal-move",
-      gameEnded: "false",
+      gameEndEvent: "in-progress",
       clockPressed: "true",
     });
     if (!answered.ok) throw new Error(answered.error);

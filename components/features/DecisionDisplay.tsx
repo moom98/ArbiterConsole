@@ -181,7 +181,9 @@ export function DecisionDisplay({
       {/* Conclusion */}
       <div className="mb-4">
         <h3 className="font-semibold mb-2 text-gray-700">推奨される結論</h3>
-        <p className="text-lg whitespace-pre-line">{decision.conclusion}</p>
+        <p className="text-lg whitespace-pre-line break-words">
+          {decision.conclusion}
+        </p>
       </div>
 
       {/* Facts answered "unknown" (fact-model §3.3) */}

@@ -41,6 +41,10 @@ import {
   analyzeRepetition,
   type ChessPositionPort,
 } from "@/lib/domain/services/position-analysis";
+import {
+  parseGameHistoryText,
+  validateGameHistory,
+} from "@/lib/domain/services/game-history";
 import type { LlmAssistOutcome, LlmAssistPort } from "@/lib/domain/llm/ports";
 import { buildLlmDecision } from "@/lib/domain/llm/llm-decision";
 import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
@@ -308,7 +312,8 @@ export class DecisionEngine {
         const labels = resolution.questions
           .filter((q) => !q.optional)
           .map((q) => q.label);
-        // 元の評価にない質問（全分岐で共通に必要な質問）の場合、元の結論文は合わない
+        // 元の評価にない質問（全分岐で共通に必要な質問）の場合、元の結論文は合わない。
+        // 全分岐の結論文が同じなら、それを使う（例: 照合する最終局面の表示）
         const baseIds = new Set(base.followUpQuestions.map((q) => q.id));
         const sameRound = resolution.questions.every((q) => baseIds.has(q.id));
         return {
@@ -316,7 +321,7 @@ export class DecisionEngine {
             ...base.decision,
             conclusion: sameRound
               ? base.decision.conclusion
-              : DEFAULT_NEEDS_INPUT_CONCLUSION,
+              : (resolution.conclusion ?? DEFAULT_NEEDS_INPUT_CONCLUSION),
             actions: labels,
             missingFields: labels,
           },
@@ -422,14 +427,22 @@ export class DecisionEngine {
         };
         if (facts.conditionCheck === "auto" && facts.positionsText) {
           if (this.deps.positions) {
-            const analysed = analyzeRepetition(
-              this.deps.positions,
-              facts.positionsText,
-              incident.subtype === "threefold-repetition-claim" &&
-                facts.claimMode === "about-to-appear"
-                ? facts.intendedMove
-                : undefined
-            );
+            // 対局履歴（game.history）は端末内で解析・検証したものだけを使う（ADR-014 §4）
+            const port = this.deps.positions;
+            const parsed = parseGameHistoryText(facts.positionsText);
+            const validated = parsed.ok
+              ? validateGameHistory(port, parsed.history)
+              : parsed;
+            const analysed = validated.ok
+              ? analyzeRepetition(
+                  port,
+                  validated,
+                  incident.subtype === "threefold-repetition-claim" &&
+                    facts.claimMode === "about-to-appear"
+                    ? facts.intendedMove
+                    : undefined
+                )
+              : validated;
             input.analysis = analysed.ok
               ? { ok: true, result: analysed }
               : { ok: false, error: analysed.error };

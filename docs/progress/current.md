@@ -118,6 +118,14 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 
 ## Tests and verification performed
 
+**J1b-3 `game.history` (2026-10-08, `feature/fact-catalog`):**
+
+- tsc is clean.
+- eslint reports 0 problems.
+- 56 files / 937 tests pass, including the new `__tests__/game-history.test.ts` and `game-history.component.test.tsx`.
+- `npm run build` succeeds.
+- Review: FIX REQUIRED (2 must-fix, 3 should-fix) → fixed → re-review APPROVE. See `milestones/j1b-3-game-history.md`.
+
 **J1b-2 `unknown` answers (2026-10-08, `feature/fact-catalog`):**
 
 - tsc is clean.
@@ -156,6 +164,10 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 ## Known issues
 
+- **J1b-3:**
+  - `Game.pgn` is not wired in: no UI sets it, so the history comes only from the pasted text.
+  - There is no board diagram; the arbiter compares the FEN and the last move with the board (J2).
+  - The side to move still comes from the `claimantHasMove` question, and the history only validates it (J1b-5).
 - **J1b-2:**
   - With an unknown answer, a branch that needs another unanswered question counts as disagreeing, unless every branch asks the same question. Example: `claimMode` unknown and `moveWritten` unanswered give manual-review.
   - `materialConfirmed` = unknown gives manual-review until ADR-014 §5 removes the count inputs.
@@ -206,6 +218,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
   - Code so far:
     - J1b-1: `lib/domain/facts/`, pure;
     - J1b-2: `unknown` answers and `resolveUnknown` in the engine. No Decision Tree body changed.
+    - J1b-3: `lib/domain/services/game-history.ts`, strict replay in the port, and `historyConfirmed` in DT-005.
   - The key must never go into `.env*` (`cf:deploy` refuses to run). Keep it in `~/.config/arbiter-console/typesafe.key` for J0 and J3.
 
 - Whether the user's federation applies 1 or 2 minutes for Blitz B.2 (adequate supervision).
@@ -239,7 +252,10 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
        - Unknown answers are kept in `Incident.unknownAnswers`.
        - `DecisionEngine.routeResolvingUnknown` enumerates them with the pure `resolveUnknown` (`tree-support.ts`) for every tree. The trees did not change (ADR-013 amendment).
        - The decision lists `unconfirmedFacts`.
-     - J1b-3: `game.history`;
+     - J1b-3: `game.history`. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-3-game-history.md`.
+       - PGN or scoresheet text is parsed in the domain (start position only via `[FEN]`, FEN lists rejected), then replayed with chess.js `strict: true`.
+       - In an incomplete history, "not met" is inconclusive and the start FEN's clock is not trusted.
+       - DT-005 asks `historyConfirmed`: the arbiter compares the final position and the move count with the board.
      - J1b-4: mate possibility;
      - J1b-5: DT-005/006 restructure;
      - J1b-6: DT-007 touch move and counting;

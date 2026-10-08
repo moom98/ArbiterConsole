@@ -458,7 +458,22 @@ describe("DecisionEngine — DT-005 automatic repetition check via injected port
       positionsText: "1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6 4. Ng1",
       intendedMove: "Ng8",
     });
-    const r = engine.processIncident({ incident: inc, ruleset: STANDARD });
+    // 再生した最終局面を盤上と照合してもらう（ADR-014 §4）
+    const ask = engine.processIncident({ incident: inc, ruleset: STANDARD });
+    expect(ask.requiresFollowUp).toBe(true);
+    expect(ask.followUpQuestions.map((q) => q.id)).toEqual([
+      "historyConfirmed",
+    ]);
+    expect(ask.decision.conclusion).toContain("初期配置から7半手");
+    expect(ask.decision.conclusion).toContain("4. Ng1");
+    expect(ask.decision.conclusion).toContain("黒の手番");
+    expect(ask.decision.penalties).toHaveLength(0);
+
+    const confirmed = applyIncidentAnswers(inc, { historyConfirmed: "match" });
+    const r = engine.processIncident({
+      incident: confirmed,
+      ruleset: STANDARD,
+    });
     expect(r.decision.treeId).toBe("DT-005-repetition");
     expect(r.decision.penalties[0].type).toBe("draw");
   });

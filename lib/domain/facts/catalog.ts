@@ -160,7 +160,7 @@ export const FACT_DEFINITIONS: readonly FactDefinition[] = [
   ),
   localOnly(
     "game.history",
-    "対局の手順（PGN／棋譜。途中から始まる場合は開始 FEN を含む。端末内だけで使い、外部へは送りません）",
+    "対局の手順（PGN／棋譜。途中から始まる場合は開始 FEN を含む。端末内で厳密に再生・検証し、最終局面を盤上と照合します。外部へは送りません）",
     "game-history",
     [req("§19"), design("ADR-014 §4")]
   ),
@@ -1123,7 +1123,8 @@ export const FACT_USAGES: readonly FactUsage[] = [
     category: "draw",
     level: "conditional",
     appliesWhen: DRAW_POSITIONS,
-    dtQuestionIds: ["positionsText"],
+    // 棋譜の入力と、再生した最終局面の盤上との照合（ADR-014 §4）
+    dtQuestionIds: ["positionsText", "historyConfirmed"],
     dtValues: "computed",
   },
   {

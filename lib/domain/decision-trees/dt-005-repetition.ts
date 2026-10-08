@@ -2,6 +2,7 @@ import type {
   CompetitionType,
   ConditionCheck,
   DrawClaimFacts,
+  HistoryConfirmation,
   Penalty,
   PlayerColor,
   SupervisionRegime,
@@ -76,35 +77,85 @@ export class RepetitionTree {
 
   // ---------------------------------------------------------------------------
 
-  /** 確認結果（手動 or 自動）を解決する。追加入力が必要なら null + 質問 */
+  /**
+   * 確認結果（手動 or 自動）を解決する。
+   * - null: 確認方法が未回答
+   * - error: 自動判定を使えない（理由を示して手動の確認を求める）
+   * - confirm: 再生した最終局面を盤上と照合してもらう（ADR-014 §4）
+   *
+   * 自動判定では、初期配置からの履歴で、かつ局面と手数の両方が一致した場合だけ
+   * 「不成立」を確定できる。途中からの履歴や手数を確認できない場合、autoOutcome は
+   * "inconclusive" を返し、盤上での手動再現に回す。
+   */
   private resolveCheck(
+    input: Partial<RepetitionInput>,
     check: ConditionCheck | undefined,
-    analysis: RepetitionInput["analysis"],
-    positionsText: string | undefined,
-    autoOutcome: (r: RepetitionAnalysis) => Outcome,
+    autoOutcome: (
+      r: RepetitionAnalysis,
+      complete: boolean
+    ) => Outcome | "inconclusive",
     /** 自動判定の前提を検証する（不整合ならエラー文を返す） */
     validate?: (r: RepetitionAnalysis) => string | undefined
   ):
-    { outcome: Outcome; auto?: RepetitionAnalysis } | { error: string } | null {
+    | { outcome: Outcome; auto?: RepetitionAnalysis }
+    | { error: string }
+    | { confirm: RepetitionAnalysis }
+    | null {
     if (check === undefined) return null;
     if (check !== "auto") return { outcome: check };
-    if (!positionsText)
+    const { analysis } = input;
+    if (!input.positionsText)
       return {
-        error:
-          "「判定する」を選んだ場合は、棋譜または FEN を入力してください。",
+        error: "「判定する」を選んだ場合は、棋譜（PGN）を入力してください。",
       };
     if (!analysis) return { error: "局面の自動判定は利用できません。" };
     if (!analysis.ok)
-      return { error: `入力を解析できません: ${analysis.error}` };
+      return {
+        error: `棋譜を検証できません: ${analysis.error}\n棋譜を直すか、盤上で手順を再現して確認してください。`,
+      };
     const invalid = validate?.(analysis.result);
     if (invalid) return { error: invalid };
-    return { outcome: autoOutcome(analysis.result), auto: analysis.result };
+    const confirmed = input.historyConfirmed;
+    if (confirmed === undefined) return { confirm: analysis.result };
+    if (confirmed === "mismatch" || confirmed === "unknown")
+      return {
+        error:
+          "棋譜を再生した局面が盤上と照合できないため、自動判定は使いません。盤上で手順を再現して確認し、結果を選んでください。",
+      };
+    const complete = analysis.result.complete && confirmed === "match";
+    const outcome = autoOutcome(analysis.result, complete);
+    if (outcome === "inconclusive")
+      return {
+        error: analysis.result.complete
+          ? "手数を確認できない棋譜では、開始より前の手順が欠けている可能性があるため「不成立」を自動では確定できません。盤上で手順を再現して確認してください。"
+          : "途中の局面から始まる棋譜では、開始局面より前の局面が分からないため「不成立」を自動では確定できません。盤上で手順を再現して確認してください。",
+      };
+    return { outcome, auto: analysis.result };
   }
 
-  private autoLine(a: RepetitionAnalysis | undefined): string[] {
-    if (!a) return [];
+  /** 再生した最終局面を盤上と照合してもらう案内（ADR-014 §4） */
+  private confirmText(a: RepetitionAnalysis): string {
+    const h = a.history;
+    const from = h.complete ? "初期配置から" : "途中の局面（[FEN]）から";
+    const side = COLOR_JA[h.sideToMove];
     return [
-      `自動判定: ${a.positions}局面を解析（${a.format === "moves" ? "棋譜" : "FEN"}）。対象局面の出現 ${a.targetOccurrences}回 / 最大 ${a.maxOccurrences}回 / ポーン移動・駒取りなし 最大 ${a.maxHalfmoveClock}半手`,
+      h.lastMove
+        ? `棋譜を再生しました: ${h.lastMove} まで（${from}${h.plies}半手）。最終局面は${h.fullmoveNumber}手目の${side}の手番です。`
+        : `棋譜を再生しました: 指し手はありません（${from}）。最終局面は${h.fullmoveNumber}手目の${side}の手番です。`,
+      `FEN: ${h.finalFen}`,
+      "盤上の局面とスコアシートの手数を照合してください。",
+    ].join("\n");
+  }
+
+  private autoLine(
+    a: RepetitionAnalysis | undefined,
+    confirmed: HistoryConfirmation | undefined
+  ): string[] {
+    if (!a) return [];
+    const checked =
+      confirmed === "match" ? "盤上と照合済み" : "局面のみ照合（手数は未確認）";
+    return [
+      `自動判定: 棋譜（${a.complete ? "初期配置から" : "途中の局面から"}${a.history.plies}半手）を再生し、${checked}。対象局面の出現 ${a.targetOccurrences}回 / 最大 ${a.maxOccurrences}回 / ポーン移動・駒取りなし 最大 ${a.maxHalfmoveClock}半手`,
       "自動判定は入力に依存する。両プレーヤーの面前で対局を再現して確認する",
     ];
   }
@@ -185,15 +236,31 @@ export class RepetitionTree {
             "9.2.1 のクレームを自動判定するには、記入した次の手（例: Ng8）を入力してください。",
         }
       : this.resolveCheck(
+          input,
           input.conditionCheck,
-          input.analysis,
-          input.positionsText,
-          (r) => (r.targetOccurrences >= 3 ? "met" : "not-met"),
+          (r, complete) =>
+            r.targetOccurrences >= 3
+              ? "met"
+              : complete
+                ? "not-met"
+                : "inconclusive",
           (r) =>
             r.sideToMove !== claimant
               ? `入力された手順の最後の局面は${COLOR_JA[r.sideToMove]}の手番です。クレームした${COLOR_JA[claimant]}の手番になるまでの手順を入力してください。`
               : undefined
         );
+    const claimSources = cite(
+      "FIDE_9_2",
+      "FIDE_9_2_3",
+      "FIDE_9_5_1",
+      "MANUAL_9_2_CHECK_PRESENCE"
+    );
+    if (resolved !== null && "confirm" in resolved)
+      return this.out.needsInput(
+        [QUESTIONS.historyConfirmed],
+        `${COLOR_JA[claimant]}の三回同一局面のクレームです。時計を止めたまま、両プレーヤーの面前で確認してください。\n${this.confirmText(resolved.confirm)}`,
+        claimSources
+      );
     if (resolved === null || "error" in resolved) {
       const qs: FollowUpQuestion[] = [
         QUESTIONS.repetitionCheck,
@@ -227,7 +294,7 @@ export class RepetitionTree {
         conclusion: `${COLOR_JA[claimant]}のクレームは正しいです（同一局面が3回以上）。ドローです。`,
         actions: [
           "時計を止める（9.5.1）",
-          ...this.autoLine(resolved.auto),
+          ...this.autoLine(resolved.auto, input.historyConfirmed),
           ...fivefoldNote,
           "ドローを宣言する（9.5.2）",
           "結果を記録する",
@@ -330,7 +397,7 @@ export class RepetitionTree {
             ? tournamentPenaltyNote(rule)
             : ""),
       actions: [
-        ...this.autoLine(auto),
+        ...this.autoLine(auto, input.historyConfirmed),
         rule.kind === "fixed"
           ? `${COLOR_JA[opp]}の残り時間に${amount}加算する（9.5.3${input.competitionType === "standard" ? "" : " / A.3"}）`
           : rule.kind === "tournament"
@@ -355,11 +422,17 @@ export class RepetitionTree {
 
   private fivefold(input: Partial<RepetitionInput>): DecisionTreeResult {
     const resolved = this.resolveCheck(
+      input,
       input.conditionCheck,
-      input.analysis,
-      input.positionsText,
-      (r) => (r.maxOccurrences >= 5 ? "met" : "not-met")
+      (r, complete) =>
+        r.maxOccurrences >= 5 ? "met" : complete ? "not-met" : "inconclusive"
     );
+    if (resolved !== null && "confirm" in resolved)
+      return this.out.needsInput(
+        [QUESTIONS.historyConfirmed],
+        `五回同一局面（9.6.1）の確認です。直ちに時計を止めて確認してください。\n${this.confirmText(resolved.confirm)}`,
+        cite("FIDE_9_6", "MANUAL_9_6_INTERVENE")
+      );
     if (resolved === null || "error" in resolved) {
       return this.out.needsInput(
         [QUESTIONS.fivefoldCheck, QUESTIONS.positionsText],
@@ -374,7 +447,7 @@ export class RepetitionTree {
           "同じ局面が5回以上出現しています。プレーヤーのクレームは不要で、対局はドローです（9.6.1）。直ちに介入してください。",
         actions: [
           "直ちに時計を止めて介入する",
-          ...this.autoLine(resolved.auto),
+          ...this.autoLine(resolved.auto, input.historyConfirmed),
           "ドローを宣言する（9.6.1）",
           "結果を記録する",
         ],
@@ -396,7 +469,7 @@ export class RepetitionTree {
         conclusion:
           "同じ局面は5回未満のため、9.6.1 による介入は行いません。対局を続行します。",
         actions: [
-          ...this.autoLine(resolved.auto),
+          ...this.autoLine(resolved.auto, input.historyConfirmed),
           "介入しない（プレーヤーは手番で 9.2 のクレームができる）",
           "引き続き、同一局面の回数を記録しておく",
         ],
@@ -415,18 +488,27 @@ export class RepetitionTree {
 
   private seventyFive(input: Partial<RepetitionInput>): DecisionTreeResult {
     const resolved = this.resolveCheck(
+      input,
       input.conditionCheck,
-      input.analysis,
-      input.positionsText,
+      // 9.6.2: 途中で一度でも 150 半手に達していれば成立。途中からの履歴では
+      // 開始 FEN の halfmove clock を信用せず、履歴内で数えた値（下限）で比べる
+      (r, complete) =>
+        r.maxHalfmoveClock >= SEVENTY_FIVE_MOVES_PLIES
+          ? "met"
+          : complete
+            ? "not-met"
+            : "inconclusive",
       (r) =>
-        r.format === "moves"
-          ? // 9.6.2: 途中で一度でも 150 半手に達していれば成立
-            r.maxHalfmoveClock >= SEVENTY_FIVE_MOVES_PLIES
-            ? "met"
-            : "not-met"
-          : // FEN の halfmove clock は入力者が記入した値のため、確定には使わない
-            "unknown"
+        r.seventyFiveCheckmateUncertain
+          ? "途中の局面から始まる棋譜では、75手に達したのが最後のチェックメイトの手か、それより前かを確定できません（開始局面の手数は使いません）。盤上・スコアシートで手順を確認してください。"
+          : undefined
     );
+    if (resolved !== null && "confirm" in resolved)
+      return this.out.needsInput(
+        [QUESTIONS.historyConfirmed],
+        `75手ルール（9.6.2）の確認です。直ちに時計を止めて確認してください。\n${this.confirmText(resolved.confirm)}`,
+        cite("FIDE_9_6", "MANUAL_9_6_INTERVENE")
+      );
     const missing: FollowUpQuestion[] = [];
     if (resolved === null || "error" in resolved)
       missing.push(QUESTIONS.seventyFiveCheck, QUESTIONS.positionsText);
@@ -466,7 +548,7 @@ export class RepetitionTree {
           "両プレーヤーとも、ポーンの移動も駒取りもなく75手以上を指しています。対局はドローです（9.6.2）。直ちに介入してください。",
         actions: [
           "直ちに時計を止めて介入する",
-          ...this.autoLine(resolved.auto),
+          ...this.autoLine(resolved.auto, input.historyConfirmed),
           "ドローを宣言する（9.6.2）",
           "結果を記録する",
         ],
@@ -486,7 +568,7 @@ export class RepetitionTree {
         kind: "recommendation",
         conclusion: "75手に達していないため、9.6.2 による介入は行いません。",
         actions: [
-          ...this.autoLine(resolved.auto),
+          ...this.autoLine(resolved.auto, input.historyConfirmed),
           "介入しない（50手ルール 9.3 のクレームは手番のプレーヤーが行える）",
           "引き続き手数を記録しておく",
         ],

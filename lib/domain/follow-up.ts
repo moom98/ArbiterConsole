@@ -7,6 +7,7 @@ import type {
   DrawSubtype,
   FlagFallFacts,
   FlagFallen,
+  HistoryConfirmation,
   Incident,
   IllegalMoveDetection,
   IllegalMoveFacts,
@@ -59,6 +60,7 @@ export type IncidentQuestionId =
   | "seventyFiveCheck"
   | "lastMoveCheckmate"
   | "positionsText"
+  | "historyConfirmed"
   | "intendedMove"
   // 手動確認（決定木の対象外）
   | "situationNote";
@@ -234,7 +236,7 @@ function withUnknown(
 
 const CONDITION_AUTO: FollowUpOption = {
   value: "auto",
-  label: "下の棋譜 / FEN から判定する",
+  label: "下の棋譜から判定する",
 };
 
 const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
@@ -484,12 +486,25 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
   positionsText: {
     id: "positionsText",
     scope: "incident",
-    label: "（任意）棋譜（初期局面からの指し手）または FEN（1行に1局面）",
-    help: "「判定する」を選んだ場合に使用します。例: 1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6",
+    label: "（任意）棋譜・PGN（初期配置からの指し手）",
+    help: '「判定する」を選んだ場合に使用します。標準の表記（SAN）で入力してください。例: 1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6。途中の局面から始める場合は [FEN "…"] を先頭に書きます（その場合「不成立」は自動では確定しません）。FEN の列は使えません。入力した棋譜は端末の外へ送りません。',
     input: "text",
     optional: true,
     placeholder: "1. e4 e5 2. Nf3 Nc6 ...",
     options: [],
+  },
+  historyConfirmed: {
+    id: "historyConfirmed",
+    scope: "incident",
+    label:
+      "棋譜を再生した最終局面と手数は、盤上の局面・スコアシートと一致しますか？",
+    help: "上に表示した最終局面（手番・最後の手・FEN）を盤上と照合してください。一致しない場合は自動判定を使いません。",
+    options: [
+      { value: "match", label: "局面も手数も一致した" },
+      { value: "position-only", label: "局面は一致・手数は確認できない" },
+      { value: "mismatch", label: "一致しない" },
+      { value: "unknown", label: "照合できない（盤上で再現する）" },
+    ],
   },
   intendedMove: {
     id: "intendedMove",
@@ -537,7 +552,7 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
 /**
  * 共通の unknown を持つ質問（fact-model §3.3）。
  * 独自の unknown 値を持つ質問（opponentCanCheckmate・bothFlagsOrder・movesNotCompleted・
- * positionBlocked・同一局面の確認）は各 DT が独自の手動確認で扱うため含めない。
+ * positionBlocked・同一局面の確認・対局履歴の照合）は各 DT が独自の手動確認で扱うため含めない。
  * 駒数（count）・テキストは列挙できず、テキストは任意（空欄 = 不明）のため含めない。
  * game-context（競技区分・規則）は大会プロファイルから与えるため含めない。
  */
@@ -888,8 +903,32 @@ export function applyIncidentAnswers(
         touchedDraw = true;
         break;
       }
+      case "historyConfirmed":
+        if (
+          isOneOf(raw, [
+            "match",
+            "position-only",
+            "mismatch",
+            "unknown",
+          ] as readonly HistoryConfirmation[])
+        ) {
+          draw.historyConfirmed = raw;
+          touchedDraw = true;
+        }
+        break;
     }
   }
+
+  // 別の対局履歴に対する照合結果は引き継がない（ADR-014 §4）。同じ送信で新しい棋譜と
+  // 照合結果が届いた場合も、照合は表示していた旧い棋譜に対するものなので消す
+  if (draw.positionsText !== incident.drawClaimFacts?.positionsText)
+    delete draw.historyConfirmed;
+  // 「判定する」を選び直した場合は、照合からやり直す（「一致しない」の誤タップを取り消せる）
+  const reselectedAuto = (
+    ["repetitionCheck", "fivefoldCheck", "seventyFiveCheck"] as const
+  ).some((id) => answers[id] === "auto");
+  if (reselectedAuto && answers.historyConfirmed === undefined)
+    delete draw.historyConfirmed;
 
   const next: Incident = {
     ...incident,

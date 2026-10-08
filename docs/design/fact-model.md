@@ -239,6 +239,40 @@ See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §4.
 - Without a valid history, the trees ask for `dr.manual-reconstruction` or go to manual-review. They never parse free text.
 - `game.history` is local-only (🔒) and never sent externally (ADR-012).
 
+**Implementation (J1b-3).** See `docs/progress/milestones/j1b-3-game-history.md`.
+
+- **Domain service** `lib/domain/services/game-history.ts` (pure):
+  - `parseGameHistoryText(text)` turns PGN or scoresheet text into `GameHistory`.
+    - It removes headers, comments, variations, NAGs, move numbers, results and `!?`.
+    - The start position comes **only** from a `[FEN "…"]` header.
+    - Any FEN placement in the body is rejected, so a FEN list never becomes a history.
+  - `validateGameHistory(port, history)` replays the history through the port. The result is `ValidatedGameHistory`: positions, FENs, canonical SAN, plies and `complete`.
+  - `complete` is true only when the history starts at the standard initial position.
+  - `trustedHalfmoveClock` = `min(clock, plyIndex)` for an incomplete history: the start FEN's clock is never trusted.
+  - `summarizeGameHistory` gives the final position for the arbiter: plies, last move (e.g. `23... Kg7`), side to move and FEN.
+- **Port** (`chess-js-position-port.ts`):
+  - `replay(history)` and `play(fen, san)` use chess.js `move(san, { strict: true })`.
+  - Over-disambiguation (`Ngf3`), coordinates (`e2e4`), `0-0` and ambiguous SAN are rejected, with a hint.
+  - Wrong check suffixes (`Rh8#` for a check) are accepted by chess.js. They do not change which move is meant.
+- **`analyzeRepetition(port, validated, intendedMove?)`** takes only a validated history. Its result has `complete` and the `history` summary. `format` and `detectPositionsFormat` are removed.
+- **DT-005 (until the J1b-5 restructure):**
+  - With `conditionCheck = auto` and a valid history, the tree first asks `historyConfirmed`. The final position summary is shown in the conclusion. The options are:
+    - `match`: position and move count agree;
+    - `position-only`: the position agrees, but the move count cannot be checked;
+    - `mismatch`;
+    - `unknown`: cannot compare.
+  - `historyConfirmed` has its own `unknown`, so it is not enumerated by `resolveUnknown`.
+  - `mismatch` and `unknown` → no automatic decision. The tree asks for the manual check again, which is today's `dr.manual-reconstruction`.
+  - A not-met automatic outcome is decided only for a **complete** history confirmed with `match`. Otherwise it is inconclusive and goes to the manual check. A met outcome (repetition found, 150 counted plies) is decided either way.
+  - Changing `positionsText` clears `historyConfirmed`, even when both arrive in the same submission. Choosing "判定する" (`auto`) again also clears it, so a mis-tapped `mismatch` can be undone.
+  - **75-move checkmate precedence in an incomplete history.**
+    - Suppose the counted clock reaches 150 at a checkmate with no reset inside the history. The real 150th ply may have come earlier, so we cannot tell which came first.
+    - This sets `seventyFiveCheckmateUncertain`, and the case goes to the manual check.
+    - If that position is not checkmate, the result is a draw either way: a position that reached 150 earlier had a following move, so it was not mate.
+  - The summary leads with the move number: "4... Ng8 まで（初期配置から8半手）。最終局面は5手目の白の手番".
+  - When an unknown answer leads every branch to the same follow-up question with the same conclusion, `resolveUnknown`'s `ask-others` keeps that conclusion. This way the confirmation never appears without the position it refers to.
+- The source `Game.pgn` is not wired yet. No UI sets it. Today the history comes from the pasted text (`positionsText`).
+
 ### 3.6 Time control periods (FIDE 8.4)
 
 - `TimeControl.periods` comes from the Tournament Profile.

@@ -106,7 +106,15 @@ export type UnknownResolution =
    * 未回答の質問が他にある。unknown の質問を除いて先に質問する
    * （unknown の事実は、それが必要になった時点で列挙する）
    */
-  | { kind: "ask-others"; questions: FollowUpQuestion[] }
+  | {
+      kind: "ask-others";
+      questions: FollowUpQuestion[];
+      /**
+       * 全分岐が同じ質問を求め、結論文（質問の前提となる案内）も同じ場合のその文。
+       * 例: 対局履歴の照合では、照合する最終局面を結論文で示す（ADR-014 §4）
+       */
+      conclusion?: string;
+    }
   /** すべての分岐が同じ判断（§3.3 2） */
   | { kind: "agreed"; facts: FollowUpQuestion[]; branches: UnknownBranch[] }
   /** 判断が分かれる・列挙できない・多すぎる（§3.3 3） */
@@ -230,9 +238,16 @@ export function resolveUnknown(params: {
         BranchResult,
         { status: "needs-input" }
       >;
+      const conclusion = firstNeeds.decision.conclusion;
+      const sameConclusion = branches.every(
+        (b) =>
+          b.result.status === "needs-input" &&
+          b.result.decision.conclusion === conclusion
+      );
       return {
         kind: "ask-others",
         questions: firstNeeds.questions.filter((x) => !unknown.has(x.id)),
+        ...(sameConclusion ? { conclusion } : {}),
       };
     }
 

@@ -360,10 +360,14 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
         claimMode: "just-appeared",
         touchedPiece: "false",
       });
-      const final = await answer({
+      const confirm = await answer({
         repetitionCheck: "auto",
         positionsText: "1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6 4. Ng1",
       });
+      expect(confirm.followUpQuestions.map((q) => q.id)).toEqual([
+        "historyConfirmed",
+      ]);
+      const final = await answer({ historyConfirmed: "match" });
       // 黒番で 4.Ng1 の後の局面は2回目のみ → 誤ったクレーム（白に2分）
       expect(final.decision.treeId).toBe("DT-005-repetition");
       expect(final.decision.penalties[0]).toEqual(

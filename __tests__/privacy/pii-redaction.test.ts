@@ -175,6 +175,32 @@ describe("PII redaction (external-ai-data-protection §5.2)", () => {
       }
     });
 
+    it("a wall-clock time after 時計 followed by に/から/頃 is redacted (review 3, M2)", () => {
+      for (const text of ["時計を14:20に止めた", "時計は13:05に交換した"]) {
+        expect(redact(text), text).toContain("〈日時1〉");
+        expect(residualCheck(text, IDS).ok, text).toBe(false);
+      }
+      expect(redact("表示は1:05のまま")).toBe("表示は1:05のまま");
+      expect(redact("残り13:05")).toBe("残り13:05");
+    });
+
+    it("a kanji numeral inside a word is not a round or board number (同一局面)", () => {
+      expect(redact("同一局面が3回目")).toBe("同一局面が3回目");
+      expect(redact("第一局で違法手")).toBe("〈ラウンド1〉で違法手");
+      expect(redact("十番盤で違法手")).toBe("〈盤1〉で違法手");
+    });
+
+    it("a registered one-character name", () => {
+      const ids: KnownIdentifiers = {
+        ...NO_IDENTIFIERS,
+        players: [{ name: "林" }],
+      };
+      expect(redactPii("林が違法手", ids, new PlaceholderMap()).text).toBe(
+        "〈選手A〉が違法手"
+      );
+      expect(residualCheck("林が違法手", ids).ok).toBe(false);
+    });
+
     it("text shaped like a placeholder but not one is processed as text", () => {
       expect(redact("〈選手TANAKA〉が違法手")).not.toContain("〈選手TANAKA〉");
       expect(redact("〈人物090〉が違法手")).not.toContain("〈人物090〉");

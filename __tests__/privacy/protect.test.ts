@@ -167,6 +167,24 @@ describe("protectIncidentText (§3 steps A–E)", () => {
     expect(!r.ok && r.gate.reasons.map((x) => x.code)).toContain("too-long");
   });
 
+  it("E: words swallowed by a pattern rule are checked against the vocabulary (J1a-1 review 3, M1)", () => {
+    for (const text of [
+      "妊婦さんが白の席の隣で対局していた",
+      "看護師さんが白の席に来た",
+      "ムスリム選手が対局を中断した",
+      "白の母さんが白に強く言っていた",
+      "違法手の後、白がPanic Attackになった",
+      "白がリハビリクラブの時計を押した",
+      // 登録されていない名前も同じ（端末内で処理する）
+      "中村さんが違法手を指した",
+    ]) {
+      const r = run(text);
+      expect(r.ok, text).toBe(false);
+    }
+    // 登録済みの名前のプレースホルダーは既知のまま
+    expect(run("田中太郎が違法手を指して時計を押した。").ok).toBe(true);
+  });
+
   it("never returns the original text when it stops", () => {
     const r = run("田中太郎が救急車で運ばれた");
     expect(JSON.stringify(r)).not.toContain("田中");

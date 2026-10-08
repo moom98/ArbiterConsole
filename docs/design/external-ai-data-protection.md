@@ -189,7 +189,7 @@ Placeholders use `〈…〉` and are **indexed per request**: `〈選手A〉`, `
 
 **5.2.1 Kept**, because they carry meaning and identify nobody:
 
-- **Clock readings.** `H:MM` or `H:MM:SS` within 6 characters after 残り, 持ち時間, 時計, 表示 or 秒読み, or before 残.
+- **Clock readings.** `H:MM` or `H:MM:SS` within 6 characters after 残り, 持ち時間, 時計, 表示 or 秒読み, or before 残 — **except** an hour of 3 or more followed by に, から, まで, 頃 or 過ぎ, which is a time of day (時計を14:20に止めた). Near 白, 黒 or フラッグ only readings up to 2:59 count as clock readings (J1a-1 reviews 2 and 3).
 - Durations: `30秒`, `5分`, `90分+30秒`.
 - Counts: `50手`, `2回目`.
 - The colours 白 and 黒, chess terms, and "相手選手".
@@ -403,7 +403,17 @@ The pure package exists and is tested; nothing calls it yet (J1a-2 wires it into
   - registry additions: `third-party` (観戦者, 監督, キャプテン, 隣の選手 …: never `clear`), and terms without a benign context: 何か, 大声, 何度も, taking things away (持って帰 …), following (付いて行 …), 帰れない, 呼び止め, 待っている;
   - PII: placeholders have a fixed shape (`〈選手A〉`…`〈選手ZZZ〉`, others 1–999), so typed look-alikes are text; a wall-clock H:MM next to 白/黒/フラッグ is redacted (only up to 2:59 counts as a clock reading there); single-kanji name parts are matched only for the surname and not before a verb ending (田中 勝 must not break 白の勝ち).
 - **Results after the second review:** 0 false negatives on all three sets used so far (192 own, 108 from review 1, 117 from review 2, the last two now regression sets). False positives on the 76-report benign set: 6 (7.9%); third parties (キャプテン, 観戦者) are always held back. The second reviewer measured 11 of 80 (13.75%) on its own benign set before the fixes; the fixes added restrictions, so expect more.
-- **Tests:** `__tests__/privacy/{sensitive-gate,gate-evaluation,pii-redaction,protect}.test.ts`.
+- **Third review (2026-10-08): FIX REQUIRED.** Held-out measurement on 208 new phrases: the gate alone let 21 through (10.1%), the whole pipeline sent 35 (16.8%). Fixes:
+  - **M1: placeholders from pattern rules hid content words** (妊婦さん → 〈人物1〉さん, リハビリクラブ → 〈団体1〉). `PlaceholderMap` now marks placeholders from rules 6, 7, 12 and 13 (and a name after a title) as *unverified*; step E runs the gate on the text with those restored (`restoreUnverified`, on the device only). Unregistered names therefore always go to the local fallback; registered names stay usable.
+  - **M2: wall-clock times after 時計** (§5.2.1 above).
+  - kanji numerals inside a word are not round or board numbers (同一局面 was damaged);
+  - registry: `third-party` also covers 主将, メンバー, チーム, 他の/別の選手 and 対局者; new `bag` entry (only putting a phone away is benign); new `cannot` entry (押せない, 持てない …); terms 待って, 強く言, 受け取, 次はない; 変 and 指示 removed from the vocabulary;
+  - grammar: two one-kana particles in a row cannot build a word (はは, かね); ない and だ are also function words (加算がなかった, 違法だが), while ない still cannot carry a verb ending (ないていた);
+  - vocabulary: 間違え, 盤の外, 抜け, 手を離, 指し方, 放置, 撤回, 質問, 段目; `protest` benign context widened (ペアリングの結果に…苦情);
+  - a registered one-character name (林) is redacted and checked.
+- **Results after the third review:** 0 false negatives, through the gate and through the whole pipeline, on all four sets (192 own, 108 + 269 + 208 from the three reviews; all are now regression sets, so they no longer measure held-out performance). Usefulness: 5 of the reviewers' 80 realistic non-sensitive reports are held back (6.25%).
+- **Held-out false-negative rates so far** (each measured before the fixes that followed): list-based gate ~76% (115/151); known vocabulary ~43% (117/270); after review-2 fixes 10.1% gate / 16.8% pipeline (208). The arbiter's confirmation (D13) remains the final defense.
+- **Tests:** `__tests__/privacy/{sensitive-gate,gate-evaluation,pii-redaction,protect}.test.ts`. `gate-evaluation` also runs every sensitive set through `protectIncidentText`.
 
 ## Appendix A. Sensitive terms (for review)
 

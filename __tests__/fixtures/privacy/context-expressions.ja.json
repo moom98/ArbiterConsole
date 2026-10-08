@@ -2087,34 +2087,199 @@
    "text": "白が黒を呼び止めた。体調が悪いと言った"
   },
   {
-   "entry": "term:待っている",
+   "entry": "term:待って",
    "expected": "uncertain",
-   "text": "会場で待っている"
+   "text": "会場で待っていた"
   },
   {
-   "entry": "term:待っている",
+   "entry": "term:待って",
    "expected": "blocked",
-   "text": "会場で待っている。暴言もあった"
+   "text": "会場で待っていた。暴言もあった"
   },
   {
-   "entry": "term:待っている",
+   "entry": "term:待って",
    "expected": "uncertain",
    "text": "相手が待っている"
   },
   {
-   "entry": "term:待っている",
+   "entry": "term:待って",
    "expected": "blocked",
    "text": "相手が待っている。警察を呼んだ"
   },
   {
-   "entry": "term:待っている",
+   "entry": "term:待って",
    "expected": "uncertain",
-   "text": "対局後に待っている"
+   "text": "対局後に待って"
   },
   {
-   "entry": "term:待っている",
+   "entry": "term:待って",
    "expected": "blocked",
-   "text": "対局後に待っている。体調が悪いと言った"
+   "text": "対局後に待って。体調が悪いと言った"
+  },
+  {
+   "entry": "term:強く言",
+   "expected": "uncertain",
+   "text": "強く言った"
+  },
+  {
+   "entry": "term:強く言",
+   "expected": "blocked",
+   "text": "強く言った。暴言もあった"
+  },
+  {
+   "entry": "term:強く言",
+   "expected": "uncertain",
+   "text": "相手に強く言われた"
+  },
+  {
+   "entry": "term:強く言",
+   "expected": "blocked",
+   "text": "相手に強く言われた。警察を呼んだ"
+  },
+  {
+   "entry": "term:強く言",
+   "expected": "uncertain",
+   "text": "強く言っていた"
+  },
+  {
+   "entry": "term:強く言",
+   "expected": "blocked",
+   "text": "強く言っていた。体調が悪いと言った"
+  },
+  {
+   "entry": "term:受け取",
+   "expected": "uncertain",
+   "text": "用紙を受け取った"
+  },
+  {
+   "entry": "term:受け取",
+   "expected": "blocked",
+   "text": "用紙を受け取った。暴言もあった"
+  },
+  {
+   "entry": "term:受け取",
+   "expected": "uncertain",
+   "text": "何かを受け取った"
+  },
+  {
+   "entry": "term:受け取",
+   "expected": "blocked",
+   "text": "何かを受け取った。警察を呼んだ"
+  },
+  {
+   "entry": "term:受け取",
+   "expected": "uncertain",
+   "text": "手紙を受け取った"
+  },
+  {
+   "entry": "term:受け取",
+   "expected": "blocked",
+   "text": "手紙を受け取った。体調が悪いと言った"
+  },
+  {
+   "entry": "term:次はない",
+   "expected": "uncertain",
+   "text": "次はないと言った"
+  },
+  {
+   "entry": "term:次はない",
+   "expected": "blocked",
+   "text": "次はないと言った。暴言もあった"
+  },
+  {
+   "entry": "term:次はない",
+   "expected": "uncertain",
+   "text": "次はないぞ"
+  },
+  {
+   "entry": "term:次はない",
+   "expected": "blocked",
+   "text": "次はないぞ。警察を呼んだ"
+  },
+  {
+   "entry": "term:次はない",
+   "expected": "uncertain",
+   "text": "次はないと言われた"
+  },
+  {
+   "entry": "term:次はない",
+   "expected": "blocked",
+   "text": "次はないと言われた。体調が悪いと言った"
+  },
+  {
+   "entry": "bag",
+   "expected": "blocked",
+   "text": "白のバッグに黒の時計が入っていた"
+  },
+  {
+   "entry": "bag",
+   "expected": "blocked",
+   "text": "バッグから財布を抜いた"
+  },
+  {
+   "entry": "bag",
+   "expected": "blocked",
+   "text": "鞄を盗まれた"
+  },
+  {
+   "entry": "bag",
+   "expected": "clear",
+   "text": "スマホをバッグに入れていた"
+  },
+  {
+   "entry": "bag",
+   "expected": "clear",
+   "text": "携帯を鞄に入れた"
+  },
+  {
+   "entry": "bag",
+   "expected": "clear",
+   "text": "スマホをかばんにしまった"
+  },
+  {
+   "entry": "bag",
+   "expected": "uncertain",
+   "text": "バッグを持っていた"
+  },
+  {
+   "entry": "bag",
+   "expected": "uncertain",
+   "text": "バッグが置いてあった"
+  },
+  {
+   "entry": "bag",
+   "expected": "uncertain",
+   "text": "鞄が大きい"
+  },
+  {
+   "entry": "cannot",
+   "expected": "blocked",
+   "text": "時計を押せない。体調が悪い"
+  },
+  {
+   "entry": "cannot",
+   "expected": "blocked",
+   "text": "駒を持てない。けいれんしている"
+  },
+  {
+   "entry": "cannot",
+   "expected": "blocked",
+   "text": "指せないと言って救急車"
+  },
+  {
+   "entry": "cannot",
+   "expected": "uncertain",
+   "text": "時計を押せない"
+  },
+  {
+   "entry": "cannot",
+   "expected": "uncertain",
+   "text": "駒を持てない"
+  },
+  {
+   "entry": "cannot",
+   "expected": "uncertain",
+   "text": "もう指せないと言った"
   }
  ]
 }

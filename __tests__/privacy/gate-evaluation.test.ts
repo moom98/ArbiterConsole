@@ -4,7 +4,24 @@ import context from "../fixtures/privacy/context-expressions.ja.json";
 import benign from "../fixtures/privacy/benign.ja.json";
 import review1 from "../fixtures/privacy/sensitive-review1.ja.json";
 import review2 from "../fixtures/privacy/sensitive-review2.ja.json";
-import { CONTEXT_EXPRESSIONS, evaluateSensitivity } from "@/lib/domain/privacy";
+import review3 from "../fixtures/privacy/sensitive-review3.ja.json";
+import benignReview from "../fixtures/privacy/benign-review.ja.json";
+import {
+  CONTEXT_EXPRESSIONS,
+  NO_IDENTIFIERS,
+  PlaceholderMap,
+  evaluateSensitivity,
+  protectIncidentText,
+} from "@/lib/domain/privacy";
+
+/** 送信までの全体（A〜E）を通した結果。true なら送られる */
+const sentByPipeline = (text: string) =>
+  protectIncidentText({
+    route: "classify",
+    text,
+    identifiers: NO_IDENTIFIERS,
+    map: new PlaceholderMap(),
+  }).ok;
 
 /**
  * Sensitive Gate の評価（external-ai-data-protection §8.1。リリースの条件）。
@@ -50,6 +67,32 @@ describe("Sensitive Gate evaluation (release gate)", () => {
       (c) => evaluateSensitivity({ text: c.text }).verdict === "clear"
     );
     expect(falseNegatives).toEqual([]);
+  });
+
+  it("0 false negatives on the third reviewer's set (now a regression set)", () => {
+    expect(review3.cases.length).toBeGreaterThanOrEqual(200);
+    const falseNegatives = review3.cases.filter(
+      (c) => evaluateSensitivity({ text: c.text }).verdict === "clear"
+    );
+    expect(falseNegatives).toEqual([]);
+  });
+
+  it("0 sensitive reports are sent through the whole pipeline (every set)", () => {
+    const all = [
+      ...sensitive.cases,
+      ...review1.cases,
+      ...review2.cases,
+      ...review3.cases,
+    ];
+    expect(all.filter((c) => sentByPipeline(c.text))).toEqual([]);
+  });
+
+  it("usefulness: at most 20% of the reviewers' realistic non-sensitive reports are held back (tracked)", () => {
+    const held = benignReview.cases.filter((c) => !sentByPipeline(c.text));
+    console.info(
+      `Held back (local fallback): ${held.length}/${benignReview.cases.length}`
+    );
+    expect(held.length / benignReview.cases.length).toBeLessThanOrEqual(0.2);
   });
 
   // 登録簿（L3）の判定を確かめる。既知の語彙（L3v）は別に確かめる（sensitive-gate.test）

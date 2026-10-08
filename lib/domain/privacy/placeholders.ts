@@ -65,6 +65,11 @@ export class PlaceholderMap {
   private readonly counters = new Map<PlaceholderKind, number>();
   /** 本文にもともとあったプレースホルダー（番号を重ねない） */
   private readonly reserved = new Set<string>();
+  /**
+   * 形の規則（敬称の前の語・英字の2語・団体・大会の名前）で置き換えた、登録されていない語。
+   * 中身が名前とは限らない（「妊婦さん」「リハビリクラブ」）ため、既知の語彙の判定では元に戻す
+   */
+  private readonly unverified = new Set<string>();
 
   /**
    * 本文にすでにある〈…〉を予約する（入力された〈…〉や、別の対応表で置き換えた本文）。
@@ -81,10 +86,18 @@ export class PlaceholderMap {
    * 元の文字列のプレースホルダー。key は同一性の判定に使う（例: 正規化した名前）。
    * 同じ key は同じプレースホルダーになる
    */
-  placeholder(kind: PlaceholderKind, original: string, key = original): string {
+  placeholder(
+    kind: PlaceholderKind,
+    original: string,
+    key = original,
+    options: { unverified?: boolean } = {}
+  ): string {
     const k = `${kind}\u0000${key}`;
     const existing = this.byKey.get(k);
-    if (existing) return existing;
+    if (existing) {
+      if (options.unverified) this.unverified.add(existing);
+      return existing;
+    }
     let n = this.counters.get(kind) ?? 0;
     let ph: string;
     do {
@@ -95,7 +108,18 @@ export class PlaceholderMap {
     this.counters.set(kind, n);
     this.byKey.set(k, ph);
     this.byPlaceholder.set(ph, original);
+    if (options.unverified) this.unverified.add(ph);
     return ph;
+  }
+
+  /**
+   * 登録されていない語のプレースホルダーを元に戻した本文（端末内の判定用。送らない）。
+   * 既知の語彙の判定（L3v）で、プレースホルダーに隠れた内容語を見逃さないために使う
+   */
+  restoreUnverified(text: string): string {
+    return text.replace(new RegExp(PLACEHOLDER_PATTERN.source, "g"), (ph) =>
+      this.unverified.has(ph) ? (this.byPlaceholder.get(ph) ?? ph) : ph
+    );
   }
 
   /** プレースホルダー → 元の文字列 */

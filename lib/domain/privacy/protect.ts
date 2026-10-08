@@ -109,8 +109,12 @@ export function protectIncidentText(input: ProtectInput): ProtectResult {
     };
   }
 
-  // E
-  const again = evaluateSensitivity({ ...common, text: minimized });
+  // E: 登録されていない語のプレースホルダーは元に戻して判定する（中身が名前とは限らない。
+  // 「妊婦さん」「リハビリクラブ」）。判定は端末内だけで行い、送るのは minimized
+  const again = evaluateSensitivity({
+    ...common,
+    text: input.map.restoreUnverified(minimized),
+  });
   if (again.verdict !== "clear")
     return { ok: false, stage: "gate-redacted", gate: again };
   return { ok: true, text: minimized };

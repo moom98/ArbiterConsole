@@ -194,6 +194,41 @@ describe("Sensitive Gate (external-ai-data-protection §4)", () => {
     });
   });
 
+  describe("review fixes (J1a-1 review 3)", () => {
+    it("third parties, bags, waiting, euphemisms, inability, two one-kana particles", () => {
+      for (const text of [
+        "主将が対局中の白に次の手を言った",
+        "白が対局中に他の選手と指し手について話した",
+        "白のメンバーが白の席に来て用紙を渡した",
+        "白のバッグの中に黒の時計があった",
+        "白が黒の駒を自分のバッグに入れて帰った",
+        "対局後、白が黒の帰りを会場で待っていた",
+        "白が黒に変なことを言った",
+        "白の時計が鳴った。白は対局中に黒に強く言った",
+        "黒が手を押さえて時計を押せないと言った",
+        "白のははが会場に来た",
+        "白が黒にかねを渡した",
+        "対局中に相手が本人に「次はない」と言った",
+      ])
+        expect(verdict(text), text).not.toBe("clear");
+      expect(verdict("スマホをバッグに入れていた")).toBe("clear");
+    });
+
+    it("usefulness: ない after a particle, the copula だ, 間違えた", () => {
+      for (const text of [
+        "加算がなかった",
+        "自分の手番でない時に提案した",
+        "メイトではなかった",
+        "違法だが時計を押した",
+        "手を間違えた",
+        "盤の外に落ちた",
+      ])
+        expect(verdict(text), text).toBe("clear");
+      // ない を語尾につなげて語を作らせない
+      expect(verdict("本人がないていた")).not.toBe("clear");
+    });
+  });
+
   describe("review fixes (J1a-1 review 2)", () => {
     it("a benign context marks only its trigger as known, never its wildcard text", () => {
       for (const text of [

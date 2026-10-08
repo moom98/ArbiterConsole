@@ -111,6 +111,8 @@ function looseIdentifierHit(text: string, ids: KnownIdentifiers): boolean {
     const n = normalizeName(p.name);
     if (parts.length === 1 && n.length >= 3 && /^[一-鿿々]{2}/.test(n))
       needles.push(n.slice(0, 2));
+    // 1文字の漢字の名前（「林」）
+    if (n.length === 1 && /[一-鿿々]/.test(n)) singles.push(n);
   }
   for (const v of [...ids.tournaments, ...ids.venues, ...ids.officials]) {
     add(v);
@@ -142,9 +144,17 @@ export function residualCheck(
   options: { minNarrativeChars?: number } = {}
 ): ResidualResult {
   const findings = new Set<ResidualFinding>();
-  const outside = withoutClockReadings(
-    textOutsidePlaceholders(neutralizeBrackets(redacted.normalize("NFKC")))
+  const beforeClock = textOutsidePlaceholders(
+    neutralizeBrackets(redacted.normalize("NFKC"))
   );
+  // 3時以降の H:MM に「に・から・まで・頃・過ぎ」が続けば、時計の近くでも時刻
+  if (
+    /(?<![\d:])([3-9]|1\d|2[0-3]):\d{2}(?=\s*(に|から|まで|頃|ごろ|過ぎ|すぎ))/.test(
+      beforeClock
+    )
+  )
+    findings.add("time");
+  const outside = withoutClockReadings(beforeClock);
   if (looseIdentifierHit(outside, ids)) findings.add("registered-identifier");
   if (DIGITS.test(outside)) findings.add("digits");
   for (const d of DETECTORS) if (d.re.test(outside)) findings.add(d.finding);

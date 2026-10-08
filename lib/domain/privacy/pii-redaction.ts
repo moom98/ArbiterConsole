@@ -60,6 +60,10 @@ const CLOCK_AFTER = /^\s*残/;
 const CLOCK_WEAK_BEFORE = /(白番|黒番|白|黒|フラッグ|フラグ)[\s\S]{0,6}$/;
 const CLOCK_WEAK_AFTER = /^\s*で?(フラッグ|フラグ|時間切|0になった)/;
 const MAX_WEAK_CLOCK_HOURS = 2;
+/** 時刻の後に続く語（3時以降の H:MM に続けば、時計の近くでも時刻とみなす） */
+const WALL_CLOCK_AFTER = /^\s*(に|から|まで|頃|ごろ|過ぎ|すぎ)/;
+/** 漢字の数字の前が漢字なら、数字ではなく語の一部（「同一局面」「唯一」） */
+const NUM_START = `(?:第${NUM}|[0-9]+|(?<![\\u3400-\\u4dbf\\u4e00-\\u9fff々〆])${KANJI_NUM}+)`;
 /** 漢字の時刻（「一時停止」「一時中断」は時刻ではない） */
 const KANJI_TIME = `${KANJI_NUM}{1,3}時(?:${KANJI_NUM}{1,3}分|半)?(?=頃|ごろ|に|から|まで|過ぎ|すぎ|前|ちょうど|の|、|。|$)`;
 
@@ -68,7 +72,9 @@ type Replacer = (segment: string, map: PlaceholderMap) => string;
 function rule(
   pattern: RegExp,
   kind: PlaceholderKind | ((m: string) => PlaceholderKind),
-  keep?: (match: RegExpExecArray, segment: string) => boolean
+  keep?: (match: RegExpExecArray, segment: string) => boolean,
+  /** 登録されていない語（中身を既知の語彙の判定で確かめる） */
+  unverified = false
 ): Replacer {
   return (segment, map) => {
     const re = new RegExp(
@@ -85,7 +91,9 @@ function rule(
       }
       if (keep?.(m, segment)) continue;
       const k = typeof kind === "function" ? kind(m[0]) : kind;
-      out += segment.slice(last, m.index) + map.placeholder(k, m[0]);
+      out +=
+        segment.slice(last, m.index) +
+        map.placeholder(k, m[0], m[0], { unverified });
       last = m.index + m[0].length;
     }
     return out + segment.slice(last);
@@ -138,6 +146,9 @@ const TIME = rule(
     if (!/^\d/.test(m[0]) || !m[0].includes(":")) return false;
     const before = segment.slice(0, m.index);
     const after = segment.slice(m.index + m[0].length);
+    // 「時計を14:20に止めた」: 3時以降で「に・から・まで・頃・過ぎ」が続くものは時刻
+    if (Number(m[0].split(":")[0]) >= 3 && WALL_CLOCK_AFTER.test(after))
+      return false;
     if (CLOCK_BEFORE.test(before) || CLOCK_AFTER.test(after)) return true;
     return (
       Number(m[0].split(":")[0]) <= MAX_WEAK_CLOCK_HOURS &&
@@ -157,7 +168,9 @@ const TOURNAMENT_NAME = rule(
   new RegExp(
     `第${NUM}回${NAME_CHARS}{0,20}?(?:大会|選手権|杯|オープン|リーグ)|${NAME_CHARS}{1,12}(?:杯|選手権)`
   ),
-  "大会"
+  "大会",
+  undefined,
+  true
 );
 
 /** 7. チーム・学校・クラブ */
@@ -165,7 +178,9 @@ const ORGANIZATION = rule(
   new RegExp(
     `${NAME_CHARS}{1,12}(?:高等学校|高校|中学校|中学|小学校|大学|クラブ|チーム|支部|道場|教室|同好会)`
   ),
-  "団体"
+  "団体",
+  undefined,
+  true
 );
 
 /**
@@ -176,7 +191,7 @@ const ORGANIZATION = rule(
 const BOARD = rule(
   new RegExp(
     [
-      `第?${NUM}番?(?:ボード|盤|テーブル|卓|席)`,
+      `${NUM_START}番?(?:ボード|盤|テーブル|卓|席)`,
       `(?:ボード|盤|テーブル|席)\\s?${NUM}(?:番)?`,
       "\\b(?:Board|board|BOARD|Table|table|TABLE)\\s?\\d+\\b",
       "\\bBd(?:\\.\\s*|\\s+)\\d+\\b",
@@ -189,7 +204,7 @@ const ROUND = rule(
   new RegExp(
     [
       // 「1局目」は手数・局数の表現として残す
-      `第?${NUM}(?:回戦|ラウンド|局(?!目))`,
+      `${NUM_START}(?:回戦|ラウンド|局(?!目))`,
       `(?:ラウンド|回戦)\\s?${NUM}`,
       `第?[0-9]+R(?![A-Za-z])`,
       "\\b(?:Round|round|ROUND)\\s?\\d+\\b",
@@ -224,7 +239,7 @@ const ATTRIBUTE: Replacer = (segment, map) =>
     segment.replace(
       TITLE_NAME,
       (_m, title: string, space: string, name: string) =>
-        `${map.placeholder("属性", title)}${space}${map.placeholder("人物", name)}`
+        `${map.placeholder("属性", title)}${space}${map.placeholder("人物", name, name, { unverified: true })}`
     ),
     map
   );
@@ -269,7 +284,10 @@ const HONORIFIC_NAME: Replacer = (segment, map) =>
       (r) => run.startsWith(r) && run.length > r.length
     );
     const name = role ? run.slice(role.length) : run;
-    return (role ?? "") + map.placeholder("人物", name, normalizeName(name));
+    return (
+      (role ?? "") +
+      map.placeholder("人物", name, normalizeName(name), { unverified: true })
+    );
   });
 
 /** 13. 登録されていない英字の名前 */
@@ -341,14 +359,14 @@ const LATIN_ALLOW = new Set(
 const LATIN_NAME: Replacer = (segment, map) =>
   segment
     .replace(/\b(?:Mr|Ms|Mrs|Miss|Dr)\.?\s+[A-Z][A-Za-z'-]+/g, (m) =>
-      map.placeholder("人物", m)
+      map.placeholder("人物", m, m, { unverified: true })
     )
     .replace(/\b[A-Z][a-z'-]+\s+[A-Z][a-z'-]+\b/g, (m) => {
       const [a, b] = m.split(/\s+/);
       return LATIN_ALLOW.has(a.toLowerCase()) &&
         LATIN_ALLOW.has(b.toLowerCase())
         ? m
-        : map.placeholder("人物", m);
+        : map.placeholder("人物", m, m, { unverified: true });
     });
 
 // ---------------------------------------------------------------------------
@@ -381,6 +399,11 @@ export function nameTargets(ids: KnownIdentifiers): NameTarget[] {
   ) => {
     if (!value) return;
     const key = normalizeName(value);
+    // 1文字の名前（「林」）は、前後が漢字でない場合だけ
+    if (key.length === 1 && KANJI_CHAR.test(key) && kind === "選手") {
+      out.push({ needle: key, kind, key, original: value, standalone: true });
+      return;
+    }
     if (key.length < 2) return;
     out.push({ needle: key, kind, key, original: value });
     if (!withParts) return;

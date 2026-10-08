@@ -1,0 +1,837 @@
+{
+ "description": "Regression set: sensitive reports written independently by the third J1a-1 reviewer (2026-10-08) as a held-out measurement (gate 21/208 clear, pipeline 35/208 sent before the fixes). Used during the fixes, so no longer held out.",
+ "cases": [
+  {
+   "class": "fair-play",
+   "text": "白がトイレの個室に長くこもっていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒が対局中にポケットの中で何かを操作していた"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒の指し手がコンピューターの最善手と一致しすぎている"
+  },
+  {
+   "class": "fair-play",
+   "text": "白が腕時計型の端末を着けていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "白のスマートウォッチが光っていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "観戦席から白に向かって指で数字を示していた"
+  },
+  {
+   "class": "fair-play",
+   "text": "白と黒が事前に引き分けで話をつけていたらしい"
+  },
+  {
+   "class": "fair-play",
+   "text": "白が終盤だけ急に強くなった"
+  },
+  {
+   "class": "fair-play",
+   "text": "白の上着のポケットに電子機器が入っていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒がトイレで誰かと話していた"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒がメモを見ながら指していた"
+  },
+  {
+   "class": "fair-play",
+   "text": "白が棋譜用紙に変化を書き込んでいた"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒が白の棋譜をのぞき込んでいた"
+  },
+  {
+   "class": "fair-play",
+   "text": "対局中にAIの評価値を見ていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "白の兄が観戦席から手振りで合図していた"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒が八百長を持ちかけてきた"
+  },
+  {
+   "class": "fair-play",
+   "text": "白が負けてくれたら賞金を半分渡すと言った"
+  },
+  {
+   "class": "fair-play",
+   "text": "レーティング操作のためにわざと負けたようだ"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒が白に投了してほしいと頼んだ"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒が別の対局者と局面について話していた"
+  },
+  {
+   "class": "fair-play",
+   "text": "白は解析ソフトの画面を見ていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "白のペンに小型カメラが付いていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒のポケットから振動音がした"
+  },
+  {
+   "class": "fair-play",
+   "text": "白が黒の手番中に自分のノートを開いた"
+  },
+  {
+   "class": "fair-play",
+   "text": "対戦相手以外の選手が白に指し手を伝えた"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒の主将が黒に次の手を伝えた"
+  },
+  {
+   "class": "fair-play",
+   "text": "白番の選手が別の対局の選手に指し手を伝えた"
+  },
+  {
+   "class": "fair-play",
+   "text": "白が黒の対局の盤を見て黒に指示した"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒が他の対局者から用紙を受け取った"
+  },
+  {
+   "class": "fair-play",
+   "text": "白が時計の下に用紙を置いていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "白がチームのメンバーと対局中に話していた"
+  },
+  {
+   "class": "fair-play",
+   "text": "白と黒が対局前に結果を合意していた"
+  },
+  {
+   "class": "fair-play",
+   "text": "白のチームの主将が白の盤を見て、指で次の手を示した"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒番の選手の席に用紙が置いてあって、指し手が書いてあった"
+  },
+  {
+   "class": "fair-play",
+   "text": "主将が対局中の白に次の手を言った"
+  },
+  {
+   "class": "fair-play",
+   "text": "白が対局中に他の選手と指し手について話した"
+  },
+  {
+   "class": "fair-play",
+   "text": "白のメンバーが白の席に来て用紙を渡した"
+  },
+  {
+   "class": "fair-play",
+   "text": "対局中、白が黒の次の手を書いた用紙を受け取った"
+  },
+  {
+   "class": "fair-play",
+   "text": "しろがかんにんぐしてた"
+  },
+  {
+   "class": "fair-play",
+   "text": "くろがチートしてる"
+  },
+  {
+   "class": "health",
+   "text": "白の顔が真っ青になっていた"
+  },
+  {
+   "class": "health",
+   "text": "黒が手を震わせながら指していた"
+  },
+  {
+   "class": "health",
+   "text": "白が対局中に居眠りをしていた"
+  },
+  {
+   "class": "health",
+   "text": "黒がうずくまって動かなくなった"
+  },
+  {
+   "class": "health",
+   "text": "白が息苦しそうにしていた"
+  },
+  {
+   "class": "health",
+   "text": "黒がぜんそくの吸入器を使った"
+  },
+  {
+   "class": "health",
+   "text": "白は低血糖で手が震えると言った"
+  },
+  {
+   "class": "health",
+   "text": "黒が胸を押さえて苦しそうにしていた"
+  },
+  {
+   "class": "health",
+   "text": "白がふらついて椅子から落ちた"
+  },
+  {
+   "class": "health",
+   "text": "白はインスリンを打つ必要があると言った"
+  },
+  {
+   "class": "health",
+   "text": "黒は熱中症っぽかった"
+  },
+  {
+   "class": "health",
+   "text": "白が鼻血を出した"
+  },
+  {
+   "class": "health",
+   "text": "白が汗びっしょりで手が止まった"
+  },
+  {
+   "class": "health",
+   "text": "黒がお酒のにおいがした"
+  },
+  {
+   "class": "health",
+   "text": "黒の目の焦点が合っていない"
+  },
+  {
+   "class": "health",
+   "text": "白が頭を抱えて唸っていた"
+  },
+  {
+   "class": "health",
+   "text": "黒は手が不自由なので代わりに駒を動かす人が必要だ"
+  },
+  {
+   "class": "health",
+   "text": "白は目が見えにくい"
+  },
+  {
+   "class": "health",
+   "text": "白は耳が遠いので時計の音が分からない"
+  },
+  {
+   "class": "health",
+   "text": "黒は精神的に不安定な状態だった"
+  },
+  {
+   "class": "health",
+   "text": "白がリストカットの跡を見せた"
+  },
+  {
+   "class": "health",
+   "text": "黒が「死にたい」と言っていた"
+  },
+  {
+   "class": "health",
+   "text": "白が対局後に自分を傷つけると言った"
+  },
+  {
+   "class": "health",
+   "text": "黒が足をつって立てなくなった"
+  },
+  {
+   "class": "health",
+   "text": "白が持ち込んだ水筒の中身がお酒だった"
+  },
+  {
+   "class": "health",
+   "text": "黒が対局中に吐きそうになった"
+  },
+  {
+   "class": "health",
+   "text": "白が対局中に動かなくなって、声をかけても答えなかった"
+  },
+  {
+   "class": "health",
+   "text": "黒が手を押さえて時計を押せないと言った"
+  },
+  {
+   "class": "health",
+   "text": "白は手が動かないので、相手に駒を動かしてもらった"
+  },
+  {
+   "class": "health",
+   "text": "白が対局中に席で長く動かなかった"
+  },
+  {
+   "class": "health",
+   "text": "黒が急に手を止めて、何も言えなかった"
+  },
+  {
+   "class": "health",
+   "text": "白の手が強く震えていた"
+  },
+  {
+   "class": "health",
+   "text": "妊婦さんが白の席の隣で対局していた"
+  },
+  {
+   "class": "health",
+   "text": "全盲選手が駒を触って確認した"
+  },
+  {
+   "class": "health",
+   "text": "弱視選手の時計の表示が見にくい"
+  },
+  {
+   "class": "health",
+   "text": "白は対局中、声をかけても答えず、手も止まったままだった"
+  },
+  {
+   "class": "health",
+   "text": "白は対局中に手で頭を押さえていた"
+  },
+  {
+   "class": "health",
+   "text": "くろがびょういんにいった"
+  },
+  {
+   "class": "health",
+   "text": "白の顔が赤くて、ろれつが回っていない"
+  },
+  {
+   "class": "health",
+   "text": "黒は認知症の症状があるようだ"
+  },
+  {
+   "class": "health",
+   "text": "白が手を押さえて「もう指せない」と言った"
+  },
+  {
+   "class": "health",
+   "text": "白は対局中ずっと手で口を押さえていた"
+  },
+  {
+   "class": "health",
+   "text": "看護師さんが白の席に来た"
+  },
+  {
+   "class": "harassment",
+   "text": "黒が白の胸元をじっと見ていた"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒の女子選手の体にわざと触れた"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒に「女のくせに」と言った"
+  },
+  {
+   "class": "harassment",
+   "text": "黒が白の容姿について下品なことを言った"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒の連絡先をしつこく聞いた"
+  },
+  {
+   "class": "harassment",
+   "text": "白が対局後に黒を出口で待ち伏せしていた"
+  },
+  {
+   "class": "harassment",
+   "text": "黒が白の髪を引っ張った"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒の胸ぐらをつかんだ"
+  },
+  {
+   "class": "harassment",
+   "text": "黒が白の足を踏みつけた"
+  },
+  {
+   "class": "harassment",
+   "text": "白が駒を黒に投げつけた"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒の国籍をからかった"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒をにらみつけて威嚇した"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒に「外で待ってろ」と言った"
+  },
+  {
+   "class": "harassment",
+   "text": "黒が白の肩に手を回してきた"
+  },
+  {
+   "class": "harassment",
+   "text": "黒が白のスカートの中を撮影していた"
+  },
+  {
+   "class": "harassment",
+   "text": "対局後に白と黒が取っ組み合いになった"
+  },
+  {
+   "class": "harassment",
+   "text": "黒が白の顔に水をかけた"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒のシャツをつかんだ"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒の手を強く押さえた"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒を会場の出口まで追って行った"
+  },
+  {
+   "class": "harassment",
+   "text": "対局後、白が黒の帰りを会場で待っていた"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒に「次は負けろ」と強い声で言った"
+  },
+  {
+   "class": "harassment",
+   "text": "白が対局中ずっと黒をにらんでいた"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒の駒を取って黒に投げた"
+  },
+  {
+   "class": "harassment",
+   "text": "白は対局中、黒に聞こえるように黒の悪い話をした"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒に変なことを言った"
+  },
+  {
+   "class": "harassment",
+   "text": "白は黒に「次はない」と言った"
+  },
+  {
+   "class": "harassment",
+   "text": "黒が白に失礼なことを言った"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒の言ったことに怒って、黒の盤の駒を全部落とした"
+  },
+  {
+   "class": "harassment",
+   "text": "対局後、白が黒の後ろを会場の外まで付いて来た"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒に向かって駒を強く置いて、黒の手に当たった"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒の名前を何回も呼んで、対局中の黒の集中を乱した"
+  },
+  {
+   "class": "harassment",
+   "text": "白が対局中に黒の足を何回も踏んだ"
+  },
+  {
+   "class": "harassment",
+   "text": "白は黒の席の横に立って黒を上から見ていた"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒の体を見て何か言った"
+  },
+  {
+   "class": "crime",
+   "text": "会場でナイフを持っている人がいた"
+  },
+  {
+   "class": "crime",
+   "text": "白のカバンからカッターが出てきた"
+  },
+  {
+   "class": "crime",
+   "text": "黒の財布から現金が抜かれていた"
+  },
+  {
+   "class": "crime",
+   "text": "白の賞金を誰かが持ち去った"
+  },
+  {
+   "class": "crime",
+   "text": "黒が白の時計をこっそり自分のバッグに入れた"
+  },
+  {
+   "class": "crime",
+   "text": "対局の結果に賭けをしている人がいた"
+  },
+  {
+   "class": "crime",
+   "text": "観客が勝敗でお金を賭けていた"
+  },
+  {
+   "class": "crime",
+   "text": "白が会場の備品を壊した"
+  },
+  {
+   "class": "crime",
+   "text": "白が会場で大麻のようなものを持っていた"
+  },
+  {
+   "class": "crime",
+   "text": "黒が白に「金を払えば負けてやる」と言った"
+  },
+  {
+   "class": "crime",
+   "text": "白がパトカーを呼んだ"
+  },
+  {
+   "class": "crime",
+   "text": "会場のロッカーがこじ開けられていた"
+  },
+  {
+   "class": "crime",
+   "text": "黒が刃物を見せた"
+  },
+  {
+   "class": "crime",
+   "text": "黒が会場で違法な薬物を売っていた"
+  },
+  {
+   "class": "crime",
+   "text": "白が賞品を不当に受け取った"
+  },
+  {
+   "class": "crime",
+   "text": "対局後、黒の時計が白のバッグに入っていた"
+  },
+  {
+   "class": "crime",
+   "text": "白が黒の用紙と時計を自分のバッグに入れた"
+  },
+  {
+   "class": "crime",
+   "text": "白が他の選手のバッグから時計を取った"
+  },
+  {
+   "class": "crime",
+   "text": "白が黒の駒を自分のバッグに入れて帰った"
+  },
+  {
+   "class": "crime",
+   "text": "白のバッグの中に黒の時計があった"
+  },
+  {
+   "class": "crime",
+   "text": "対局後、白の時計がなくなっていて、黒が持っていた"
+  },
+  {
+   "class": "crime",
+   "text": "しろがけいさつをよんだ"
+  },
+  {
+   "class": "crime",
+   "text": "白が他の選手の時計を取って帰った"
+  },
+  {
+   "class": "crime",
+   "text": "会場の時計が一つ足りない。白のバッグにあった"
+  },
+  {
+   "class": "crime",
+   "text": "黒が白に勝ったら千円渡すと言った"
+  },
+  {
+   "class": "religion",
+   "text": "白が対局中に数珠を握っていた"
+  },
+  {
+   "class": "religion",
+   "text": "黒がお守りを盤の横に置いていた"
+  },
+  {
+   "class": "religion",
+   "text": "黒はラマダン中で断食している"
+  },
+  {
+   "class": "religion",
+   "text": "白がハラール食について申し出た"
+  },
+  {
+   "class": "religion",
+   "text": "黒はスカーフを外すことを拒否した"
+  },
+  {
+   "class": "religion",
+   "text": "白が神社のお札を持ち込んだ"
+  },
+  {
+   "class": "religion",
+   "text": "黒が対局前に十字を切った"
+  },
+  {
+   "class": "religion",
+   "text": "黒が対局中にお経を唱えていた"
+  },
+  {
+   "class": "religion",
+   "text": "黒がヒジャブを着けていた"
+  },
+  {
+   "class": "religion",
+   "text": "白が相手の信じる神を侮辱した"
+  },
+  {
+   "class": "religion",
+   "text": "ムスリム選手が対局を中断して席を立った"
+  },
+  {
+   "class": "religion",
+   "text": "イスラム教徒の選手が日没後に対局を中断したいと申し出た"
+  },
+  {
+   "class": "religion",
+   "text": "白はキリスト教の行事で欠席すると言った"
+  },
+  {
+   "class": "religion",
+   "text": "白が対局中に時計の前で手を合わせて何度も頭を下げていた"
+  },
+  {
+   "class": "religion",
+   "text": "黒は神父さんと会場に来た"
+  },
+  {
+   "class": "religion",
+   "text": "ムスリム選手が対局を中断した"
+  },
+  {
+   "class": "religion",
+   "text": "仏教徒選手の申し出で対局を中断した"
+  },
+  {
+   "class": "religion",
+   "text": "白は対局中に手を合わせて目を閉じていた"
+  },
+  {
+   "class": "religion",
+   "text": "黒は決まった時間に対局を中断して、会場の隅で手を合わせた"
+  },
+  {
+   "class": "religion",
+   "text": "白が黒の信仰について質問した"
+  },
+  {
+   "class": "family-minors",
+   "text": "白の母親が会場で子どもを怒鳴っていた"
+  },
+  {
+   "class": "family-minors",
+   "text": "黒の父親が対局中の黒に話しかけた"
+  },
+  {
+   "class": "family-minors",
+   "text": "黒の父さんが黒に次の手を伝えた"
+  },
+  {
+   "class": "family-minors",
+   "text": "白の両親が離婚調停中で集中できない"
+  },
+  {
+   "class": "family-minors",
+   "text": "黒の保護者が子の負けで叱っていた"
+  },
+  {
+   "class": "family-minors",
+   "text": "白の親が白をたたいていた"
+  },
+  {
+   "class": "family-minors",
+   "text": "白は施設から来ている子で引率者がいない"
+  },
+  {
+   "class": "family-minors",
+   "text": "黒は母子家庭で参加費の減免を希望"
+  },
+  {
+   "class": "family-minors",
+   "text": "白の姉が会場で白の対局をずっと見ていた"
+  },
+  {
+   "class": "family-minors",
+   "text": "白の兄さんが白の席に来て、白と話した"
+  },
+  {
+   "class": "family-minors",
+   "text": "黒の奥さんが対局中に黒の席に来た"
+  },
+  {
+   "class": "family-minors",
+   "text": "迎えが来なくて黒が一人で待っていた"
+  },
+  {
+   "class": "family-minors",
+   "text": "白の息子さんが会場で迷子になった"
+  },
+  {
+   "class": "family-minors",
+   "text": "黒の娘ちゃんが会場で泣いていた"
+  },
+  {
+   "class": "family-minors",
+   "text": "白は家で親に怒られると言って負けを認めなかった"
+  },
+  {
+   "class": "family-minors",
+   "text": "対局中に黒のおじいちゃんが黒に声をかけた"
+  },
+  {
+   "class": "family-minors",
+   "text": "白の弟くんが会場から帰れなくなった"
+  },
+  {
+   "class": "family-minors",
+   "text": "黒の母さんが白の母さんと口論になった"
+  },
+  {
+   "class": "family-minors",
+   "text": "白は児童養護施設で暮らしている"
+  },
+  {
+   "class": "family-minors",
+   "text": "黒の継父が黒に手を上げた"
+  },
+  {
+   "class": "family-minors",
+   "text": "白の担任先生が白を連れて帰った"
+  },
+  {
+   "class": "family-minors",
+   "text": "黒の父さんが黒の席に来て、黒の手を強く押さえた"
+  },
+  {
+   "class": "family-minors",
+   "text": "白の兄さんが会場の外で白を待っていた"
+  },
+  {
+   "class": "family-minors",
+   "text": "黒の母さんが白に「負けて」と言った"
+  },
+  {
+   "class": "family-minors",
+   "text": "白の父さんが黒に強く言った"
+  },
+  {
+   "class": "family-minors",
+   "text": "白の母さんが白の負けの後、白に強く言っていた"
+  },
+  {
+   "class": "family-minors",
+   "text": "白の兄さんが対局中に白に指し手を伝えた"
+  },
+  {
+   "class": "family-minors",
+   "text": "白のお父さんが対局中に会場に来た"
+  },
+  {
+   "class": "family-minors",
+   "text": "黒の奥さんが黒に用紙を渡した"
+  },
+  {
+   "class": "family-minors",
+   "text": "白の父さんが白の手を取って帰った"
+  },
+  {
+   "class": "mixed",
+   "text": "黒が違法手を指したあと、白がめまいがすると言った"
+  },
+  {
+   "class": "mixed",
+   "text": "白のフラッグが落ちた。その後、白は顔を真っ赤にして黒の胸を押した"
+  },
+  {
+   "class": "mixed",
+   "text": "時間切れの後、白が黒に「覚えてろ」と言った"
+  },
+  {
+   "class": "mixed",
+   "text": "タッチムーブのクレームの後、黒が白の顔を叩いた"
+  },
+  {
+   "class": "mixed",
+   "text": "50手ルールのクレーム中、白の父さんが白に指し手を伝えた"
+  },
+  {
+   "class": "mixed",
+   "text": "ドローの提案の後、黒がアービターに「白に勝たせろ」と言った"
+  },
+  {
+   "class": "mixed",
+   "text": "白がチェックと言ったあと、黒が白の手を取って止めた"
+  },
+  {
+   "class": "mixed",
+   "text": "キャスリングの違法手。その後、白は黒に聞こえるように黒の悪い話をした"
+  },
+  {
+   "class": "mixed",
+   "text": "白番の時計が0:00になった。白は対局後、黒を会場で待っていた"
+  },
+  {
+   "class": "mixed",
+   "text": "白がNf3を指した後、黒の兄さんが黒に次の手を伝えた"
+  },
+  {
+   "class": "mixed",
+   "text": "白がイリーガルムーブ。黒は対局中に白の手番で主将と話していた"
+  },
+  {
+   "class": "mixed",
+   "text": "白の時計が鳴った。白は対局中に黒に強く言った"
+  },
+  {
+   "class": "mixed",
+   "text": "違法手の後、白がPanic Attackになった"
+  },
+  {
+   "class": "mixed",
+   "text": "白は Heart Attack だった"
+  },
+  {
+   "class": "mixed",
+   "text": "白は時間切れの後、Very Angry だった"
+  }
+ ]
+}

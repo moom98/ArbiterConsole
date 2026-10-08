@@ -42,6 +42,9 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
   - **Status: deployed 2026-10-08** to https://arbiter-console.arbiterconsole.workers.dev.
     - Cloudflare account `ArbiterConsole` (`account_id` in `wrangler.jsonc`), deployed from `main` at `274284e`.
     - The first version was `481a6ba0-…`.
+    - **Latest deploy:** version `7221140b-…`, from `main` at `d943ae9` (PR #3, Gemini embeddings), on 2026-10-08.
+      - Production checks: all pages return 200; all 48 precache URLs return 200; `/ort/` is gone; `/api/llm/{reason,classify,embed}` return 401 without the token.
+      - Right after a deploy, Cloudflare can briefly serve the previous `sw.js`. Re-check after about 1 minute.
     - The secrets `GEMINI_API_KEY` and `LLM_ACCESS_TOKEN` were set by the user.
     - The workers.dev subdomain `arbiterconsole` is created automatically the first time the account opens the Workers & Pages dashboard.
   - **Build-time safety (ADR-009):**
@@ -51,7 +54,11 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
 - **Semantic search via Gemini Embedding (decided 2026-10-08, ADR-010):**
   - The user chose option A, Gemini embeddings, over option B, hosting the model on R2.
   - Semantic search now needs the network and the access token; keyword search remains the offline fallback.
-  - Implemented on branch `feature/gemini-embeddings`. See `milestones/gemini-embeddings.md`.
+  - Merged via PR #3 and deployed (see above). See `milestones/gemini-embeddings.md`.
+  - **Pending user verification on a real device** (needs the real token):
+    - PDF import or 意味検索用データを作成 fills the per-source embedding count;
+    - natural-language searches return vector hits.
+    - Then tune `vectorMinSimilarity` (0.65, provisional) from the user's examples.
 - **Model change (requested earlier):** the user will change the classification and reasoning models in a later task. Only `GEMINI_MODEL_CLASSIFIER` and `GEMINI_MODEL_REASONING` (env) and the defaults in `lib/infrastructure/llm/server/config.ts` need to change. See `milestones/milestone-5.md` → "Changing models later".
 
 ## Important implementation decisions

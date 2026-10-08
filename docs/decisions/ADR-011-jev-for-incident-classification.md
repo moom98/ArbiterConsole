@@ -1,6 +1,6 @@
 # ADR-011: TypeSafe AI Jev for Incident Classification (provider-switchable)
 
-**Status:** Proposed. Waiting for user answers to Q1–Q4 in the design doc. Not implemented.
+**Status:** Accepted (the direction). The user answered Q1–Q3 on 2026-10-08. The catalogue content (Q4) is under the user's review. Not implemented.
 
 **Date:** 2026-10-08
 
@@ -20,6 +20,11 @@
 - Classification fits Jev's choice and yes/no questions well. Reasoning and embeddings do not fit: Jev cannot write text and has no embeddings.
 - ADR-007 says a new provider should implement `GenerateJsonFn`. That interface assumes text generation, so Jev cannot implement it.
 - Jev's Japanese support is not documented.
+- **User decision on data (2026-10-08):**
+  - Do not send the report text to TypeSafe. Send only a minimal, de-identified semantic state.
+  - Never send identifiers (player names and IDs, tournament name, board and round, dates and times).
+  - Never send fair-play or other sensitive reports.
+  - Do not rely on Zero Data Retention: it is not contractually confirmed for the direct API.
 
 ## Decision
 
@@ -38,7 +43,17 @@
    - `needsTournamentRules` can only be added by a domain rule, never removed;
    - a low probability turns off prefill and shows alternatives.
 5. **Missing information comes from a fixed, reviewed catalogue** in the domain, selected by Jev yes/no questions. Jev generates no text, and `followUpQuestions` is empty in Jev mode.
-6. **These guarantees are unchanged:**
+6. **Data minimization (design §4.4).** The classify route receives only a semantic state `{ v: 1, narrative }` built on the device, and never the report text.
+   - The state is built in these steps:
+     - a sensitivity gate (fair play, health or medical, harassment or violence, crime, religion), which sends nothing when it hits;
+     - deterministic de-identification in a fixed order, with placeholders protected afterwards. It uses the names and IDs from `PlayerProfile`, from `Game.white`/`Game.black` and from `Tournament`, plus patterns;
+     - minimization: identifier-only sentences dropped, 500 characters at most, no added context;
+     - a residual check with independent detectors, which fails closed;
+     - a live preview of the state before sending.
+   - The server runs the gate and the pattern rules again. If anything would change, it **rejects** the request (400) and never rewrites it.
+   - This applies to both classifier providers. The reasoning route is out of scope.
+   - Production switches only after a privacy fixture check, using synthetic data only.
+7. **These guarantees are unchanged:**
    - fair-play text is never sent;
    - a classification is a suggestion only;
    - Decision Trees take priority;
@@ -59,7 +74,9 @@
 - Two LLM vendors and two secrets to operate (Gemini stays for reasoning and embeddings).
 - `followUpQuestions` is no longer produced in Jev mode. The Decision Tree questions and the catalogue cover it.
 - Jev is a young vendor and API. It is mitigated by the pinned version, a thin client and the keyword fallback.
-- Japanese quality is unproven until the evaluation.
+- Japanese quality is unproven until the evaluation, and de-identification may lower accuracy. The evaluation runs on de-identified text.
+- An unregistered name typed without an honorific can slip through de-identification. Mitigations: the input hint, the visible preview of what is sent, and the privacy fixtures.
+- The classify request contract changes from `{ text }` to `{ state }`. Old cached clients get 400 and fall back to keyword classification.
 
 **Future**
 

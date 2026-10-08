@@ -89,7 +89,7 @@
 | `im.action` | 何が起きましたか（違法な位置へ駒を動かした・両手で指した・昇格の駒を置かずに時計を押した・手を指さずに時計を押した・**触れた駒を動かさなかった等（触れた駒の規則）**）。回答がサブタイプになります。touch-move は DT-007 へ振り分けます | 選択 | B | — | ○ | §16, DT:subtype |
 | `im.player` | 違法な動作をしたのはどちらですか（白・黒） | 選択 | B | — | ○ | DT:playerColor |
 | `im.clock-pressed` | その後、その選手は時計を押しましたか | YN | B | — | ○ | §12, DT:clockPressed |
-| `game.end-event` | （共通 fact）違法手に気づいた時点で、対局を終わらせる出来事があったか | — | B | — | ○ | §12, DT:gameEnded（「まだ対局中」以外なら終了とする。握手だけでは終了としない） |
+| `game.end-event` | （共通 fact）違法手に気づいた時点で、対局を終わらせる出来事があったか | — | B | — | ○ | §12, DT:gameEndEvent（同じ値。「まだ対局中」以外なら終了とする。握手だけでは終了としない。J1b-8） |
 | `game.record-state` | （共通 fact）結果の記入・署名の状態 | — | C | `game.end-event` が「まだ対局中」以外 | ○ | §20 |
 | `im.opponent-moved` | 相手はその後、次の手を指しましたか | YN | C | Rapid/Blitz で、DT が要求したとき | ○ | §17（A.5）, DT:opponentMadeNextMove |
 | `im.noticed-by` | 違法手を最初に指摘したのは誰ですか（アービター・相手・その他） | 選択 | C | DT が要求したとき | ○ | §12, DT:detectedBy |
@@ -122,7 +122,7 @@
 | `ct.event` | 何が起きましたか（時計の表示が0になった・その他の時計トラブル） | 選択 | B | — | ○ | §18, DT:clockTimeSubtype |
 | `ct.zero-side` | 表示が0になったのはどちらですか（白・黒・両方） | 選択 | C | `ct.event` = 0になった | ○ | DT:flagFallen |
 | `ct.zero-order` | 両方の場合、先に0になったのはどちらか分かりますか（白・黒） | 選択 | C | `ct.zero-side` = 両方 | ○ | DT:bothFlagsOrder |
-| `ct.ended-before-flag`（新規） | **フラッグが確定する前に**（アービターが気付く、または有効な主張がされる前に）、対局を終わらせる出来事がありましたか（なし・チェックメイト・投了・ドローの合意・ステイルメイト・その他）。表示が0になった後でも、フラッグ確定前のチェックメイトは有効です | 選択 | C | `ct.event` = 0になった | ○ | FIDE 6.8 / 5.1.1, DT:gameEndedBeforeFlag |
+| `ct.ended-before-flag`（新規） | **フラッグが確定する前に**（アービターが気付く、または有効な主張がされる前に）、対局を終わらせる出来事がありましたか（なし・チェックメイト・投了・ドローの合意・ステイルメイト・その他）。表示が0になった後でも、フラッグ確定前のチェックメイトは有効です | 選択 | C | `ct.event` = 0になった | ○ | FIDE 6.8 / 5.1.1, DT:endedBeforeFlag（同じ値。J1b-8） |
 | `game.history` / `game.position` | （共通 fact）相手がメイトできるかの判定に使う局面。**フラッグ確定時の局面**で、手番も正しいものを使います | — | C | DT が要求したとき（`movesNotCompleted` の分岐） | — | FIDE 6.9、ADR-014 §5。**駒数による「メイト可能」の確定は廃止** |
 | `ct.last-period` | 残りの全ての手を指し切る最終ピリオドですか | YN（設定） | C | DT が要求したとき。ピリオドが1つの持ち時間、または対局履歴で手数が分かる場合だけ設定から求め、それ以外は質問 | — | DT:lastPeriod |
 | `ct.quickplay-guidelines` | 大会規定でクイックプレイ・フィニッシュの指針が適用されますか | YN（設定） | C | DT が要求したとき。大会規定から求められない場合のみ質問 | — | DT:quickplayGuidelinesApply |

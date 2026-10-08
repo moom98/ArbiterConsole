@@ -217,7 +217,7 @@ Per §36, the following are explicitly **NOT** in MVP:
   clockPressed: boolean,
   opponentMoved: boolean,
   arbiterObserved: boolean,
-  gameEnded: boolean,
+  endEvent: GameEndEvent, // ADR-014 §3（旧 gameEnded: boolean）
   playerIncidentCount: number,
   moveDescription: string  // e.g., "両手でキャスリング"
 }

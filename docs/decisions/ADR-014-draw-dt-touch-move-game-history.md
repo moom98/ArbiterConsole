@@ -1,6 +1,6 @@
 # ADR-014: Draw Claim and Automatic Draw Trees, Touch-Move Tree, Local Game History, Position-Based Mate Possibility
 
-**Status:** Accepted. The user approved it in the catalogue re-review on 2026-10-08. Partly implemented, all on 2026-10-08: §4 (game history) in J1b-3, §5 (mate possibility) in J1b-4, §1 (draw trees) and §2 (side to move) in J1b-5, §6 (touch move) in J1b-6, §7 (time control periods) in J1b-7. See fact-model §3.5 "Implementation (J1b-3)" and "Implementation (J1b-5)", §3.7 "Implementation (J1b-4)", §3.8 "Implementation (J1b-6)", §3.6 "Implementation (J1b-7)" and [ADR-015](./ADR-015-local-helpmate-search.md). §3 is not implemented yet.
+**Status:** Accepted. The user approved it in the catalogue re-review on 2026-10-08. Partly implemented, all on 2026-10-08: §4 (game history) in J1b-3, §5 (mate possibility) in J1b-4, §1 (draw trees) and §2 (side to move) in J1b-5, §6 (touch move) in J1b-6, §7 (time control periods) in J1b-7, §3 (game end) in J1b-8. See fact-model §3.5 "Implementation (J1b-3)" and "Implementation (J1b-5)", §3.7 "Implementation (J1b-4)", §3.8 "Implementation (J1b-6)", §3.6 "Implementation (J1b-7)", §3.9 "Implementation (J1b-8)" and [ADR-015](./ADR-015-local-helpmate-search.md). Every section is now implemented.
 
 **Date:** 2026-10-08
 
@@ -74,6 +74,10 @@ The clock state (`dr.clock-state`) is recorded, but **never** used to derive the
 - `game.record-state` records whether the result is written and signed.
 - **A handshake alone never ends the game.**
 - `gameEnded` (DT-001…003) and `gameEndedBeforeFlag` (DT-004) are derived from `game.end-event`.
+- **Amendment (J1b-8, 2026-10-08):**
+  - DT-004 asks `ct.ended-before-flag` (the event before the flag was established, catalogue) rather than `game.end-event`, because the time-out itself is not an earlier end.
+  - Stored yes/no answers from before J1b-8 are not used: an old "yes" may rest on a handshake, so the event is asked again.
+  - `game.record-state` is asked as an optional, record-only question in the same round; it never changes the ruling.
 
 ### 4. Local game history (`game.history`)
 

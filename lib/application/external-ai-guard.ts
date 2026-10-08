@@ -18,9 +18,11 @@ import type {
   LlmReasoningContext,
   LlmReasoningRequest,
 } from "@/lib/domain/llm/types";
+import { isReportableSubtype } from "@/lib/domain/follow-up";
 import {
   PlaceholderMap,
   protectIncidentText,
+  recheckRegulationText,
   redactPii,
   reidentify,
   truncate,
@@ -299,7 +301,12 @@ export async function prepareReasoning(
 
   const incident: LlmIncidentSummary = {
     category: input.incident.category,
-    subtype: input.incident.subtype,
+    // 既知のコードだけ（サーバーは未知の種別を 400 にする。古いデータの値は送らない）
+    subtype:
+      input.incident.subtype !== undefined &&
+      isReportableSubtype(input.incident.category, input.incident.subtype)
+        ? input.incident.subtype
+        : undefined,
     playerColor: input.incident.playerColor,
     description: description.text,
     arbiterObserved: input.incident.arbiterObserved,
@@ -359,7 +366,9 @@ export async function prepareReasoning(
         ? undefined
         : () => generateQueryEmbedding(queryText, { ...deps, call }),
     toSentArticles: (articles) =>
-      articles.map((a) => toSentArticle(a, ids, map)),
+      articles
+        .map((a) => toSentArticle(a, ids, map))
+        .filter((a): a is LlmArticle => a !== null),
     send: (articles) => {
       const body: LlmReasoningRequest = {
         incident,
@@ -374,23 +383,35 @@ export async function prepareReasoning(
 
 /**
  * 送る形の条文（§5.3）。大会 ID は含めない。大会規定の本文・題名は狭い規則で置き換え、
- * 資料名は「大会規定」に固定し、版は送らない。FIDE・JCF・解説はそのまま
+ * 資料名は「大会規定」に固定し、版は送らない。FIDE・JCF・解説はそのまま。
+ * 大会規定がサーバーと同じ再確認（L5）を通らない場合は送らない（null）
  */
 function toSentArticle(
   a: CandidateArticle,
   ids: KnownIdentifiers,
   map: PlaceholderMap
-): LlmArticle {
+): LlmArticle | null {
   const tournament = a.source === "tournament";
   const redact = (text: string) =>
     tournament ? redactPii(text, ids, map, "regulation").text : text;
+  const article = truncate(redact(a.article), LLM_LIMITS.maxArticleNumberChars);
+  const title = truncate(redact(a.title), LLM_LIMITS.maxArticleTitleChars);
+  // 長い条文は先頭のみ送る（検証も送った本文で行うため、引用は送った範囲に限られる）
+  // プレースホルダーを途中で切らない（minimization の truncate）
+  const content = truncate(
+    redact(a.content),
+    LLM_LIMITS.maxArticleContentChars
+  );
+  if (
+    tournament &&
+    [article, title, content].some((t) => !recheckRegulationText(t).ok)
+  )
+    return null;
   return {
     id: a.id,
-    article: truncate(redact(a.article), LLM_LIMITS.maxArticleNumberChars),
-    title: truncate(redact(a.title), LLM_LIMITS.maxArticleTitleChars),
-    // 長い条文は先頭のみ送る（検証も送った本文で行うため、引用は送った範囲に限られる）
-    // プレースホルダーを途中で切らない（minimization の truncate）
-    content: truncate(redact(a.content), LLM_LIMITS.maxArticleContentChars),
+    article,
+    title,
+    content,
     source: a.source,
     sourceName: tournament
       ? "大会規定"

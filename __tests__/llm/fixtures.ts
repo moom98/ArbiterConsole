@@ -29,6 +29,17 @@ export const ARTICLE_TOURNAMENT_5: LlmArticle = {
 
 export const ARTICLES = [ARTICLE_TOURNAMENT_5, ARTICLE_FIDE_11_3];
 
+/**
+ * 外部AIガードが送る形の条文（external-ai-data-protection.md §5.3）: 大会規定の資料名は
+ * 「大会規定」で、版は送らない
+ */
+const { sourceVersion: _omitVersion, ...TOURNAMENT_5_AS_SENT } =
+  ARTICLE_TOURNAMENT_5;
+export const SENT_ARTICLES: LlmArticle[] = [
+  { ...TOURNAMENT_5_AS_SENT, sourceName: "大会規定" },
+  ARTICLE_FIDE_11_3,
+];
+
 /** 検証に合格する下書き（ゲームロス・大会規定と FIDE を引用） */
 export function validDraft(overrides: Record<string, unknown> = {}) {
   return {

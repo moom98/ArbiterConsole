@@ -48,8 +48,8 @@ export const LLM_ACCESS_TOKEN_HEADER = "x-arbiter-access-token";
 /** 入力サイズの上限（サーバーで検証し、クライアントはこれに収まるように送る） */
 export const LLM_LIMITS = {
   maxBodyBytes: 160_000,
-  maxDescriptionChars: 2_000,
-  maxClassifyTextChars: 2_000,
+  /** reason の description（外部AIガードで最小化した記述。external-ai-data-protection.md §5.3） */
+  maxReasonDescriptionChars: 1_000,
   /** classify の narrative（外部AIガードで最小化した記述。external-ai-data-protection.md §5.3） */
   maxClassifyNarrativeChars: 500,
   maxArticles: 8,
@@ -71,6 +71,8 @@ export const LLM_LIMITS = {
 export type LlmApiErrorCode =
   /** 入力が不正 */
   | "invalid-request"
+  /** 送信前の再確認（L5）で止めた。外部AIには送っていない（ADR-012 §7） */
+  | "not-sendable"
   /** Content-Type が application/json でない */
   | "unsupported-media-type"
   /** 本文が大きすぎる */

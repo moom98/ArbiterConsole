@@ -1322,6 +1322,22 @@ export const QUICK_REPORTS: readonly QuickReport[] = [
 ];
 
 /** カテゴリに対して有効な subtype か（報告時の検証用） */
+/**
+ * Incident に保存されうる種別か（外部AIへ送る構造化されたコードの確認。
+ * external-ai-data-protection.md §2）。違法手は 7.5 の4種類と touch-move
+ */
+export function isReportableSubtype(
+  category: Incident["category"],
+  subtype: string
+): boolean {
+  if (category === "illegal-move")
+    return (
+      Object.keys(SUBTYPE_LABELS).includes(subtype) ||
+      subtype === TOUCH_MOVE_SUBTYPE
+    );
+  return isKnownSubtype(category, subtype);
+}
+
 export function isKnownSubtype(
   category: Incident["category"],
   subtype: string

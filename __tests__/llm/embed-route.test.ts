@@ -216,4 +216,53 @@ describe("/api/llm/embed (ADR-010)", () => {
     expect((await errorOf(bad)).code).toBe("invalid-model-output");
     expect(broken).toHaveBeenCalledTimes(1);
   });
+
+  // L5（ADR-012 §7）: 検索語は事故由来のテキスト。条文（document）は規則の本文のため確認しない
+  it("re-checks queries (L5) and rejects unknown fields; rule documents are not re-checked", async () => {
+    const embed = vi.fn<EmbedTextsFn>(okEmbed);
+    const log = vi.fn();
+    const handler = createEmbedRouteHandler(makeDeps(embed, { log }));
+
+    const ok = await handler(
+      request({
+        taskType: "query",
+        texts: ["白が違法手を指したので黒がクレームした"],
+      })
+    );
+    expect(ok.status).toBe(200);
+    expect(embed).toHaveBeenCalledTimes(1);
+
+    for (const q of [
+      "山本さんが違法手を指した",
+      "6月8日に白が違法手を指した",
+      "〈選手A〉が対局中に気分が悪くなり倒れた",
+    ]) {
+      const res = await handler(request({ taskType: "query", texts: [q] }));
+      expect(res.status, q).toBe(400);
+      expect((await errorOf(res)).code).toBe("not-sendable");
+    }
+    expect(embed).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith({ route: "embed", code: "not-sendable" });
+
+    const unknown = await handler(
+      request({
+        taskType: "query",
+        texts: ["白が違法手を指した"],
+        tournamentId: "t",
+      })
+    );
+    expect(unknown.status).toBe(400);
+    expect((await errorOf(unknown)).code).toBe("invalid-request");
+
+    const doc = await handler(
+      request({
+        taskType: "document",
+        texts: [
+          "第3ラウンドは2026年6月8日13時に開始する。Dr. Smith が主審を務める",
+        ],
+      })
+    );
+    expect(doc.status).toBe(200);
+    expect(embed).toHaveBeenCalledTimes(2);
+  });
 });

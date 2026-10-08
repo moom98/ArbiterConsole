@@ -6,6 +6,8 @@
  *   C. ルートごとの最小化
  *   D. 残存チェック（独立した検出器）             → 何か見つかればローカルで処理
  *   E. Sensitive Gate を置き換え後の本文にもう一度 → blocked / uncertain ならローカルで処理
+ *   E2. サーバーと同じ再確認（server-recheck, L5）を送る形の本文に → 止まればローカルで処理
+ *       （正しいクライアントの送信がサーバーで 400 にならないようにする）
  *
  * どの段階も失敗すれば送らない。元の本文は返さない。F（送信前のプレビュー）と
  * 実際の送信は application 層の external-ai-guard が行う。
@@ -24,6 +26,7 @@ import {
   type ResidualFinding,
 } from "./residual-check";
 import type { PlaceholderMap } from "./placeholders";
+import { recheckIncidentText, type RecheckFinding } from "./server-recheck";
 
 /** 事故由来のテキストを送るルート */
 export type ProtectedTextRoute =
@@ -53,9 +56,11 @@ export type ProtectResult =
   | {
       ok: false;
       /** どの段階で止めたか */
-      stage: "gate-raw" | "residual" | "gate-redacted";
+      stage: "gate-raw" | "residual" | "gate-redacted" | "recheck";
       gate: GateResult;
       residual?: ResidualFinding[];
+      /** E2 で止めた理由（コードだけ） */
+      recheck?: RecheckFinding[];
     };
 
 function minimize(route: ProtectedTextRoute, redacted: string): string {
@@ -117,5 +122,15 @@ export function protectIncidentText(input: ProtectInput): ProtectResult {
   });
   if (again.verdict !== "clear")
     return { ok: false, stage: "gate-redacted", gate: again };
+
+  // E2: サーバーは対応表を持たないため、プレースホルダーのままの本文で判定する
+  const recheck = recheckIncidentText(minimized, input.route);
+  if (!recheck.ok)
+    return {
+      ok: false,
+      stage: "recheck",
+      gate: { verdict: "uncertain", reasons: [{ code: "residual" }] },
+      recheck: recheck.findings,
+    };
   return { ok: true, text: minimized };
 }

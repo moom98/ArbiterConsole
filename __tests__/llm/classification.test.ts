@@ -73,6 +73,7 @@ describe("parseLlmClassification", () => {
       needsTournamentRules: true,
       confidence: "medium",
       method: "llm",
+      provider: "gemini",
     });
   });
 

@@ -120,6 +120,15 @@ export interface LlmClassificationRequest {
   narrative: string;
 }
 
+/**
+ * /api/llm/facts へのリクエスト本文（fact-model.md §4.2）。narrative は分類と同じく外部AIガードで
+ * 置き換え・最小化した記述。factIds はカタログの fact id（サーバーがカタログから質問を作る）
+ */
+export interface LlmFactPresenceRequest {
+  narrative: string;
+  factIds: string[];
+}
+
 // ---------------------------------------------------------------------------
 // 外部AIへの送信前の確認（D13, external-ai-data-protection.md §3 F）
 // ---------------------------------------------------------------------------
@@ -158,6 +167,23 @@ export interface IncidentClassification {
   /** 大会固有規則の確認が必要か（§11） */
   needsTournamentRules: boolean;
   confidence: "medium" | "low";
-  /** llm: Gemini による分類 / keyword: 端末内のキーワード分類 */
+  /** llm: 外部AI（Gemini / Jev）による分類 / keyword: 端末内のキーワード分類 */
   method: "llm" | "keyword";
+  /** 分類したプロバイダー（表示・記録用。method が llm の場合のみ） */
+  provider?: ClassifierProvider;
+  /**
+   * category の確率（Jev のみ。較正済みの確率。jev-classifier-design §5.4）。
+   * 表示のみ。判断には使わない
+   */
+  probability?: number;
+  /** 確率が低い・プレフィルしない場合の他の候補（確率の高い順、category は含まない） */
+  alternatives?: IncidentCategory[];
+  /**
+   * false: 「このカテゴリで続ける」を出さず、category と alternatives を候補として示す。
+   * 未指定は true（従来どおり）
+   */
+  prefill?: boolean;
 }
+
+/** 分類のプロバイダー（LLM_CLASSIFIER_PROVIDER。ADR-011） */
+export type ClassifierProvider = "gemini" | "jev";

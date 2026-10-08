@@ -1,4 +1,7 @@
-import { INCIDENT_CATEGORIES } from "@/lib/domain/llm/classification";
+import {
+  INCIDENT_CATEGORIES,
+  INCIDENT_CATEGORY_DESCRIPTIONS,
+} from "@/lib/domain/llm/classification";
 import {
   LLM_INTERVENTIONS,
   LLM_PENALTY_TYPES,
@@ -40,16 +43,9 @@ export const REASONING_SYSTEM_PROMPT = `あなたはチェス大会のアービ�
 export const CLASSIFIER_SYSTEM_PROMPT = `あなたはチェス大会のアービター支援システムの分類器です。アービターが自由記述で報告したインシデントを分類します。裁定は行いません。
 
 カテゴリ（category）:
-- illegal-move: 違法手（両手で指した、手を指さずに時計を押した、昇格の駒を置かずに時計を押した等）
-- board-piece: 盤・駒（駒の落下・ずれ、初期配置の誤り等）
-- clock-time: 時計・時間（フラッグ・時間切れ、時計の故障、押し忘れ等）
-- game-result: 対局結果（結果の争い、記録・署名の誤り等）
-- draw: ドロー（同一局面、50手・75手、ステイルメイト、合意等）
-- scoresheet: 棋譜・記録用紙
-- player-behavior: 選手の行動・電子機器（スマートフォン、スマートウォッチ、離席、会話、騒音、喫煙、妨害等）
-- team: 団体戦（キャプテン、ボード順等）
-- fair-play: フェアプレー（不正の疑い、検査拒否等）
-- tournament-admin: 大会運営（遅刻、不戦、ペアリング等）
+${INCIDENT_CATEGORIES.map(
+  (c) => `- ${c}: ${INCIDENT_CATEGORY_DESCRIPTIONS[c]}`
+).join("\n")}
 
 subtype（該当する場合のみ）:
 - clock-time: ${Object.entries(CLOCK_TIME_SUBTYPE_LABELS)

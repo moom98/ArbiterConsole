@@ -1,13 +1,17 @@
 import type {
   CompetitionType,
   Decision,
+  DrawSubtype,
   Incident,
   PlayerColor,
   RuleCitation,
   SupervisionRegime,
   TournamentOverrides,
 } from "@/lib/domain/entities";
-import { SUPPORTED_RULES_VERSIONS } from "@/lib/domain/entities";
+import {
+  SUPPORTED_RULES_VERSIONS,
+  drawClaimBasisOf,
+} from "@/lib/domain/entities";
 import {
   IllegalMoveStandardTree,
   type PriorIllegalMove,
@@ -19,10 +23,9 @@ import {
 import { IllegalMoveFastCompetitionTree } from "@/lib/domain/decision-trees/dt-002-illegal-move-fast-competition";
 import { IllegalMoveFastBasicTree } from "@/lib/domain/decision-trees/dt-003-illegal-move-fast-basic";
 import { FlagFallTree } from "@/lib/domain/decision-trees/dt-004-flag-fall";
-import {
-  RepetitionTree,
-  type RepetitionInput,
-} from "@/lib/domain/decision-trees/dt-005-repetition";
+import { DrawClaimTree } from "@/lib/domain/decision-trees/dt-005-draw-claim";
+import { AutomaticDrawTree } from "@/lib/domain/decision-trees/dt-006-automatic-draw";
+import type { DrawTreeInput } from "@/lib/domain/decision-trees/draw-shared";
 import type { DecisionTreeResult } from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
 import {
   QUESTIONS,
@@ -421,15 +424,19 @@ export class DecisionEngine {
     if (incident.category === "draw") {
       if (incident.subtype === undefined)
         return this.ask(incident, [QUESTIONS.drawSubtype], rulesVersion);
+      // DT-005 Draw Claim（9.2 / 9.3）/ DT-006 Automatic Draw（9.6）。合意・ステイルメイト・
+      // デッドポジション・その他は Decision Tree を持たない（ADR-014 §1）
+      const claimBasis = drawClaimBasisOf(incident.subtype);
       if (
-        incident.subtype === "threefold-repetition-claim" ||
+        claimBasis !== undefined ||
         incident.subtype === "fivefold-repetition" ||
         incident.subtype === "75-move-rule"
       ) {
         const facts = incident.drawClaimFacts ?? {};
-        const input: Partial<RepetitionInput> = {
+        const input: Partial<DrawTreeInput> = {
           ...facts,
-          subtype: incident.subtype,
+          // 上の条件で DT-005 / DT-006 の subtype に絞り込み済み
+          subtype: incident.subtype as DrawSubtype,
           competitionType,
           supervisionRegime: regime,
           tournamentOverrides: ruleset.tournamentOverrides,
@@ -446,7 +453,8 @@ export class DecisionEngine {
               ? analyzeRepetition(
                   port,
                   validated,
-                  incident.subtype === "threefold-repetition-claim" &&
+                  // 9.2.1 / 9.3.1: 記入した手を指した後の局面で判定する
+                  claimBasis !== undefined &&
                     facts.claimMode === "about-to-appear"
                     ? facts.intendedMove
                     : undefined
@@ -457,8 +465,13 @@ export class DecisionEngine {
               : { ok: false, error: analysed.error };
           }
         }
-        const tree = new RepetitionTree(this.providers, rulesVersion);
-        return this.finish(incident, tree.evaluate(input), rulesVersion);
+        const result =
+          claimBasis !== undefined
+            ? new DrawClaimTree(this.providers, rulesVersion).evaluate(input)
+            : new AutomaticDrawTree(this.providers, rulesVersion).evaluate(
+                input
+              );
+        return this.finish(incident, result, rulesVersion);
       }
     }
 
@@ -685,4 +698,5 @@ export * from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
 export { DT_002_ID } from "@/lib/domain/decision-trees/dt-002-illegal-move-fast-competition";
 export { DT_003_ID } from "@/lib/domain/decision-trees/dt-003-illegal-move-fast-basic";
 export { DT_004_ID } from "@/lib/domain/decision-trees/dt-004-flag-fall";
-export { DT_005_ID } from "@/lib/domain/decision-trees/dt-005-repetition";
+export { DT_005_ID } from "@/lib/domain/decision-trees/dt-005-draw-claim";
+export { DT_006_ID } from "@/lib/domain/decision-trees/dt-006-automatic-draw";

@@ -43,17 +43,17 @@ export type IncidentQuestionId =
   | "positionFen"
   // メイト可能性の局面（DT-001〜004。ADR-014 §5）
   | "matePosition"
-  // ドロー（DT-005）
+  // ドロー（DT-005 Draw Claim / DT-006 Automatic Draw）
   | "drawSubtype"
   | "claimant"
-  | "claimantHasMove"
+  | "lastMover"
   | "claimMode"
   | "moveWritten"
   | "touchedPiece"
   | "repetitionCheck"
+  | "fiftyMoveCheck"
   | "fivefoldCheck"
   | "seventyFiveCheck"
-  | "lastMoveCheckmate"
   | "positionsText"
   | "historyConfirmed"
   | "intendedMove"
@@ -166,9 +166,13 @@ export const CLOCK_TIME_SUBTYPE_LABELS: Record<ClockTimeSubtype, string> = {
 
 export const DRAW_SUBTYPE_LABELS: Record<DrawSubtype, string> = {
   "threefold-repetition-claim": "三回同一局面のクレーム（9.2）",
+  "fifty-move-claim": "50手ルールのクレーム（9.3）",
   "fivefold-repetition": "五回同一局面（9.6.1）",
   "75-move-rule": "75手ルール（9.6.2）",
-  other: "その他（合意・50手ルール等）",
+  agreement: "ドローの合意",
+  stalemate: "ステイルメイト",
+  "dead-position": "これ以上メイトできない局面",
+  other: "その他",
 };
 
 /** 共通の unknown を加える（fact-model §3.3: すべての DT 質問に unknown） */
@@ -340,11 +344,12 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     label: "クレームしたのはどちらのプレーヤーですか？",
     options: COLOR_OPTIONS,
   },
-  claimantHasMove: {
-    id: "claimantHasMove",
+  lastMover: {
+    id: "lastMover",
     scope: "incident",
-    label: "クレームしたプレーヤーの手番（自分の時計が動いている）ですか？",
-    options: YES_NO,
+    label: "クレームの直前に、盤上で最後に手を指したのはどちらですか？",
+    help: "手番は盤上の手から判断します（時計の状態からは判断しません）。クレームできるのは手番のプレーヤーだけです。",
+    options: COLOR_OPTIONS,
   },
   claimMode: {
     id: "claimMode",
@@ -353,11 +358,11 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     options: [
       {
         value: "just-appeared",
-        label: "相手の直前の手で3回目の局面が出現した（9.2.2）",
+        label: "相手の直前の手で条件が成立した（9.2.2 / 9.3.2）",
       },
       {
         value: "about-to-appear",
-        label: "自分の次の手で3回目の局面が出現する（9.2.1）",
+        label: "自分の次の手で条件が成立する（9.2.1 / 9.3.1）",
       },
     ],
   },
@@ -365,14 +370,15 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     id: "moveWritten",
     scope: "incident",
     label:
-      "クレームしたプレーヤーは、指す手を棋譜に記入し、その手を指す意思をアービターに宣言しましたか？",
+      "クレームしたプレーヤーは、指す手を棋譜に記入し、その手を指す意思をアービターに宣言しましたか？（盤上ではまだ指していない）",
     options: YES_NO,
   },
   touchedPiece: {
     id: "touchedPiece",
     scope: "incident",
     label:
-      "クレームの前に、クレームしたプレーヤーは動かす（取る）意図で駒に触れましたか？",
+      "クレームの前に、クレームしたプレーヤーはその手番で、動かす・取る意思で盤上の駒に触れましたか？",
+    help: "駒を整える目的の接触や、偶然の接触は含みません（9.4 / 4.3）。",
     options: YES_NO,
   },
   repetitionCheck: {
@@ -384,6 +390,19 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     options: [
       { value: "met", label: "3回以上を確認した" },
       { value: "not-met", label: "3回未満だった" },
+      { value: "unknown", label: "確認できない（CAへ）" },
+      CONDITION_AUTO,
+    ],
+  },
+  fiftyMoveCheck: {
+    id: "fiftyMoveCheck",
+    scope: "incident",
+    label:
+      "対局を再現して確認した結果、両プレーヤーとも直近50手以上を、ポーンの移動も駒取りもなく指していますか？",
+    help: "9.3.1（次の手で成立）の場合は、記入した手を含めて数えます。51手目以降でもクレームできます。",
+    options: [
+      { value: "met", label: "50手以上を確認した" },
+      { value: "not-met", label: "50手未満だった" },
       { value: "unknown", label: "確認できない（CAへ）" },
       CONDITION_AUTO,
     ],
@@ -405,18 +424,17 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     scope: "incident",
     label:
       "両プレーヤーとも、ポーンの移動も駒取りもなく75手以上を指したことを確認しましたか？",
+    help: "75手に達した手でチェックメイトになった場合は、チェックメイトが優先されます（9.6.2）。",
     options: [
-      { value: "met", label: "75手以上を確認した" },
+      { value: "met", label: "75手以上を確認した（チェックメイトではない）" },
+      {
+        value: "met-checkmate",
+        label: "75手に達した手でチェックメイトになった",
+      },
       { value: "not-met", label: "75手未満だった" },
       { value: "unknown", label: "確認できない（CAへ）" },
       CONDITION_AUTO,
     ],
-  },
-  lastMoveCheckmate: {
-    id: "lastMoveCheckmate",
-    scope: "incident",
-    label: "最後の手はチェックメイトでしたか？",
-    options: YES_NO,
   },
   positionsText: {
     id: "positionsText",
@@ -505,11 +523,10 @@ const ENUMERATED_UNKNOWN: readonly IncidentQuestionId[] = [
   "gameEndedBeforeFlag",
   "drawSubtype",
   "claimant",
-  "claimantHasMove",
+  "lastMover",
   "claimMode",
   "moveWritten",
   "touchedPiece",
-  "lastMoveCheckmate",
 ];
 /** 列挙できない質問（unknown なら手動確認）。現在はなし（駒数の確認は ADR-014 §5 で廃止） */
 const MANUAL_REVIEW_UNKNOWN: readonly IncidentQuestionId[] = [];
@@ -553,6 +570,15 @@ function isOneOf<T extends string>(
 }
 
 const CONDITION_CHECKS = ["met", "not-met", "unknown", "auto"] as const;
+/** 75手の確認だけが「75手に達した手でチェックメイト」を持つ（9.6.2） */
+const SEVENTY_FIVE_CHECKS = [...CONDITION_CHECKS, "met-checkmate"] as const;
+/** 盤上の手順の確認結果（auto を含む）を表す質問 */
+const CONDITION_CHECK_QUESTIONS = [
+  "repetitionCheck",
+  "fiftyMoveCheck",
+  "fivefoldCheck",
+  "seventyFiveCheck",
+] as const;
 
 /**
  * Incident スコープの回答を Incident に反映した新しい Incident を返す（純粋関数）。
@@ -611,16 +637,32 @@ export function applyIncidentAnswers(
         if (incident.category === "draw") playerColor = undefined;
         touchedDraw = true;
         break;
-      case "claimantHasMove":
+      case "lastMover":
       case "claimMode":
       case "moveWritten":
       case "touchedPiece":
-      case "lastMoveCheckmate":
         delete draw[id];
         touchedDraw = true;
         break;
     }
   };
+
+  // 確認結果の意味はドローの種類ごとに違う（3回・50手・5回・75手）ため、種類を変えたら
+  // 以前の確認結果を消す（同じ送信の確認結果は、この後の反映で入る）
+  const previousDrawSubtype =
+    incident.category === "draw"
+      ? (incident.drawClaimFacts?.subtype ?? incident.subtype)
+      : undefined;
+  if (
+    answers.drawSubtype !== undefined &&
+    previousDrawSubtype !== undefined &&
+    answers.drawSubtype !== previousDrawSubtype
+  ) {
+    delete draw.conditionCheck;
+    delete draw.historyConfirmed;
+    delete draw.lastMoveCheckmate;
+    touchedDraw = true;
+  }
 
   for (const [id, raw] of Object.entries(answers) as [
     IncidentQuestionId,
@@ -759,10 +801,14 @@ export function applyIncidentAnswers(
           touchedDraw = true;
         }
         break;
-      case "claimantHasMove":
+      case "lastMover":
+        if (isOneOf(raw, ["white", "black"] as const)) {
+          draw.lastMover = raw;
+          touchedDraw = true;
+        }
+        break;
       case "moveWritten":
-      case "touchedPiece":
-      case "lastMoveCheckmate": {
+      case "touchedPiece": {
         const b = parseBoolean(raw);
         if (b !== undefined) {
           draw[id] = b;
@@ -782,10 +828,25 @@ export function applyIncidentAnswers(
         }
         break;
       case "repetitionCheck":
+      case "fiftyMoveCheck":
       case "fivefoldCheck":
       case "seventyFiveCheck":
-        if (isOneOf(raw, CONDITION_CHECKS as readonly ConditionCheck[])) {
+        if (
+          isOneOf(
+            raw,
+            (id === "seventyFiveCheck"
+              ? SEVENTY_FIVE_CHECKS
+              : CONDITION_CHECKS) as readonly ConditionCheck[]
+          )
+        ) {
           draw.conditionCheck = raw;
+          // 75手の手動確認では「チェックメイトではない（met）」も明示の観測として記録する。
+          // 旧（J1b-5 より前）の「75手以上」には記録がなく、DT-006 は確認をやり直す
+          if (id === "seventyFiveCheck" && raw === "met")
+            draw.lastMoveCheckmate = false;
+          else delete draw.lastMoveCheckmate;
+          // 旧「最後の手はチェックメイトか」への「わからない」は、新しい確認結果で置き換える
+          unknown.delete("lastMoveCheckmate");
           touchedDraw = true;
         }
         break;
@@ -826,9 +887,9 @@ export function applyIncidentAnswers(
   if (draw.positionsText !== incident.drawClaimFacts?.positionsText)
     delete draw.historyConfirmed;
   // 「判定する」を選び直した場合は、照合からやり直す（「一致しない」の誤タップを取り消せる）
-  const reselectedAuto = (
-    ["repetitionCheck", "fivefoldCheck", "seventyFiveCheck"] as const
-  ).some((id) => answers[id] === "auto");
+  const reselectedAuto = CONDITION_CHECK_QUESTIONS.some(
+    (id) => answers[id] === "auto"
+  );
   if (reselectedAuto && answers.historyConfirmed === undefined)
     delete draw.historyConfirmed;
 
@@ -895,6 +956,12 @@ export const QUICK_REPORTS: readonly QuickReport[] = [
     category: "draw",
     subtype: "threefold-repetition-claim",
     label: "三回同一局面のクレーム",
+  },
+  {
+    id: "fifty-move",
+    category: "draw",
+    subtype: "fifty-move-claim",
+    label: "50手ルールのクレーム",
   },
   {
     id: "fivefold",

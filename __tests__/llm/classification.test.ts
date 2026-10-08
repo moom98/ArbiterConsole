@@ -14,6 +14,7 @@ describe("classifyByKeywords (offline fallback)", () => {
     ["黒の時間が落ちたけど白にはナイトしかない", "clock-time", "flag-fall"],
     ["三回同一局面を主張された", "draw", "threefold-repetition-claim"],
     ["75手ルールに達した", "draw", "75-move-rule"],
+    ["白が50手ルールでドローを主張した", "draw", "fifty-move-claim"],
     ["キャプテンが選手に話しかけた", "team", undefined],
     ["バッグ検査を拒否した", "fair-play", undefined],
     ["棋譜を記入していない", "scoresheet", undefined],
@@ -24,6 +25,14 @@ describe("classifyByKeywords (offline fallback)", () => {
     expect(c?.subtype).toBe(subtype);
     expect(c?.method).toBe("keyword");
     expect(c?.confidence).toBe("low");
+  });
+
+  it.each([
+    "150手を超えた",
+    "50手目にイリーガルムーブ",
+    "50手目で反則手を指した",
+  ])("does not read %s as the 50-move rule", (text) => {
+    expect(classifyByKeywords(text)?.subtype).not.toBe("fifty-move-claim");
   });
 
   it("returns null when nothing matches", () => {

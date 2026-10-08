@@ -225,18 +225,39 @@ describe("DecisionEngine", () => {
       expect(second.followUpQuestions.map((q) => q.id)).toContain("flagFallen");
     });
 
-    it("draw asks for the subtype, then routes repetition to DT-005", () => {
+    it("draw asks for the subtype, then routes claims to DT-005 and automatic draws to DT-006 (ADR-014 §1)", () => {
       const first = run({
         incident: incident({ category: "draw" }),
         ruleset: STANDARD,
       });
       expect(first.followUpQuestions.map((q) => q.id)).toEqual(["drawSubtype"]);
-      const answered = applyIncidentAnswers(incident({ category: "draw" }), {
-        drawSubtype: "fivefold-repetition",
-      });
-      const second = run({ incident: answered, ruleset: STANDARD });
-      expect(second.decision.treeId).toBe("DT-005-repetition");
+      const treeFor = (drawSubtype: string) =>
+        run({
+          incident: applyIncidentAnswers(incident({ category: "draw" }), {
+            drawSubtype,
+          }),
+          ruleset: STANDARD,
+        }).decision.treeId;
+      expect(treeFor("threefold-repetition-claim")).toBe("DT-005-repetition");
+      expect(treeFor("fifty-move-claim")).toBe("DT-005-repetition");
+      expect(treeFor("fivefold-repetition")).toBe("DT-006-automatic-draw");
+      expect(treeFor("75-move-rule")).toBe("DT-006-automatic-draw");
     });
+
+    it.each(["agreement", "stalemate", "dead-position", "other"])(
+      "draw subtype %s has no Decision Tree (asks for a situation note)",
+      (drawSubtype) => {
+        const r = run({
+          incident: applyIncidentAnswers(
+            incident({ category: "draw", description: "" }),
+            { drawSubtype }
+          ),
+          ruleset: STANDARD,
+        });
+        expect(r.decision.treeId).toBeUndefined();
+        expect(r.followUpQuestions.map((q) => q.id)).toEqual(["situationNote"]);
+      }
+    );
 
     it("M2: 'other' without a note asks for a required situation note", () => {
       const r = run({
@@ -492,7 +513,7 @@ describe("DecisionEngine — DT-005 automatic repetition check via injected port
     const inc = applyIncidentAnswers(incident({ category: "draw" }), {
       drawSubtype: "threefold-repetition-claim",
       claimant: "black",
-      claimantHasMove: "true",
+      lastMover: "white",
       claimMode: "about-to-appear",
       touchedPiece: "false",
       moveWritten: "true",
@@ -529,7 +550,7 @@ describe("DecisionEngine — DT-005 automatic repetition check via injected port
     const inc = applyIncidentAnswers(incident({ category: "draw" }), {
       drawSubtype: "threefold-repetition-claim",
       claimant: "black",
-      claimantHasMove: "true",
+      lastMover: "white",
       claimMode: "about-to-appear",
       touchedPiece: "false",
       moveWritten: "true",

@@ -858,7 +858,7 @@ describe("DT-004 with unknown answers", () => {
 });
 
 // ---------------------------------------------------------------------------
-// DT-005 (repetition / 75 moves)
+// DT-005 Draw Claim / DT-006 Automatic Draw
 // ---------------------------------------------------------------------------
 
 const DRAW = {
@@ -868,20 +868,17 @@ const DRAW = {
 const CLAIM = {
   drawSubtype: "threefold-repetition-claim",
   claimant: "white",
-  claimantHasMove: "true",
+  lastMover: "black",
   claimMode: "just-appeared",
   touchedPiece: "false",
   repetitionCheck: "met",
 } as const;
 
 describe("DT-005 with unknown answers", () => {
-  it("claimant unknown with a correct claim: a draw either way → decided", () => {
+  it("claimant unknown: whether the claimant had the move depends on who claimed → manual-review", () => {
+    // 黒が最後に指した: 白のクレームなら正しいクレーム（ドロー）、黒なら手番ではない
     const r = evaluate(DRAW, { ...CLAIM, claimant: "unknown" });
-    expect(r.decision.kind).toBe("recommendation");
-    expect(r.decision.penalties).toEqual([
-      expect.objectContaining({ type: "draw" }),
-    ]);
-    expect(r.decision.unconfirmedFacts).toEqual([QUESTIONS.claimant.label]);
+    expectManualReview(r.decision, ["claimant"]);
   });
 
   it("claimant unknown with an incorrect claim: time goes to different players → manual-review", () => {
@@ -893,9 +890,23 @@ describe("DT-005 with unknown answers", () => {
     expectManualReview(r.decision, ["claimant"]);
   });
 
-  it("claimantHasMove unknown → manual-review", () => {
-    const r = evaluate(DRAW, { ...CLAIM, claimantHasMove: "unknown" });
-    expectManualReview(r.decision, ["claimantHasMove"]);
+  it("lastMover unknown → manual-review (the side to move is never taken from the clock)", () => {
+    const r = evaluate(DRAW, { ...CLAIM, lastMover: "unknown" });
+    expectManualReview(r.decision, ["lastMover"]);
+  });
+
+  it("lastMover unknown with a correct 50-move claim: not-on-move vs draw → manual-review", () => {
+    const r = evaluate(
+      { category: "draw", subtype: "fifty-move-claim" },
+      {
+        ...CLAIM,
+        drawSubtype: "fifty-move-claim",
+        repetitionCheck: undefined,
+        fiftyMoveCheck: "met",
+        lastMover: "unknown",
+      }
+    );
+    expectManualReview(r.decision, ["lastMover"]);
   });
 
   it("touchedPiece unknown → manual-review", () => {
@@ -929,31 +940,20 @@ describe("DT-005 with unknown answers", () => {
     expectManualReview(r.decision, ["moveWritten"]);
   });
 
-  it("lastMoveCheckmate unknown with 75 moves met: checkmate or draw → manual-review", () => {
+  it("75 moves: the last-move checkmate is part of the reconstruction result, not a separate question", () => {
+    expect(
+      (QUESTIONS as Record<string, unknown>).lastMoveCheckmate
+    ).toBeUndefined();
+    expect(QUESTIONS.seventyFiveCheck.options.map((o) => o.value)).toContain(
+      "met-checkmate"
+    );
     const r = evaluate(
       { category: "draw", subtype: "75-move-rule" },
-      {
-        drawSubtype: "75-move-rule",
-        seventyFiveCheck: "met",
-        lastMoveCheckmate: "unknown",
-      }
+      { drawSubtype: "75-move-rule", seventyFiveCheck: "met-checkmate" }
     );
-    expectManualReview(r.decision, ["lastMoveCheckmate"]);
-  });
-
-  it("lastMoveCheckmate unknown with 75 moves not met: no intervention either way → decided", () => {
-    const r = evaluate(
-      { category: "draw", subtype: "75-move-rule" },
-      {
-        drawSubtype: "75-move-rule",
-        seventyFiveCheck: "not-met",
-        lastMoveCheckmate: "unknown",
-      }
-    );
-    expect(r.decision.intervention).toBe("no-intervention");
-    expect(r.decision.unconfirmedFacts).toEqual([
-      QUESTIONS.lastMoveCheckmate.label,
-    ]);
+    expect(r.decision.treeId).toBe("DT-006-automatic-draw");
+    expect(r.decision.penalties).toHaveLength(0);
+    expect(r.decision.conclusion).toContain("チェックメイトが優先");
   });
 
   it("drawSubtype unknown → manual-review", () => {

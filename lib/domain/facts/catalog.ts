@@ -1054,18 +1054,8 @@ export const FACT_USAGES: readonly FactUsage[] = [
     factId: "dr.kind",
     category: "draw",
     level: "blocking",
+    // 値は DT の subtype と同じ（J1b-5 で全種類を DT の subtype にした。ADR-014 §1）
     dtQuestionIds: ["drawSubtype"],
-    // DT-005/006 の再構成（J1b-5）までは、新しい種類を既存の "other" に変換する
-    dtValues: {
-      "threefold-repetition-claim": "threefold-repetition-claim",
-      "fifty-move-claim": "other",
-      "fivefold-repetition": "fivefold-repetition",
-      "75-move-rule": "75-move-rule",
-      agreement: "other",
-      stalemate: "other",
-      "dead-position": "other",
-      other: "other",
-    },
   },
   {
     factId: "dr.claimant",
@@ -1086,9 +1076,9 @@ export const FACT_USAGES: readonly FactUsage[] = [
     category: "draw",
     level: "conditional",
     appliesWhen: DRAW_CLAIM,
-    dtQuestionIds: ["claimantHasMove"],
-    // 申立人と最後に指した側から手番を求める（時計からは求めない。ADR-014 §2）
-    dtValues: "computed",
+    // DT-005 が申立人と最後に指した側から手番を求める（時計からは求めない。ADR-014 §2）。
+    // 照合済みの対局履歴がある場合、DT-005 はこの質問をしない
+    dtQuestionIds: ["lastMover"],
   },
   {
     factId: "dr.clock-state",
@@ -1131,7 +1121,12 @@ export const FACT_USAGES: readonly FactUsage[] = [
     category: "draw",
     level: "conditional",
     appliesWhen: DRAW_POSITIONS,
-    dtQuestionIds: ["repetitionCheck", "fivefoldCheck", "seventyFiveCheck"],
+    dtQuestionIds: [
+      "repetitionCheck",
+      "fiftyMoveCheck",
+      "fivefoldCheck",
+      "seventyFiveCheck",
+    ],
     dtValues: {
       met: "met",
       "not-met": "not-met",

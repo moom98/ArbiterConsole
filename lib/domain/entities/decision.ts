@@ -66,8 +66,13 @@ export type DecisionTreeId =
   /** Rapid / Blitz の違法手（それ以外: A.5 / B.3） */
   | "DT-003-illegal-move-fast-basic"
   | "DT-004-flag-fall"
-  /** 同一局面（9.2 / 9.6.1）および 75手ルール（9.6.2） */
-  | "DT-005-repetition";
+  /**
+   * Draw Claim: 三回同一局面（9.2）・50手（9.3）のクレーム（ADR-014 §1）。
+   * ID は保存済みの判断との互換のため変えない。J1b-5 より前は 9.6.1 / 9.6.2 も含んでいた
+   */
+  | "DT-005-repetition"
+  /** Automatic Draw: 五回同一局面（9.6.1）・75手（9.6.2） */
+  | "DT-006-automatic-draw";
 
 /** 判断の種類 */
 export type DecisionKind =

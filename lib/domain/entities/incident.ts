@@ -170,24 +170,50 @@ export interface FlagFallFacts {
 // ドロー（draw）
 // ---------------------------------------------------------------------------
 
-/** draw カテゴリのうち Decision Tree で扱う subtype（incident-classification.md §8） */
+/**
+ * draw カテゴリの subtype（ADR-014 §1）。
+ * - DT-005 Draw Claim: threefold-repetition-claim（9.2）/ fifty-move-claim（9.3）
+ * - DT-006 Automatic Draw: fivefold-repetition（9.6.1）/ 75-move-rule（9.6.2）
+ * - Decision Tree なし（fact plan）: agreement / stalemate / dead-position / other
+ */
 export type DrawSubtype =
   | "threefold-repetition-claim"
+  | "fifty-move-claim"
   | "fivefold-repetition"
   | "75-move-rule"
+  | "agreement"
+  | "stalemate"
+  | "dead-position"
   | "other";
 
-/** 9.2.1（これから出現する: 指し手を記入して宣言）/ 9.2.2（出現したばかり） */
+/** DT-005 Draw Claim のクレームの根拠（FIDE 9.2 / 9.3） */
+export type DrawClaimBasis = "threefold" | "fifty-move";
+
+/** クレームの subtype の根拠。クレームでない subtype は undefined */
+export function drawClaimBasisOf(
+  subtype: string | undefined
+): DrawClaimBasis | undefined {
+  if (subtype === "threefold-repetition-claim") return "threefold";
+  if (subtype === "fifty-move-claim") return "fifty-move";
+  return undefined;
+}
+
+/**
+ * 9.2.1 / 9.3.1（記入した次の手で成立する: 指し手を記入して宣言）/
+ * 9.2.2 / 9.3.2（相手の直前の手で成立した）
+ */
 export type RepetitionClaimMode = "about-to-appear" | "just-appeared";
 
 /**
  * アービターによる確認結果。
  * - met:     条件が成立していることを確認した
  * - not-met: 条件が成立していないことを確認した
+ * - met-checkmate: 75手に達した手がチェックメイトだった（9.6.2: メイトが優先。75手の確認のみ）
  * - unknown: 確認できない
  * - auto:    入力した対局履歴（棋譜。game.history）から判定する
  */
-export type ConditionCheck = "met" | "not-met" | "unknown" | "auto";
+export type ConditionCheck =
+  "met" | "met-checkmate" | "not-met" | "unknown" | "auto";
 
 /**
  * 再生した対局履歴の最終局面を、アービターが盤上と照合した結果（ADR-014 §4）。
@@ -201,18 +227,35 @@ export type HistoryConfirmation =
 
 export interface DrawClaimFacts {
   subtype: DrawSubtype;
-  /** 9.2: クレームしたプレーヤー */
+  /** 9.2 / 9.3: クレームしたプレーヤー */
   claimant?: PlayerColor;
-  /** 9.2: クレームしたプレーヤーの手番（自分の時計が動いている）か */
+  /**
+   * クレームの直前に、盤上で最後に手を指したプレーヤー（dr.last-mover。ADR-014 §2）。
+   * 手番はこれ、または照合済みの対局履歴から求める。時計の状態からは求めない。
+   */
+  lastMover?: PlayerColor;
+  /**
+   * 旧（J1b-5 より前）: 「手番（自分の時計が動いている）か」。時計に依存するため
+   * 判定には使わない（保存済みの Incident との互換のためだけに残す）。
+   * @deprecated lastMover を使う
+   */
   claimantHasMove?: boolean;
   claimMode?: RepetitionClaimMode;
-  /** 9.2.1: 指す手を棋譜に記入し、アービターに宣言したか */
+  /** 9.2.1 / 9.3.1: 指す手を棋譜に記入し、アービターに宣言したか */
   moveWritten?: boolean;
-  /** 9.4: クレーム前に、動かす（取る）意図で駒に触れたか */
+  /** 9.4: クレーム前に、その手番で動かす（取る）意思で駒に触れたか */
   touchedPiece?: boolean;
-  /** 同一局面の回数（9.2: 3回 / 9.6.1: 5回）または 75手（9.6.2）の確認結果 */
+  /**
+   * 盤上で手順を再現した確認結果（dr.manual-reconstruction）、または auto。
+   * 同一局面の回数（9.2: 3回 / 9.6.1: 5回）、50手（9.3）、75手（9.6.2）。
+   */
   conditionCheck?: ConditionCheck;
-  /** 9.6.2: 最後の手がチェックメイトだったか */
+  /**
+   * 9.6.2: 75手に達した手がチェックメイトだったか（手動確認のみ）。独立した質問は廃止し、
+   * 75手の確認結果から記録する: "met"（チェックメイトではない）→ false、"met-checkmate" →
+   * conditionCheck に記録。conditionCheck = met でこれが未設定なのは J1b-5 より前の回答で、
+   * DT-006 は確認をやり直す（チェックメイトでないことが確認されていないため）。
+   */
   lastMoveCheckmate?: boolean;
   /**
    * 任意: 対局履歴（game.history）のテキスト。PGN / 棋譜（SAN の指し手列）だけを受け付け、
@@ -225,7 +268,7 @@ export interface DrawClaimFacts {
    * （別の履歴に対する照合を引き継がない）。
    */
   historyConfirmed?: HistoryConfirmation;
-  /** 任意（9.2.1）: 記入した指し手（SAN） */
+  /** 任意（9.2.1 / 9.3.1）: 記入した指し手（SAN） */
   intendedMove?: string;
 }
 
@@ -240,7 +283,7 @@ export interface Incident {
   illegalMoveFacts?: Partial<IllegalMoveFacts>;
   /** フラッグフォールの構造化された回答 */
   flagFallFacts?: Partial<FlagFallFacts>;
-  /** ドロー（同一局面・75手）の構造化された回答 */
+  /** ドロー（クレーム・自動ドロー）の構造化された回答 */
   drawClaimFacts?: Partial<DrawClaimFacts>;
   /**
    * 「わからない・確認できない」と回答された追加質問の ID（fact-model §3.3）。

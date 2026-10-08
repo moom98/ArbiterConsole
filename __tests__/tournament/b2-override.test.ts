@@ -5,9 +5,9 @@ import {
 } from "@/lib/domain/decision-engine";
 import type { Incident } from "@/lib/domain/entities";
 import {
-  RepetitionTree,
-  type RepetitionInput,
-} from "@/lib/domain/decision-trees/dt-005-repetition";
+  DrawClaimTree,
+  type DrawClaimInput,
+} from "@/lib/domain/decision-trees/dt-005-draw-claim";
 import { opponentTimePenalty } from "@/lib/domain/rules/time-penalty";
 import { fixedProviders, FIXED_NOW } from "../helpers";
 import { B2_OVERRIDE } from "./fixtures";
@@ -162,19 +162,19 @@ describe("DT-002 Blitz B.2 first illegal move with a tournament override", () =>
 });
 
 describe("DT-005 incorrect threefold claim in Blitz B.2 with a tournament override", () => {
-  const CLAIM: Partial<RepetitionInput> = {
+  const CLAIM: Partial<DrawClaimInput> = {
     subtype: "threefold-repetition-claim",
     competitionType: "blitz",
     supervisionRegime: "competition-rules",
     claimant: "white",
-    claimantHasMove: true,
+    lastMover: "black",
     claimMode: "just-appeared",
     touchedPiece: false,
     conditionCheck: "not-met",
   };
 
   it("applies the tournament amount with the regulation as source", () => {
-    const r = new RepetitionTree(fixedProviders()).evaluate({
+    const r = new DrawClaimTree(fixedProviders()).evaluate({
       ...CLAIM,
       tournamentOverrides: OVERRIDES,
     });

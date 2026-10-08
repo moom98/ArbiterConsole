@@ -34,6 +34,15 @@ const RULES: KeywordRule[] = [
   },
   {
     category: "draw",
+    subtype: "fifty-move-claim",
+    // 「150手」「50手目（手数）」を除く
+    patterns: [
+      /(?<![0-9０-９])50\s*手(?!目)|fifty[- ]move|(?<![0-9])50[- ]move/i,
+    ],
+    weight: 3,
+  },
+  {
+    category: "draw",
     subtype: "fivefold-repetition",
     patterns: [/(五|5)回.{0,4}(同一|同じ)局面|fivefold/i],
     weight: 3,

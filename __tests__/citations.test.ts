@@ -475,3 +475,42 @@ describe("Round checklist citations (Milestone 7)", () => {
     }
   });
 });
+
+/**
+ * J1b-5（DT-005 Draw Claim / DT-006 Automatic Draw）で追加した引用。pdfjs-dist の抽出テキストと
+ * 照合済み（FIDE は改行を半角スペース、JCF は行頭の箇条書き記号「・」を除く）。
+ */
+const EXPECTED_J1B5: Record<string, { page: number; text: string }> = {
+  FIDE_9_3: {
+    page: 33,
+    text: "The game is drawn, upon a correct claim by a player having the move, if: 9.3.1 he/she indicates his/her move, which cannot be changed, by writing it on the paper scoresheet or entering it on the electronic scoresheet and declares to the arbiter his/her intention to make this move which will result in the last 50 moves by each player having been made without the movement of any pawn and without any capture, or 9.3.2 the last 50 moves by each player have been completed without the movement of any pawn and without any capture.",
+  },
+  FIDE_11_12: {
+    page: 37,
+    text: "Checking a ‘three times occurrence of the position’ or a ’50 moves’ claim is a duty of the players, under supervision of the arbiter.",
+  },
+  JCF_NA_P67_OWN_MOVE: {
+    page: 67,
+    text: "前提: 自分の手番であること",
+  },
+  JCF_NA_P67_CLAIM_LATER: {
+    page: 67,
+    text: "三回同一局面のケースは4回目でも主張可能。50手ルールは51手目以降でも主張可能",
+  },
+};
+
+describe("Draw claim citations (J1b-5)", () => {
+  it.each(Object.entries(EXPECTED_J1B5))("%s is verbatim", (key, exp) => {
+    const c = CITATIONS[key as keyof typeof CITATIONS];
+    expect(c, `citation ${key} missing`).toBeDefined();
+    expect(c.text).toBe(exp.text);
+    expect(c.page).toBe(exp.page);
+  });
+
+  it("FIDE 9.3 and 11.12 are Laws 2023 articles", () => {
+    for (const k of ["FIDE_9_3", "FIDE_11_12"] as const) {
+      expect(CITATIONS[k].source).toBe("FIDE");
+      expect(CITATIONS[k].edition).toBe("FIDE Laws of Chess 2023");
+    }
+  });
+});

@@ -60,12 +60,12 @@ Per ADR-002, implement Decision Trees for high-frequency incidents:
 | DT-002 | Illegal Move Rapid A4 | Rapid (A4) | P1 | 3 days |
 | DT-003 | Illegal Move Rapid A5 | Rapid (A5) | P1 | 4 days |
 | DT-004 | Flag Fall | All | P0 | 2 days |
-| DT-005 | Threefold Repetition | All | P1 | 5 days* |
-| DT-006 | Automatic Draw: fivefold and 75 moves (renumbered by ADR-014; the 50-move claim is in DT-005) | All | P2 | — |
+| DT-005 | Draw Claim: threefold repetition (9.2) and 50 moves (9.3) (ADR-014; implemented in J1b-5) | All | P1 | 5 days* |
+| DT-006 | Automatic Draw: fivefold and 75 moves (renumbered by ADR-014; implemented in J1b-5) | All | P2 | — |
 | DT-007 | Touch Move, Article 4 (renumbered by ADR-014) | All | P1 | — |
-| DT-008 | 75-move Rule | All | P2 | 2 days |
-| DT-009 | Stalemate | All | P2 | 3 days |
-| DT-010 | Dead Position | All | P2 | 2 days |
+| ~~DT-008~~ | ~~75-move Rule~~ — part of DT-006 (ADR-014) | All | — | — |
+| ~~DT-009~~ | ~~Stalemate~~ — no tree; fact plan (ADR-014 §1) | All | — | — |
+| ~~DT-010~~ | ~~Dead Position~~ — no tree; fact plan (ADR-014 §1) | All | — | — |
 
 *Requires position comparison logic (FEN)
 
@@ -276,6 +276,8 @@ Per §36, the following are explicitly **NOT** in MVP:
 **Test Cases**: 10 material combinations
 
 ### 5.4 DT-005: Threefold Repetition (P1)
+
+> **Superseded (J1b-5, 2026-10-08).** DT-005 is now Draw Claim (threefold and 50 moves) and DT-006 Automatic Draw (ADR-014 §1). The side to move comes from the last mover on the board or the confirmed game history, never from the clock (ADR-014 §2), and FEN lists are not accepted as a history (ADR-014 §4). See fact-model §3.5 "Implementation (J1b-5)". The sketch below is the original MVP plan.
 
 **Input Fields**:
 ```typescript

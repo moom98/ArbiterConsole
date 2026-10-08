@@ -124,7 +124,7 @@ type FactAnswer = { value: string | number | string[] } | { unknown: true };
   - `game.history` covers `positionsText` (DT-005). Since J1b-4, `game.position` covers the mate-possibility position questions, with `dtValues: "computed"`: `matePosition` + `reinstatedFen` (DT-001…003) and `matePosition` + `positionFen` (DT-004). Deriving that position from `game.history` comes later (with the history input UI);
   - `game.end-event` covers `gameEnded` and `gameEndedBeforeFlag`;
   - `ct.last-period` and `ct.quickplay-guidelines` (yes/no, derived from settings when possible) cover `lastPeriod` and `quickplayGuidelinesApply`.
-- **Values.** Fact values use the DT question values where they map, for example `opponent-claim`, `white-first` and `threefold-repetition-claim`. Where the shapes differ, `dtValues` converts them, for example `game.end-event` → `gameEnded` (true/false). The new draw kinds map to `other` until J1b-5. A test checks that every value converts to a valid DT option.
+- **Values.** Fact values use the DT question values where they map, for example `opponent-claim`, `white-first` and `threefold-repetition-claim`. Where the shapes differ, `dtValues` converts them, for example `game.end-event` → `gameEnded` (true/false). Since J1b-5 every `dr.kind` value is a DT subtype, so it maps to itself. A test checks that every value converts to a valid DT option.
 - **DT questions with no fact.** They are never presence-checked and never shown in the missing-facts list:
 
   | Question                               | Why it has no fact                                                                       |
@@ -218,10 +218,10 @@ These existing questions ask for a judgment. They are reworded, or replaced by a
 | `gameEnded`                                            | "対局はすでに終了していますか"                      | Derived from `game.end-event` (the observed event that ended the game). `game.record-state` is a separate fact. A handshake alone never ends the game.                                                                                                                              |
 | `gameEndedBeforeFlag`                                  | "フラッグの前に対局は終了していましたか"            | The new fact `ct.ended-before-flag`: "**before the flag was established** (noticed by the arbiter or validly claimed), was there an event that ended the game?". Under 6.8 / 5.1.1, a checkmate made after the display reached 0, but before the flag is established, still stands. |
 | `repetitionCheck`, `fivefoldCheck`, `seventyFiveCheck` | "成立していますか" (met / not-met / unknown / auto) | Computed from `game.history` (§3.5). Without a valid history: `dr.manual-reconstruction`, the arbiter's result of replaying on the board. Free text is never used.                                                                                                                  |
-| `claimantHasMove`                                      | "手番ですか"                                        | Derived from `game.history` (side to move), otherwise from `dr.last-mover`. **Never from the clock.**                                                                                                                                                                               |
+| `claimantHasMove`                                      | "手番ですか"                                        | Derived from `game.history` (side to move), otherwise from `dr.last-mover`. **Never from the clock.** Done in J1b-5: question `lastMover` (§3.5).                                                                                                                                                                               |
 | `positionBlocked`                                      | "閉塞局面の可能性" (judgment)                       | Removed. It is part of `assessMatePossibility` (§3.7).                                                                                                                                                                                                                              |
 | `touchedPiece`                                         | the wording mentions intent                         | "クレームの前に、動かす・取る意思で盤上の駒に触れましたか（駒を整える目的・偶然を除く）" (`dr.piece-touched`).                                                                                                                                                                      |
-| `lastMoveCheckmate`                                    | "最後の手はチェックメイトでしたか" (judgment)       | Removed. Computed from `game.history` with chess.js (DT-006).                                                                                                                                                                                                                       |
+| `lastMoveCheckmate`                                    | "最後の手はチェックメイトでしたか" (judgment)       | Removed. Computed from `game.history` with chess.js (DT-006). Without a history: the 75-move result `met-checkmate` (J1b-5).                                                                                                                                                                                                             |
 
 ### 3.5 Local game history (`game.history`)
 
@@ -254,7 +254,7 @@ See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §4.
   - Over-disambiguation (`Ngf3`), coordinates (`e2e4`), `0-0` and ambiguous SAN are rejected, with a hint.
   - Wrong check suffixes (`Rh8#` for a check) are accepted by chess.js. They do not change which move is meant.
 - **`analyzeRepetition(port, validated, intendedMove?)`** takes only a validated history. Its result has `complete` and the `history` summary. `format` and `detectPositionsFormat` are removed.
-- **DT-005 (until the J1b-5 restructure):**
+- **DT-005 (J1b-3; restructured in J1b-5, see "Implementation (J1b-5)" below):**
   - With `conditionCheck = auto` and a valid history, the tree first asks `historyConfirmed`. The final position summary is shown in the conclusion. The options are:
     - `match`: position and move count agree;
     - `position-only`: the position agrees, but the move count cannot be checked;
@@ -271,6 +271,26 @@ See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §4.
   - The summary leads with the move number: "4... Ng8 まで（初期配置から8半手）。最終局面は5手目の白の手番".
   - When an unknown answer leads every branch to the same follow-up question with the same conclusion, `resolveUnknown`'s `ask-others` keeps that conclusion. This way the confirmation never appears without the position it refers to.
 - The source `Game.pgn` is not wired yet. No UI sets it. Today the history comes from the pasted text (`positionsText`).
+
+**Implementation (J1b-5).** ADR-014 §1 (draw trees) and §2 (side to move). See `docs/progress/milestones/j1b-5-draw-trees.md`.
+
+- **Subtypes.** `DrawSubtype` = the `dr.kind` values: `threefold-repetition-claim`, `fifty-move-claim`, `fivefold-repetition`, `75-move-rule`, `agreement`, `stalemate`, `dead-position`, `other`. `dr.kind` maps to `drawSubtype` one to one. `agreement`, `stalemate`, `dead-position` and `other` have no tree: the engine asks for a situation note and they follow the non-DT path.
+- **DT-005 Draw Claim** (`dt-005-draw-claim.ts`, `DrawClaimTree`). The persisted id stays `DT-005-repetition`. The claim basis comes from the subtype (`drawClaimBasisOf`):
+  - threefold: `repetitionCheck`; automatic: the target position occurs at least 3 times;
+  - fifty-move: `fiftyMoveCheck` (new); automatic: the target position's halfmove clock is at least 100 plies (`FIFTY_MOVES_PLIES`). The target is the final position (9.3.2), or the position after the written move (9.3.1). 51 moves and more are also a correct claim (JCF p.67);
+  - shared: claimant, side to move, claim timing, 9.2.1/9.3.1 written move ("Make your claim legal"), 9.4 touched piece, the history confirmation, correct → draw (9.5.2), incorrect → 9.5.3 (time to the opponent by competition type and tournament override), unknown → CA;
+  - when the automatic check also finds 5 occurrences or 150 plies, the decision notes a possible 9.6 draw and recommends escalation.
+- **Side to move (ADR-014 §2).** `claimantHasMove` ("手番（自分の時計が動いている）") is removed. The new question `lastMover` (`dr.last-mover`: who last moved on the board) gives the side to move.
+  - It is asked in the first round, unless an automatic check with a valid history is already pending. Then the history is confirmed first, and the 9.4 and 9.x.1 rulings wait until the side to move is known.
+  - With a history confirmed against the board (`match` or `position-only`) and no `lastMover`, the history's side to move is used (the claimant not to move → "not your move", confidence medium).
+  - If `lastMover` and the history disagree, the history is not used: the tree asks the manual check again and re-asks `lastMover`, so the arbiter can correct either.
+  - `lastMover` unknown → `resolveUnknown` enumerates white/black; the branches disagree (not your move vs. a claim to check), so the result is manual-review. The clock is never used.
+- **DT-006 Automatic Draw** (`dt-006-automatic-draw.ts`, `AutomaticDrawTree`, id `DT-006-automatic-draw`). Fivefold (9.6.1) and 75 moves (9.6.2), moved unchanged from the old DT-005, with no claimant questions.
+  - `lastMoveCheckmate` is removed as a question. With a history, checkmate precedence comes from `seventyFiveReachedWithCheckmate`. Without one, the manual result `seventyFiveCheck` has the option `met-checkmate` ("75手に達した手でチェックメイトになった"); `met` now means "75 moves, not checkmate", and the answer records it as `lastMoveCheckmate: false`.
+  - `met-checkmate` is a DT-only value (`ConditionCheck`). It is accepted only for `seventyFiveCheck`, and the other trees treat it as unanswered. The catalogue fact `dr.manual-reconstruction` has no matching value yet (open point for J1c).
+  - **Legacy incidents.** On the manual path, `met` is a draw only with `lastMoveCheckmate: false`. A stored `met` with the old `lastMoveCheckmate: true` still gives checkmate precedence. A stored `met` without it (unanswered, or the old "わからない" in `unknownAnswers`) never becomes a draw: DT-006 asks `seventyFiveCheck` again, and the new answer removes the stale `lastMoveCheckmate` unknown. A stored `claimantHasMove` is ignored, so the tree asks `lastMover`. Old decisions under `DT-005-repetition` for fivefold or 75 moves stay as they are.
+- **Changing the draw kind** (`drawSubtype`) clears `conditionCheck`, `historyConfirmed` and `lastMoveCheckmate`, because a check result means different things for each kind. The history text and the claim answers are kept. This runs before the answers are applied, so it does not depend on their order.
+- **Citations added:** FIDE 9.3 and 11.12 (Laws 2023, Arbiters' Manual 2025 pp. 33 and 37), JCF NA p.67 "前提: 自分の手番であること" and "…50手ルールは51手目以降でも主張可能".
 
 ### 3.6 Time control periods (FIDE 8.4)
 

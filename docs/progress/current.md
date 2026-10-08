@@ -1,6 +1,6 @@
 # Current Progress
 
-**Last updated:** 2026-10-08
+**Last updated:** 2026-10-08 (J1b-5)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
@@ -80,6 +80,7 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 - **ADR-008:** the round checklist.
   - Templates are code, and customisation stores references to them.
   - Dexie v7. v6 is unused, and future schema versions must be ≥ 8.
+- **ADR-014 §1/§2 (J1b-5):** DT-005 Draw Claim (threefold + 50 moves, id kept as `DT-005-repetition`), DT-006 Automatic Draw (`DT-006-automatic-draw`); the side to move from `lastMover` or the confirmed history, never the clock.
 - **ADR-015:** mate-possibility search in infrastructure (own 0x88 generator + best-first portfolio, Web Worker, 1.5 s), result stored on the incident and re-verified by the domain through `ChessPositionPort` every time. A search bug can only cause "unknown".
 - **ADR-009:** Cloudflare Workers through OpenNext.
   - Next.js 14.2.35 with `@opennextjs/cloudflare@~1.15.1`. Do not bump to 1.16+ without moving to Next 15.5+/16.
@@ -94,7 +95,7 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 
 - **Domain:**
   - `lib/domain/decision-engine/index.ts`
-  - `lib/domain/decision-trees/`
+  - `lib/domain/decision-trees/` (draw: `draw-shared.ts`, `dt-005-draw-claim.ts`, `dt-006-automatic-draw.ts`)
   - `lib/domain/llm/` (output validator, quote match, keyword classifier, ports)
   - `lib/domain/services/` (incident-counter, mate-material, mate-possibility, game-history, position-analysis, fair-play, round-checklist, round-planning, game-context, …)
   - `lib/domain/rules/citations.ts`
@@ -118,6 +119,14 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `scripts/check-cf-env.mjs` (`cf:build` env-file guard)
 
 ## Tests and verification performed
+
+**J1b-5 draw trees (2026-10-08, `feature/fact-catalog`):**
+
+- tsc is clean.
+- eslint reports 0 problems.
+- 61 files / 1027 tests pass, including the new `dt-005-draw-claim`, `dt-006-automatic-draw` and `draw-claim.integration` tests (100 quiet plies through chess.js).
+- `npm run build` succeeds.
+- Review: FIX REQUIRED (1 must-fix: legacy 75-move "met" became a draw; 3 should-fix) → fixed → re-review. See `milestones/j1b-5-draw-trees.md`.
 
 **J1b-4 mate possibility (2026-10-08, `feature/fact-catalog`):**
 
@@ -174,6 +183,10 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 ## Known issues
 
+- **J1b-5:**
+  - `lastMover` unknown gives manual-review; the arbiter must answer the last mover to continue.
+  - The 75-move result `met-checkmate` is a DT-only value; the catalogue fact `dr.manual-reconstruction` has no checkmate value yet (J1c must not map `met` without it).
+  - Agreement, stalemate and dead position have no tree (ADR-014 §1); they use the situation note.
 - **J1b-4:**
   - Typing a FEN on a phone is slow; there is no board editor and the position is not derived from `game.history` yet (J2). Many flag falls and second illegal moves end in "局面を確認／CAへ確認". Counts never give "can-mate" any more (K+Q vs K without a FEN is no longer an automatic loss).
   - Phone timing of the 1.5 s search is estimated, not measured. Check on a real device.
@@ -181,7 +194,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 - **J1b-3:**
   - `Game.pgn` is not wired in: no UI sets it, so the history comes only from the pasted text.
   - There is no board diagram; the arbiter compares the FEN and the last move with the board (J2).
-  - The side to move still comes from the `claimantHasMove` question, and the history only validates it (J1b-5).
+  - The side to move is now `lastMover` or the confirmed history (done in J1b-5).
 - **J1b-2:**
   - With an unknown answer, a branch that needs another unanswered question counts as disagreeing, unless every branch asks the same question. Example: `claimMode` unknown and `moveWritten` unanswered give manual-review.
   - The fact layer's `FactAnswer.unknown` is not yet linked to `Incident.unknownAnswers`. That happens when facts replace the follow-up questions.
@@ -198,7 +211,6 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
   - The rate limit and daily cap are per instance. Set Google Cloud quotas and a billing budget.
   - Strict quote matching may reject usable answers.
 - **Not implemented:**
-  - 50-move claim (9.3);
   - dead position as its own incident type;
   - separate round-exclusion and point-deduction penalty types (§25);
   - a Game Detail screen;
@@ -274,7 +286,11 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
        - Questions `matePosition` (FEN を入力 / 入力できない) + `reinstatedFen` (DT-001…003) or `positionFen` (DT-004). `opponentCanCheckmate`, the material counts, `materialConfirmed` and `positionBlocked` are removed.
        - "cannot-mate" only from the three provable material cases; "can-mate" only from a helpmate line found by the local search (Web Worker, own 0x88 move generator) **and** re-verified by chess.js (strict) on every evaluation; otherwise "局面を確認し、CAへ確認".
        - The store searches before evaluation and saves `Incident.mateSearch`.
-     - J1b-5: DT-005/006 restructure;
+     - J1b-5: DT-005/006 restructure. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-5-draw-trees.md`.
+       - DT-005 Draw Claim: threefold (9.2) and the new 50-move claim (9.3, ≥ 100 plies at the target position); DT-006 Automatic Draw: fivefold and 75 moves.
+       - `claimantHasMove` (clock) replaced by `lastMover`; `lastMoveCheckmate` folded into the 75-move result (`met-checkmate`).
+       - Draw subtypes: the 8 kinds of ADR-014 §1. Changing the kind clears the stored check.
+     - ADR-014 §3 (`game.end-event` for `gameEnded` / `gameEndedBeforeFlag`) has no slice yet; do it before J1c or with J2;
      - J1b-6: DT-007 touch move and counting;
      - J1b-7: `TimeControl` periods;
    - J1c: the Jev port, adapter, calibrated parser and `/api/llm/facts`, with the default provider kept on `gemini`;

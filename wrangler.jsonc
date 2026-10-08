@@ -4,6 +4,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "main": ".open-next/worker.js",
   "name": "arbiter-console",
+  // デプロイ先の Cloudflare アカウント「ArbiterConsole」（ID は秘密情報ではない）
+  "account_id": "a7bf12b92fb25ac19b8b333be22a1114",
   "compatibility_date": "2025-12-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": {

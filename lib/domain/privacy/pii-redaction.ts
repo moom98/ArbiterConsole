@@ -150,8 +150,10 @@ const TIME = rule(
     if (Number(m[0].split(":")[0]) >= 3 && WALL_CLOCK_AFTER.test(after))
       return false;
     if (CLOCK_BEFORE.test(before) || CLOCK_AFTER.test(after)) return true;
+    // 白・黒・フラッグだけの文脈では、「に・から…」が続けば時間にかかわらず時刻（黒は 2:15 に到着）
     return (
       Number(m[0].split(":")[0]) <= MAX_WEAK_CLOCK_HOURS &&
+      !WALL_CLOCK_AFTER.test(after) &&
       (CLOCK_WEAK_BEFORE.test(before) || CLOCK_WEAK_AFTER.test(after))
     );
   }

@@ -2087,32 +2087,32 @@
    "text": "白が黒を呼び止めた。体調が悪いと言った"
   },
   {
-   "entry": "term:待って",
+   "entry": "term:待っ",
    "expected": "uncertain",
    "text": "会場で待っていた"
   },
   {
-   "entry": "term:待って",
+   "entry": "term:待っ",
    "expected": "blocked",
    "text": "会場で待っていた。暴言もあった"
   },
   {
-   "entry": "term:待って",
+   "entry": "term:待っ",
    "expected": "uncertain",
    "text": "相手が待っている"
   },
   {
-   "entry": "term:待って",
+   "entry": "term:待っ",
    "expected": "blocked",
    "text": "相手が待っている。警察を呼んだ"
   },
   {
-   "entry": "term:待って",
+   "entry": "term:待っ",
    "expected": "uncertain",
    "text": "対局後に待って"
   },
   {
-   "entry": "term:待って",
+   "entry": "term:待っ",
    "expected": "blocked",
    "text": "対局後に待って。体調が悪いと言った"
   },
@@ -2280,6 +2280,246 @@
    "entry": "cannot",
    "expected": "uncertain",
    "text": "もう指せないと言った"
+  },
+  {
+   "entry": "term:返して(い)?な",
+   "expected": "uncertain",
+   "text": "時計を返していない"
+  },
+  {
+   "entry": "term:返して(い)?な",
+   "expected": "blocked",
+   "text": "時計を返していない。暴言もあった"
+  },
+  {
+   "entry": "term:返して(い)?な",
+   "expected": "uncertain",
+   "text": "駒を返してない"
+  },
+  {
+   "entry": "term:返して(い)?な",
+   "expected": "blocked",
+   "text": "駒を返してない。警察を呼んだ"
+  },
+  {
+   "entry": "term:返して(い)?な",
+   "expected": "uncertain",
+   "text": "用紙を返していない"
+  },
+  {
+   "entry": "term:返して(い)?な",
+   "expected": "blocked",
+   "text": "用紙を返していない。体調が悪いと言った"
+  },
+  {
+   "entry": "term:何回も",
+   "expected": "uncertain",
+   "text": "何回も言った"
+  },
+  {
+   "entry": "term:何回も",
+   "expected": "blocked",
+   "text": "何回も言った。暴言もあった"
+  },
+  {
+   "entry": "term:何回も",
+   "expected": "uncertain",
+   "text": "何回も見ていた"
+  },
+  {
+   "entry": "term:何回も",
+   "expected": "blocked",
+   "text": "何回も見ていた。警察を呼んだ"
+  },
+  {
+   "entry": "term:何回も",
+   "expected": "uncertain",
+   "text": "何回も呼んだ"
+  },
+  {
+   "entry": "term:何回も",
+   "expected": "blocked",
+   "text": "何回も呼んだ。体調が悪いと言った"
+  },
+  {
+   "entry": "term:帰れ",
+   "expected": "uncertain",
+   "text": "帰れと言った"
+  },
+  {
+   "entry": "term:帰れ",
+   "expected": "blocked",
+   "text": "帰れと言った。暴言もあった"
+  },
+  {
+   "entry": "term:帰れ",
+   "expected": "uncertain",
+   "text": "帰れと言われた"
+  },
+  {
+   "entry": "term:帰れ",
+   "expected": "blocked",
+   "text": "帰れと言われた。警察を呼んだ"
+  },
+  {
+   "entry": "term:帰れ",
+   "expected": "uncertain",
+   "text": "もう帰れ"
+  },
+  {
+   "entry": "term:帰れ",
+   "expected": "blocked",
+   "text": "もう帰れ。体調が悪いと言った"
+  },
+  {
+   "entry": "term:途中で帰",
+   "expected": "uncertain",
+   "text": "途中で帰った"
+  },
+  {
+   "entry": "term:途中で帰",
+   "expected": "blocked",
+   "text": "途中で帰った。暴言もあった"
+  },
+  {
+   "entry": "term:途中で帰",
+   "expected": "uncertain",
+   "text": "対局の途中で帰った"
+  },
+  {
+   "entry": "term:途中で帰",
+   "expected": "blocked",
+   "text": "対局の途中で帰った。警察を呼んだ"
+  },
+  {
+   "entry": "term:途中で帰",
+   "expected": "uncertain",
+   "text": "途中で帰ると言った"
+  },
+  {
+   "entry": "term:途中で帰",
+   "expected": "blocked",
+   "text": "途中で帰ると言った。体調が悪いと言った"
+  },
+  {
+   "entry": "term:って帰",
+   "expected": "uncertain",
+   "text": "駒を持って帰った"
+  },
+  {
+   "entry": "term:って帰",
+   "expected": "blocked",
+   "text": "駒を持って帰った。暴言もあった"
+  },
+  {
+   "entry": "term:って帰",
+   "expected": "uncertain",
+   "text": "時計を使って帰った"
+  },
+  {
+   "entry": "term:って帰",
+   "expected": "blocked",
+   "text": "時計を使って帰った。警察を呼んだ"
+  },
+  {
+   "entry": "term:って帰",
+   "expected": "uncertain",
+   "text": "用紙を取って帰る"
+  },
+  {
+   "entry": "term:って帰",
+   "expected": "blocked",
+   "text": "用紙を取って帰る。体調が悪いと言った"
+  },
+  {
+   "entry": "term:後で帰",
+   "expected": "uncertain",
+   "text": "対局の後で帰った"
+  },
+  {
+   "entry": "term:後で帰",
+   "expected": "blocked",
+   "text": "対局の後で帰った。暴言もあった"
+  },
+  {
+   "entry": "term:後で帰",
+   "expected": "uncertain",
+   "text": "指した後で帰った"
+  },
+  {
+   "entry": "term:後で帰",
+   "expected": "blocked",
+   "text": "指した後で帰った。警察を呼んだ"
+  },
+  {
+   "entry": "term:後で帰",
+   "expected": "uncertain",
+   "text": "投了の後で帰る"
+  },
+  {
+   "entry": "term:後で帰",
+   "expected": "blocked",
+   "text": "投了の後で帰る。体調が悪いと言った"
+  },
+  {
+   "entry": "term:退場と言",
+   "expected": "uncertain",
+   "text": "退場と言った"
+  },
+  {
+   "entry": "term:退場と言",
+   "expected": "blocked",
+   "text": "退場と言った。暴言もあった"
+  },
+  {
+   "entry": "term:退場と言",
+   "expected": "uncertain",
+   "text": "退場と言われた"
+  },
+  {
+   "entry": "term:退場と言",
+   "expected": "blocked",
+   "text": "退場と言われた。警察を呼んだ"
+  },
+  {
+   "entry": "term:退場と言",
+   "expected": "uncertain",
+   "text": "白に退場と言った"
+  },
+  {
+   "entry": "term:退場と言",
+   "expected": "blocked",
+   "text": "白に退場と言った。体調が悪いと言った"
+  },
+  {
+   "entry": "term:状態ではな",
+   "expected": "uncertain",
+   "text": "対局できる状態ではない"
+  },
+  {
+   "entry": "term:状態ではな",
+   "expected": "blocked",
+   "text": "対局できる状態ではない。暴言もあった"
+  },
+  {
+   "entry": "term:状態ではな",
+   "expected": "uncertain",
+   "text": "続けられる状態ではなかった"
+  },
+  {
+   "entry": "term:状態ではな",
+   "expected": "blocked",
+   "text": "続けられる状態ではなかった。警察を呼んだ"
+  },
+  {
+   "entry": "term:状態ではな",
+   "expected": "uncertain",
+   "text": "指せる状態ではない"
+  },
+  {
+   "entry": "term:状態ではな",
+   "expected": "blocked",
+   "text": "指せる状態ではない。体調が悪いと言った"
   }
  ]
 }

@@ -5,6 +5,7 @@ import benign from "../fixtures/privacy/benign.ja.json";
 import review1 from "../fixtures/privacy/sensitive-review1.ja.json";
 import review2 from "../fixtures/privacy/sensitive-review2.ja.json";
 import review3 from "../fixtures/privacy/sensitive-review3.ja.json";
+import review4 from "../fixtures/privacy/sensitive-review4.ja.json";
 import benignReview from "../fixtures/privacy/benign-review.ja.json";
 import {
   CONTEXT_EXPRESSIONS,
@@ -77,12 +78,21 @@ describe("Sensitive Gate evaluation (release gate)", () => {
     expect(falseNegatives).toEqual([]);
   });
 
+  it("0 false negatives on the fourth reviewer's set (now a regression set)", () => {
+    expect(review4.cases.length).toBeGreaterThanOrEqual(250);
+    const falseNegatives = review4.cases.filter(
+      (c) => evaluateSensitivity({ text: c.text }).verdict === "clear"
+    );
+    expect(falseNegatives).toEqual([]);
+  });
+
   it("0 sensitive reports are sent through the whole pipeline (every set)", () => {
     const all = [
       ...sensitive.cases,
       ...review1.cases,
       ...review2.cases,
       ...review3.cases,
+      ...review4.cases,
     ];
     expect(all.filter((c) => sentByPipeline(c.text))).toEqual([]);
   });

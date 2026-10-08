@@ -1,6 +1,6 @@
 # Current Progress
 
-**Last updated:** 2026-10-08 (J1b-8)
+**Last updated:** 2026-10-08 (J1a-1)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
@@ -95,6 +95,10 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - Stored legacy booleans are stripped by the engine and asked again.
   - Optional record-only `gameRecordState`; it never changes the ruling.
   - Checkmate/stalemate "result stands" asks whether the producing move was legal (FIDE 5.1.1 / 5.2.1), confidence medium.
+- **ADR-012 + amendments (J1a-1):** `lib/domain/privacy/` (pure).
+  - **D12 (user):** a known-vocabulary allow-list layer (L3v) decides `clear`; the term lists only give `blocked` reasons.
+  - **D13 (user):** the arbiter confirms **every** external send; the gate is a filter, not a guarantee. Release condition: held-out false-negative rate measured and minimized, 0 on the regression sets, no covered identifier in a sent payload.
+  - `protectIncidentText` runs steps A–E; unregistered names and words swallowed by pattern rules always go local.
 - **ADR-015:** mate-possibility search in infrastructure (own 0x88 generator + best-first portfolio, Web Worker, 1.5 s), result stored on the incident and re-verified by the domain through `ChessPositionPort` every time. A search bug can only cause "unknown".
 - **ADR-009:** Cloudflare Workers through OpenNext.
   - Next.js 14.2.35 with `@opennextjs/cloudflare@~1.15.1`. Do not bump to 1.16+ without moving to Next 15.5+/16.
@@ -133,6 +137,12 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `scripts/check-cf-env.mjs` (`cf:build` env-file guard)
 
 ## Tests and verification performed
+
+**J1a-1 privacy package (2026-10-08, `feature/fact-catalog`):**
+
+- tsc is clean; eslint 0 errors; all tests pass (70 files); `npm run build` succeeds.
+- 155 privacy tests, including evaluation of every synthetic fixture set through the gate and the whole pipeline.
+- Four independent reviews, each FIX REQUIRED → fixed. Held-out false-negative rate went ~76% → ~43% → 10–17% → 0.47% (natural phrasing, 1/211). Usefulness: 8.6% of realistic benign reports held back. See `milestones/j1a-1-privacy-package.md`.
 
 **J1b-8 game end (2026-10-08, `feature/fact-catalog`):**
 
@@ -224,6 +234,9 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 ## Known issues
 
+- **J1a-1:**
+  - Sentences deliberately built from vocabulary words can still pass the gate; the arbiter's confirmation (D13, J1a-2) is the final defense. Every miss found must become a regression case in `__tests__/fixtures/privacy/`.
+  - Nothing calls the privacy package yet: the app still sends the raw description to Gemini until J1a-2/J1a-3 land. **Do not deploy `feature/fact-catalog` before J1a-2 and J1a-3.**
 - **J1b-8:**
   - Whether the mating/stalemating move was legal is the arbiter's check; there is no automatic check from `game.history` yet (J2).
   - `game.record-state` is `conditional` in the catalogue while the DT question is optional; J1c must treat it as a non-blocking record fact.
@@ -326,7 +339,10 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 3. **Jev classifier and data protection (ADR-011/012/013):** after the catalogue re-review, implement the steps in jev-classifier-design §10 in order (J0, J1a data protection, J1b fact model, J1c Jev, J2, J3):
    - J0: check the official API with a real key;
    - J0: **done 2026-10-08**. The real API was checked with synthetic text (`scripts/jev-probe.mjs`, jev-classifier-design §2.1). `noul` returns its probability in the field `noul`; pinned `jev-1.13.0` works; 422 errors echo the input.
-   - J1a: data protection for all routes;
+   - J1a: data protection for all routes, in slices:
+     - J1a-1: the pure privacy package and its evaluation. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1a-1-privacy-package.md`.
+     - J1a-2: `lib/application/external-ai-guard.ts` (only importer of `callLlmApi`), every client route through `protectIncidentText`, the mandatory confirmation UI (D13), the 外部AIに送らない switch, re-identification of AI output, embedding key `+deid1`. `lib/infrastructure/privacy/known-identifiers.ts` exists (untested).
+     - J1a-3: server re-check of the minimized shapes (L5).
    - J1b: the fact model and ADR-014, in slices:
      - J1b-1: the catalogue data, types and `requiredFacts` (pure, no tree changes). **Done 2026-10-08**, on branch `feature/fact-catalog` (stacked on `design/jev-classifier`). See `milestones/j1b-1-fact-catalogue.md`;
      - J1b-2: `unknown` and `resolveUnknown`. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-2-unknown-answers.md`.
@@ -363,7 +379,8 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 1. Read `CLAUDE.md`, this file, `docs/progress/milestones/*`, then the design docs and ADRs for the next task.
 2. The current work branch is `feature/fact-catalog` (pushed to `origin`, latest J1b-8; `main` has the deployed app). Check `git log --oneline -15` on it, and `git worktree list`.
-   - **Next task:** J1c (jev-classifier-design §10): the Jev port, adapter, calibrated parser and `/api/llm/facts`, with the default provider kept on `gemini`. J1c should also wire `deriveTimeControlFacts` and `assessRecordingObligation`, and treat `game.record-state` as a non-blocking record fact. J1a (data protection for all routes) is also still open; check jev-classifier-design §10 for the order.
+   - **Next task:** J1a-2 (see "Next steps" → J1a), then J1a-3, then J1c (Jev port, adapter, `/api/llm/facts`; also wire `deriveTimeControlFacts` and `assessRecordingObligation`, and treat `game.record-state` as a non-blocking record fact).
+   - The privacy package's reviews used independent reviewer agents that wrote their own synthetic sensitive phrases; keep doing that for any change to `lib/domain/privacy/` (the author's own fixtures say little).
    - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/j1b-N-*.md` and update this file.
    - In a nested worktree, run eslint as `npx eslint --no-eslintrc -c .eslintrc.json --ext .ts,.tsx app components lib __tests__`.
 3. Do not edit `docs/requirements/product-requirements.md` for implementation convenience.

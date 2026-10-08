@@ -194,6 +194,49 @@ describe("Sensitive Gate (external-ai-data-protection §4)", () => {
     });
   });
 
+  describe("review fixes (J1a-1 review 4)", () => {
+    it("contact with a body part or 番/対局者, pre-arranged results, telling moves", () => {
+      for (const text of [
+        "白が黒の左手を押した",
+        "白が黒番の手に触った",
+        "白は対局者の手を押さえた",
+        "白が黒の指に触った",
+        "白が黒に負けてくれと言った",
+        "白と黒は開始前にドローで合意していた",
+        "白は黒と結果に同意していた",
+        "白が対局中に黒に指し手を言った",
+        "白が黒にこの手を指せと言った",
+      ])
+        expect(verdict(text), text).not.toBe("clear");
+    });
+
+    it("cannot (polite, 触れ), getting worse, someone else's phone, waiting, returning", () => {
+      for (const text of [
+        "白は時計を押せません",
+        "白は駒に触れない",
+        "白は対局中に悪くなった",
+        "白が黒のスマホをバッグに入れた",
+        "白が対局後に黒を待った",
+        "白が黒に何回も言った",
+        "白は黒の時計を返していない",
+        "白が途中で帰った",
+      ])
+        expect(verdict(text), text).not.toBe("clear");
+      expect(verdict("時計の具合が悪い")).toBe("clear");
+    });
+
+    it("usefulness: common particle pairs and suru-verbs after a noun", () => {
+      for (const text of [
+        "黒が時計を押したのは手番の後",
+        "黒にも警告した",
+        "白がドローの提案をしてから時計を押した",
+        "時計が0になっていた",
+        "黒が駒を落とした",
+      ])
+        expect(verdict(text), text).toBe("clear");
+    });
+  });
+
   describe("review fixes (J1a-1 review 3)", () => {
     it("third parties, bags, waiting, euphemisms, inability, two one-kana particles", () => {
       for (const text of [

@@ -154,6 +154,13 @@ export function residualCheck(
     )
   )
     findings.add("time");
+  // 0〜2時台でも、時計・残り等の文脈がなく「に・から…」が続けば時刻
+  if (
+    /(?<!(残り|持ち時間|時計|表示|秒読み)[\s\S]{0,6})(?<![\d:])[0-2]?\d:\d{2}(?=\s*(に|から|まで|頃|ごろ|過ぎ|すぎ))/.test(
+      beforeClock
+    )
+  )
+    findings.add("time");
   const outside = withoutClockReadings(beforeClock);
   if (looseIdentifierHit(outside, ids)) findings.add("registered-identifier");
   if (DIGITS.test(outside)) findings.add("digits");

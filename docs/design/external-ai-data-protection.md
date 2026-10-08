@@ -412,7 +412,14 @@ The pure package exists and is tested; nothing calls it yet (J1a-2 wires it into
   - vocabulary: 間違え, 盤の外, 抜け, 手を離, 指し方, 放置, 撤回, 質問, 段目; `protest` benign context widened (ペアリングの結果に…苦情);
   - a registered one-character name (林) is redacted and checked.
 - **Results after the third review:** 0 false negatives, through the gate and through the whole pipeline, on all four sets (192 own, 108 + 269 + 208 from the three reviews; all are now regression sets, so they no longer measure held-out performance). Usefulness: 5 of the reviewers' 80 realistic non-sensitive reports are held back (6.25%).
-- **Held-out false-negative rates so far** (each measured before the fixes that followed): list-based gate ~76% (115/151); known vocabulary ~43% (117/270); after review-2 fixes 10.1% gate / 16.8% pipeline (208). The arbiter's confirmation (D13) remains the final defense.
+- **Fourth review (2026-10-08): FIX REQUIRED (no code defect, cheap systematic holes).** Held-out, natural phrasing: **1 of 211 (0.47%)** through the gate and through the pipeline. Phrases deliberately composed from vocabulary words: 29 of 41. Usefulness on the reviewer's 60 phone-style reports: 21 held back (35%). Fixes:
+  - contact with a body part (左手, 指 …) or a possessor with 番 / 対局者 / 対戦相手; pre-arranged results in imperative and agreement forms (負けてくれ, 開始前に…合意, 結果に同意); telling moves (指し手を言う, この手を指せ);
+  - `cannot` also covers polite forms and 触れない; 悪い only in 具合が悪い / 調子が悪い (L3 decides those); someone else's phone into a bag is not benign;
+  - terms 待っ (all forms), 何回も, 返して(い)ない, 帰れ, 途中で帰, って帰, 後で帰, 退場と言, 状態ではな;
+  - near 白/黒/フラッグ, a time followed by に/から/頃… is a time of day at any hour;
+  - usefulness: only specific particle pairs are blocked (はは, かね, もも, かか, ねね, よよ) instead of every pair; する-verbs after a noun (提案をした), なっていた, 落とした, 付けた, 続けた, かけた, かも; vocabulary 旗, 手元, 経過, 合法, 反応, 否定, 代わり.
+- **Results after the fourth review:** 0 false negatives through the gate and the pipeline on all five sensitive sets (192 own; 108, 269, 208 and 252 from the four reviews; all now regression sets). Usefulness: 12 of 140 realistic non-sensitive reports from reviewers 3 and 4 held back (8.6%), enforced at ≤ 20%.
+- **Held-out false-negative rates so far** (each measured before the fixes that followed): list-based gate ~76% (115/151); known vocabulary ~43% (117/270); after review-2 fixes 10.1% gate / 16.8% pipeline (208); after review-3 fixes 0.47% on natural phrasing (1/211), but 29/41 on phrases deliberately composed from vocabulary words. The arbiter's confirmation (D13) remains the final defense.
 - **Tests:** `__tests__/privacy/{sensitive-gate,gate-evaluation,pii-redaction,protect}.test.ts`. `gate-evaluation` also runs every sensitive set through `protectIncidentText`.
 
 ## Appendix A. Sensitive terms (for review)

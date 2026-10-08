@@ -184,6 +184,16 @@ describe("PII redaction (external-ai-data-protection §5.2)", () => {
       expect(redact("残り13:05")).toBe("残り13:05");
     });
 
+    it("near 白 / 黒 / フラッグ, a time followed by に is a time of day at any hour (review 4)", () => {
+      for (const text of ["黒は 2:15 に到着した", "フラッグ後 2:30 に再開"]) {
+        expect(redact(text), text).toContain("〈日時1〉");
+        expect(residualCheck(text, IDS).ok, text).toBe(false);
+      }
+      expect(redact("白 0:00 黒 0:12 でフラッグ")).toBe(
+        "白 0:00 黒 0:12 でフラッグ"
+      );
+    });
+
     it("a kanji numeral inside a word is not a round or board number (同一局面)", () => {
       expect(redact("同一局面が3回目")).toBe("同一局面が3回目");
       expect(redact("第一局で違法手")).toBe("〈ラウンド1〉で違法手");

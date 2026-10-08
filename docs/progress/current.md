@@ -183,10 +183,12 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
     - the catalogue review: 12 points, all reflected.
   - **Still open:**
     - (done 2026-10-08) the catalogue re-review: 15 points reflected, ADR-014 added. **The user approved implementing the fact catalogue.**
-    - Q-DP1: no AI reasoning for sensitive incidents?
-    - Q-DP2: the review of the doubtful vocabulary;
-    - Q-F1: value suggestion (not planned);
-    - Q-F2: the 0.97 precision target.
+    - Q-F1: value suggestion (not planned).
+  - **Answered 2026-10-08:**
+    - Q-DP1: sensitive incidents are not sent to external AI; they are handled by local trees and forms; on-device AI is not forbidden;
+    - Q-DP2: a context-dependent expression registry with evaluation cases, where undecidable means local fallback;
+    - Q-F2: present precision ≥ 0.99, and ≥ 0.995 for blocking facts.
+  - The TypeSafe key is at `~/.config/arbiter-console/typesafe.key`. It is never in the repo or in `.env*`.
   - Code so far: J1b-1 (`lib/domain/facts/`, pure; no Decision Tree changed yet).
   - The key must never go into `.env*` (`cf:deploy` refuses to run). Keep it in `~/.config/arbiter-console/typesafe.key` for J0 and J3.
 
@@ -212,6 +214,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
    - Upgrade to Next.js 15.5+/16 and the current OpenNext adapter. Next 14 is EOL.
 3. **Jev classifier and data protection (ADR-011/012/013):** after the catalogue re-review, implement the steps in jev-classifier-design §10 in order (J0, J1a data protection, J1b fact model, J1c Jev, J2, J3):
    - J0: check the official API with a real key;
+   - J0: **done 2026-10-08**. The real API was checked with synthetic text (`scripts/jev-probe.mjs`, jev-classifier-design §2.1). `noul` returns its probability in the field `noul`; pinned `jev-1.13.0` works; 422 errors echo the input.
    - J1a: data protection for all routes;
    - J1b: the fact model and ADR-014, in slices:
      - J1b-1: the catalogue data, types and `requiredFacts` (pure, no tree changes). **Done 2026-10-08**, on branch `feature/fact-catalog` (stacked on `design/jev-classifier`). See `milestones/j1b-1-fact-catalogue.md`;

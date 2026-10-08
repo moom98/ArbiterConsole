@@ -33,7 +33,7 @@ Sources: [LiteLLM pass-through docs](https://docs.litellm.ai/docs/pass_through/t
   - `questions` maps a question ID to `{ type, instructions, criteria }`.
 - **Question types:**
   - `choice`: 1–255 labels, each with a description. Returns `choice`, `probabilities` (per label) and `confidence`.
-  - `noul` (yes/no): optional `true`/`false` descriptions. Returns `probability` (0–1).
+  - `noul` (yes/no): optional `true`/`false` descriptions. **Returns the probability in the field `noul`** (0–1), not `probability` (verified in J0).
   - `score`: 2–10 ordered levels. Returns `score` and `probabilities`.
 - All questions are answered in one parallel pass. The response also has `model` (the resolved version) and `usage` (tokens).
 - **Limits:**
@@ -48,6 +48,24 @@ Sources: [LiteLLM pass-through docs](https://docs.litellm.ai/docs/pass_through/t
 - **Calibration:** it is trained so that probabilities are calibrated. Across many answers, p = 0.8 should be right about 80% of the time.
 - **Data:** the sources say outputs are not used for training. Zero Data Retention is documented per request through the Vercel AI Gateway. For the direct API, no contractual ZDR guarantee has been confirmed. **This design does not rely on ZDR.** Everything sent to TypeSafe is treated as possibly retained (§4.4).
 - **Japanese support: not documented.** This is the main technical risk (§9).
+
+### 2.1 Verified with the real API (J0, 2026-10-08)
+
+The script is `scripts/jev-probe.mjs`. It sends synthetic, de-identified Japanese text only, and reads the key from `~/.config/arbiter-console/typesafe.key`.
+
+| Item | Result |
+| --- | --- |
+| `GET /v1/models` | Lists `jev-latest` and `jev-preview` only. |
+| Model ids | `jev-latest` resolves to **`jev-1.13.0`**, the `model` field of the response. Requesting **`jev-1.13.0` directly works**, so `JEV_MODEL` can stay pinned. |
+| Response | `{ model, answers, usage: { input_tokens, output_tokens } }` |
+| `choice` answer | `{ type, choice, confidence, probabilities }`. `probabilities` covers **all** labels and sums to 1.00 (rounded to 2 decimals). `confidence` differs slightly from `probabilities[choice]` (0.97 vs 0.98), so the design ignores `confidence` (§5.4). |
+| `noul` answer | `{ type: "noul", noul: 0.91 }`. The field is `noul`. |
+| Question ids | Fact ids with dots and hyphens (`im.clock-pressed`) are accepted. |
+| Latency | 160–230 ms per request with 2 questions. |
+| Tokens | About 820 input tokens per request, mostly the instructions and criteria. `output_tokens` (about 120) is reported. Check on the TypeSafe console whether it is billed. |
+| Japanese | 4 of 4 synthetic samples got the right category (p 0.96–1.00). The "explicit" check: stated 0.91; not stated 0.02–0.03. **This is not an evaluation** (§9). |
+| Error 401 | `{"detail":{"error_type":"authentication_error","message":…}}` |
+| Error 422 | FastAPI style `{"detail":[{type, loc, msg, input}]}`. **It echoes the request input**, so upstream error bodies must never be logged (§6). |
 
 ## 3. Scope
 
@@ -312,7 +330,7 @@ Japanese support is not documented, so production switches only after a measured
 
 | Step | Content | Exit criteria |
 | --- | --- | --- |
-| **J0** | With synthetic text only, check the official Jev API reference and Japanese behaviour with a real key. The key is read from a file outside the repo (§10 note), never from a committed file. Check these: field names; whether `noul` returns `probability`; the error format; which characters question IDs may contain (the fact ids contain dots and hyphens, for example `dr.claim-timing`); whether `categoryProbabilities` cover every label. Fix anything in §2 and §5 that is wrong. | Design updated; one manual request recorded. |
+| **J0 (done 2026-10-08, §2.1)** | With synthetic text only, check the official Jev API reference and Japanese behaviour with a real key. The key is read from a file outside the repo (§10 note), never from a committed file. Check these: field names; whether `noul` returns `probability`; the error format; which characters question IDs may contain (the fact ids contain dots and hyphens, for example `dr.claim-timing`); whether `categoryProbabilities` cover every label. Fix anything in §2 and §5 that is wrong. | Design updated; one manual request recorded. |
 | **J1a** | The data protection package and the guard, for **all routes including Gemini** ([external-ai-data-protection.md](./external-ai-data-protection.md)): privacy fixtures and gate FN and FP metrics, server re-checks, Gemini reasoning with de-identified articles and re-identification, re-embedding of all rules under the new key. | Type check, lint, tests and build pass; privacy fixtures show 0 gate false negatives and 0 PII leaks; separate reviewer approves. |
 | **J1b** | The fact model ([fact-model.md](./fact-model.md)) and [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md), in slices J1b-1…7:<br>• the catalogue and `requiredFacts`;<br>• `unknown` in every DT question, and `resolveUnknown`;<br>• observation wording and computed facts;<br>• `game.history`;<br>• DT-005 Draw Claim, DT-006 Automatic Draw, DT-007 Touch Move;<br>• position-based mate possibility;<br>• `TimeControl` periods;<br>• separate touch-move counting. | Type check, lint, tests and build pass; every DT has `unknown` tests for each blocking and conditional fact; separate reviewer approves. |
 | **J1c** | The classify port, the Jev client, the question builder, config, the calibrated parser (uncalibrated mode first), `/api/llm/facts`, and unit and handler tests (mocked `fetch`). The provider default is `gemini`. | Type check, lint, tests and build pass; separate reviewer approves; deploy changes nothing. |

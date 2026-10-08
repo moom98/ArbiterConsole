@@ -1,6 +1,6 @@
 # Gemini Embedding for Semantic Search (ADR-010)
 
-**Status:** Implemented on `feature/gemini-embeddings`. Reviewed: verdict MERGE; its two should-fix items and the nits were fixed (see below).
+**Status:** Merged (PR #3) and deployed on 2026-10-08 (version `7221140b`). Reviewed: verdict MERGE; its two should-fix items and the nits were fixed (see below). Real-device verification with the real Gemini key is still pending.
 **Date:** 2026-10-08
 **Decision record:** [ADR-010](../../decisions/ADR-010-gemini-embeddings-for-semantic-search.md)
 

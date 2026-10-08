@@ -104,6 +104,28 @@ export interface FollowUpQuestion {
    * 条件の定義はドメインが持ち、UI は一致判定のみ行う。
    */
   showWhen?: { questionId: FollowUpQuestionId; values: string[] };
+  /**
+   * 共通の「わからない・確認できない」選択肢（UNKNOWN_OPTION）を持つ質問での扱い
+   * （fact-model §3.3）。
+   * - enumerate:     unknown のとき、他の選択肢すべてで評価して比較する（resolveUnknown）
+   * - manual-review: 列挙できない（例: 駒数の確認）。unknown なら手動確認
+   * 未設定の質問は共通の unknown を持たない（独自の unknown 値を持つ質問を含む）。
+   */
+  onUnknown?: "enumerate" | "manual-review";
+}
+
+/** 共通の「わからない・確認できない」の回答値 */
+export const UNKNOWN_VALUE = "unknown";
+
+/** 共通の「わからない・確認できない」選択肢（他の選択肢と同じ大きさで表示する） */
+export const UNKNOWN_OPTION: FollowUpOption = {
+  value: UNKNOWN_VALUE,
+  label: "わからない・確認できない",
+};
+
+/** unknown のときに列挙する値（共通の unknown 以外の選択肢） */
+export function enumerableValues(q: FollowUpQuestion): string[] {
+  return q.options.map((o) => o.value).filter((v) => v !== UNKNOWN_VALUE);
 }
 
 /** showWhen の条件を満たすか（UI 用の純粋関数） */
@@ -202,12 +224,20 @@ function materialQuestions(): Record<MaterialQuestionId, FollowUpQuestion> {
   return out;
 }
 
+/** 共通の unknown を加える（fact-model §3.3: すべての DT 質問に unknown） */
+function withUnknown(
+  q: FollowUpQuestion,
+  onUnknown: "enumerate" | "manual-review" = "enumerate"
+): FollowUpQuestion {
+  return { ...q, options: [...q.options, UNKNOWN_OPTION], onUnknown };
+}
+
 const CONDITION_AUTO: FollowUpOption = {
   value: "auto",
   label: "下の棋譜 / FEN から判定する",
 };
 
-export const QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
+const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
   playerColor: {
     id: "playerColor",
     scope: "incident",
@@ -504,6 +534,58 @@ export const QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
   },
 };
 
+/**
+ * 共通の unknown を持つ質問（fact-model §3.3）。
+ * 独自の unknown 値を持つ質問（opponentCanCheckmate・bothFlagsOrder・movesNotCompleted・
+ * positionBlocked・同一局面の確認）は各 DT が独自の手動確認で扱うため含めない。
+ * 駒数（count）・テキストは列挙できず、テキストは任意（空欄 = 不明）のため含めない。
+ * game-context（競技区分・規則）は大会プロファイルから与えるため含めない。
+ */
+const ENUMERATED_UNKNOWN: readonly IncidentQuestionId[] = [
+  "playerColor",
+  "subtype",
+  "gameEnded",
+  "clockPressed",
+  "opponentMadeNextMove",
+  "detectedBy",
+  "clockTimeSubtype",
+  "flagFallen",
+  "quickplayGuidelinesApply",
+  "lastPeriod",
+  "gameEndedBeforeFlag",
+  "drawSubtype",
+  "claimant",
+  "claimantHasMove",
+  "claimMode",
+  "moveWritten",
+  "touchedPiece",
+  "lastMoveCheckmate",
+];
+const MANUAL_REVIEW_UNKNOWN: readonly IncidentQuestionId[] = [
+  // 「確認した」の1択。確認できなければ駒数が使えないため手動確認
+  "materialConfirmed",
+];
+
+export const QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
+  ...BASE_QUESTIONS,
+};
+for (const id of ENUMERATED_UNKNOWN)
+  QUESTIONS[id] = withUnknown(BASE_QUESTIONS[id], "enumerate");
+for (const id of MANUAL_REVIEW_UNKNOWN)
+  QUESTIONS[id] = withUnknown(BASE_QUESTIONS[id], "manual-review");
+
+/** この質問への回答 raw が共通の unknown か */
+export function isGenericUnknownAnswer(
+  id: string,
+  raw: string | undefined
+): boolean {
+  return (
+    raw === UNKNOWN_VALUE &&
+    (QUESTIONS as Record<string, FollowUpQuestion | undefined>)[id]
+      ?.onUnknown !== undefined
+  );
+}
+
 function parseBoolean(value: string): boolean | undefined {
   if (value === "true") return true;
   if (value === "false") return false;
@@ -569,12 +651,72 @@ export function applyIncidentAnswers(
   let touchedFlag = false;
   let touchedDraw = false;
   let next_description = incident.description;
+  const unknown = new Set(incident.unknownAnswers ?? []);
+
+  /** 共通の unknown が選ばれた質問の、以前の回答を取り消す */
+  const clearAnswer = (id: IncidentQuestionId): void => {
+    switch (id) {
+      case "playerColor":
+        playerColor = undefined;
+        break;
+      case "subtype":
+      case "gameEnded":
+      case "clockPressed":
+      case "opponentMadeNextMove":
+      case "detectedBy":
+        delete facts[id];
+        touchedIllegal = true;
+        break;
+      case "clockTimeSubtype":
+        if (incident.category === "clock-time") subtype = undefined;
+        break;
+      case "flagFallen":
+        delete flag.flagFallen;
+        if (incident.category === "clock-time") playerColor = undefined;
+        touchedFlag = true;
+        break;
+      case "quickplayGuidelinesApply":
+      case "lastPeriod":
+      case "gameEndedBeforeFlag":
+      case "materialConfirmed":
+        delete flag[id];
+        touchedFlag = true;
+        break;
+      case "drawSubtype":
+        if (incident.category === "draw") subtype = undefined;
+        delete draw.subtype;
+        touchedDraw = true;
+        break;
+      case "claimant":
+        delete draw.claimant;
+        if (incident.category === "draw") playerColor = undefined;
+        touchedDraw = true;
+        break;
+      case "claimantHasMove":
+      case "claimMode":
+      case "moveWritten":
+      case "touchedPiece":
+      case "lastMoveCheckmate":
+        delete draw[id];
+        touchedDraw = true;
+        break;
+    }
+  };
 
   for (const [id, raw] of Object.entries(answers) as [
     IncidentQuestionId,
     string | undefined,
   ][]) {
     if (raw === undefined) continue;
+
+    // 共通の unknown は値として保持せず unknownAnswers に記録する（fact-model §3.3 e）。
+    // 未回答（undefined）とは区別され、DT は needs-input で止まらずに resolveUnknown で扱う
+    if (isGenericUnknownAnswer(id, raw)) {
+      unknown.add(id);
+      clearAnswer(id);
+      continue;
+    }
+    unknown.delete(id);
 
     const material = MATERIAL_ID_MAP[id];
     if (material) {
@@ -755,6 +897,8 @@ export function applyIncidentAnswers(
     subtype,
     description: next_description,
   };
+  if (unknown.size > 0) next.unknownAnswers = Array.from(unknown);
+  else delete next.unknownAnswers;
   if (
     incident.category === "illegal-move" ||
     touchedIllegal ||
@@ -762,8 +906,11 @@ export function applyIncidentAnswers(
   ) {
     next.illegalMoveFacts = facts;
     // 違法手の subtype は Incident.subtype にも反映（従来どおり）
+    // 「わからない」と回答された場合は、以前の subtype を残さない（ログ・CSV・回数の明細に出さない）
     if (incident.category === "illegal-move")
-      next.subtype = facts.subtype ?? incident.subtype;
+      next.subtype =
+        facts.subtype ??
+        (unknown.has("subtype") ? undefined : incident.subtype);
   }
   if (touchedFlag || incident.flagFallFacts) next.flagFallFacts = flag;
   if (touchedDraw || incident.drawClaimFacts) next.drawClaimFacts = draw;

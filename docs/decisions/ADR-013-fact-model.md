@@ -62,6 +62,17 @@ The first Jev design showed "the top 5 missing items of the category by probabil
    - The thresholds are chosen per fact on a tuning set and confirmed on a held-out set. Recall loss is accepted. Borderline answers count as missing.
    - A missing calibration or a missing fact entry means everything is missing (uncalibrated mode).
 
+### Amendment (J1b-2, 2026-10-08): where `unknown` is handled
+
+- A generic `unknown` answer is kept as a question id in `Incident.unknownAnswers`. The typed fact fields stay unset.
+- `resolveUnknown` (pure, `tree-support.ts`) runs in `DecisionEngine` around the normal routing, for every tree. The trees themselves are unchanged and do not know about `unknown`.
+- Unknown facts are found lazily: only the facts the current branch asks for are enumerated.
+- Reasons:
+  - one implementation for DT-001…007 instead of one per tree;
+  - facts that live outside a tree's input (the offending player, which selects the illegal-move history, or the draw subtype, which selects the tree) are enumerated the same way;
+  - the trees stay simple to test.
+- Details: [fact-model.md](../design/fact-model.md) §3.3 "Implementation (J1b-2)".
+
 ## Consequences
 
 **Positive**

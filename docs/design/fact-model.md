@@ -1,6 +1,6 @@
 # Design: Fact Model — Required Facts from Decision Trees, Presence Check, Unknown Answers
 
-**Status:** Accepted. The user reviewed it twice on 2026-10-08 and approved implementing the catalogue. Not implemented yet. Decision record: [ADR-013](../decisions/ADR-013-fact-model.md).
+**Status:** Accepted. The user reviewed it twice on 2026-10-08 and approved implementing the catalogue. Being implemented in slices: J1b-1 (catalogue, `requiredFacts`) and J1b-2 (`unknown`, `resolveUnknown`, §3.3) are done. Decision record: [ADR-013](../decisions/ADR-013-fact-model.md).
 
 **Date:** 2026-10-08
 
@@ -186,6 +186,24 @@ When a DT meets `unknown` on a fact it needs, it applies `resolveUnknown` (a new
 - **(d) Limit.** At most 2 unknown facts are enumerated together, which is at most 9 branches with yes/no/choice facts. With more, the result goes straight to manual-review.
 - **(e) Parsing.** `parseBoolean` in `follow-up.ts` turns `"unknown"` into `undefined` today, which would loop on `needs-input`. It must return an explicit `unknown` value, and `applyIncidentAnswers` must keep it.
 
+**Implementation (J1b-2, 2026-10-08).** These details were decided while implementing; they refine the rules above.
+
+- **Where `unknown` is stored.** A generic `unknown` answer is not written into the typed fact fields. `applyIncidentAnswers` records the question id in `Incident.unknownAnswers` and leaves the fact unset. A later concrete answer removes it. The stored record still tells `unknown` (answered) from `undefined` (not answered).
+- **Where `resolveUnknown` runs.** `resolveUnknown` is a pure function in `tree-support.ts`. `DecisionEngine.routeResolvingUnknown` applies it around the normal routing, for every tree. Each branch is the incident with one value assumed (`applyIncidentAnswers(incident, assignment)`), routed as usual. The tree code does not know about `unknown`. So DT-001…005 get the same behaviour, and DT-006/007 will get it with no extra code.
+- **Lazy discovery.** First the incident is evaluated with the unknown facts unset.
+  - If the tree does not ask for an unknown fact, the unknown answer does not matter, and the normal result is used.
+  - If the tree asks for unknown facts **and** other unanswered questions, only the other questions are asked first.
+  - If it asks only for unknown facts, they are enumerated. A branch that asks only for **other unknown** facts adds them to the enumeration (still at most 2). Any other `needs-input` branch, or a branch outside the trees, disagrees (rule a).
+  - **Exception to rule a.** If **every** branch asks for the same unanswered questions, and none of them is unknown, those questions are asked. Example: a second offence with the subtype unknown still asks for mate possibility, because every subtype needs it. This is not a recursion: the arbiter answers, and the enumeration runs again.
+- **Facts that cannot be enumerated** (`onUnknown: "manual-review"`, today only `materialConfirmed`) go to manual-review as soon as the tree asks for them, before any other question. Otherwise the tree would keep re-asking the other questions.
+- **Which questions offer the generic `unknown`.** Every incident-scope choice question, with `onUnknown: "enumerate"`, except:
+  - the questions that already have their own tree-specific unknown value (`opponentCanCheckmate`, `bothFlagsOrder`, `movesNotCompleted`, `positionBlocked`, the repetition, fivefold and 75-move checks). Their trees keep their own manual-review paths, with specific wording;
+  - count and text inputs. Count inputs (material) are removed with ADR-014 §5. Text inputs are optional, and empty means unknown;
+  - game-context questions (competition type, regime), which come from the tournament profile.
+- **When branches agree.** The decision keeps the shared kind, intervention and penalties. The confidence is at most `medium`. Actions that every branch shares come first. Actions that only some branches have are kept with their condition, for example "［どの違反ですか？ →「昇格の駒を置かずに時計を押した」 の場合］…". So no step is lost. If the conclusions differ, each branch's conclusion is listed.
+- **When branches disagree.** The decision is manual-review, with the actions that **every** branch shares. A branch that is not decided has no actions, so then only "確認する: …" and "CAへ確認する" remain. This is deliberate: an action from one decided branch (for example "ドローを宣言する") must never appear on an undecided path.
+- **Display.** `Decision.unconfirmedFacts` lists the question labels. The decision card shows them under "確認できなかった事実".
+
 **Existing support.** Some questions already have `unknown` and the manual-review path: `bothFlagsOrder`, `movesNotCompleted` and the condition checks. `opponentCanCheckmate` and `positionBlocked` also have it, but they are removed (§3.4). The change makes it uniform:
 
 - every DT question offers `unknown`;
@@ -312,10 +330,10 @@ interface JevCalibration {
 
 **Targets, per fact:**
 
-| Fact level | Present precision |
-| --- | --- |
-| blocking (it directly decides the ruling) | **≥ 0.995** |
-| conditional and optional | **≥ 0.99** |
+| Fact level                                | Present precision |
+| ----------------------------------------- | ----------------- |
+| blocking (it directly decides the ruling) | **≥ 0.995**       |
+| conditional and optional                  | **≥ 0.99**        |
 
 **How a threshold is chosen.** The script is `scripts/eval-classifier.mjs`, extended. It uses synthetic data only, de-identified exactly as in production.
 

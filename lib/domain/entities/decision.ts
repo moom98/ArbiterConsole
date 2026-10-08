@@ -122,6 +122,11 @@ export interface Decision {
   escalationReason?: string;
   /** 不足している情報のラベル一覧（kind が follow-up-required / context-required の場合） */
   missingFields?: string[];
+  /**
+   * 「わからない」と回答され、確認されないまま判断に使われた事実（質問のラベル）。
+   * どの値でも同じ判断になった場合、または判断を確定できなかった場合に設定する（fact-model §3.3）。
+   */
+  unconfirmedFacts?: string[];
   generatedBy: "decision-tree" | "llm";
   /** 決定木の対象外で AI 参考情報を試みた場合の状態（ADR-007） */
   llm?: LlmDecisionMeta;

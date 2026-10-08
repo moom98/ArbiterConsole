@@ -194,6 +194,12 @@ export interface Incident {
   flagFallFacts?: Partial<FlagFallFacts>;
   /** ドロー（同一局面・75手）の構造化された回答 */
   drawClaimFacts?: Partial<DrawClaimFacts>;
+  /**
+   * 「わからない・確認できない」と回答された追加質問の ID（fact-model §3.3）。
+   * 該当する事実の値は未設定のまま。未回答（needs-input）とは区別され、
+   * DecisionEngine が resolveUnknown で全分岐を評価する。
+   */
+  unknownAnswers?: string[];
   /** 報告時点の規則セット（v5 以前の Incident には存在しない） */
   rulesetSnapshot?: RulesetSnapshot;
   /** 自由記述（メモ）。判断には使用しない */

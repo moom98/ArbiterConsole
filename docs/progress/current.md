@@ -1,23 +1,21 @@
 # Current Progress
 
-**Last updated:** 2026-10-09 (J1a-2)
+**Last updated:** 2026-10-09 (J1a-3)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
 
 This file is the handoff for a fresh Claude session. Do not rely on conversation history.
 
-**Current state in one paragraph (2026-10-09):** all work since PR #3 is on `feature/fact-catalog` (pushed, not merged, **not deployable yet**). It holds:
+**Current state in one paragraph (2026-10-09):** all work since PR #3 is on `feature/fact-catalog` (pushed, not merged into `main`, not deployed). It holds:
 - the fact catalogue and ADR-014 (J1b-1…J1b-8, all done);
 - the pure privacy package (J1a-1, done);
-- the external-AI guard on every client route with the arbiter's mandatory confirmation (J1a-2, done, review MERGE).
+- the external-AI guard on every client route with the arbiter's mandatory confirmation (J1a-2, done, review MERGE);
+- the server re-check L5 and minimized shapes only (J1a-3, done; see `milestones/j1a-3-server-recheck.md`).
 
-**Next task: J1a-3**, the server re-check (L5):
-- the gate and the pattern rules again on incident-derived text;
-- 400 for unknown fields and for the old `{ text }` classify shape;
-- no silent rewrite.
-
-Until J1a-3 is done, `feature/fact-catalog` must not be deployed or merged into `main`.
+J1a is complete, so the earlier block on deploying is lifted. **Next:** with the user's go-ahead, open a PR from `feature/fact-catalog` to `main`, merge it, then deploy (`npm run cf:deploy` from `main`; deploying is outward-facing).
+- After the first deploy, 「意味検索用データを作成」 rebuilds every vector once (key `+deid1`).
+- Then: the AI-send retry from the incident log detail, or J1c.
 `docs/IMPLEMENTATION_STATUS.md` is a stale 2024 snapshot. Use this file and `docs/progress/milestones/` instead.
 
 ## Completed work
@@ -174,6 +172,13 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 
 ## Tests and verification performed
 
+**J1a-3 server re-check (2026-10-09, `feature/fact-catalog`):**
+
+- tsc is clean; eslint reports 0 problems; 73 files / 1444 tests pass; `npm run build` and `npm run cf:build` succeed.
+- New: `__tests__/privacy/server-recheck.test.ts`, which includes the client/server agreement on all fixture sets and real guard bodies through the server validators.
+- Extended: the route, embed and client tests.
+- Review: FIX REQUIRED (1 must-fix, 5 should-fix) → fixed → re-review (see the milestone file).
+
 **J1a-2 external-AI guard (2026-10-09, `feature/fact-catalog`):**
 
 - tsc is clean; eslint 0 errors / 0 warnings; 72 files / 1377 tests pass; `next build` succeeds.
@@ -282,9 +287,11 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 - **J1a-1:**
   - Sentences deliberately built from vocabulary words can still pass the gate; the arbiter's confirmation (D13, J1a-2) is the final defense. Every miss found must become a regression case in `__tests__/fixtures/privacy/`.
-  - Since J1a-2 the client sends only de-identified, confirmed payloads, but the server does not re-check them yet. **Do not deploy `feature/fact-catalog` before J1a-3.**
+- **J1a-3:**
+  - The server cannot tell a tournament article mislabelled as FIDE, or which source a document embedding comes from; their text is not checked (§2, accepted).
+  - An E2 failure shows the generic reason `residual`.
+  - `generateEmbeddings` cuts documents with `slice(0, 2000)` and can split a placeholder (pre-existing; use `truncate`).
 - **J1a-2:**
-  - The server still accepts `tournamentId` and other unknown fields silently (ignored, not forwarded). J1a-3 makes them 400 and adds L5.
   - The incident log detail has no "retry / confirm AI send" for decisions left `offline`, `unavailable` or `awaiting-confirmation` (the report screen does). This is an existing limitation, now more frequent.
   - Fact answers are not sent to `/reason` (§5.3 would allow codes).
   - Semantic search on the rule search screen needs one extra tap (by design).
@@ -394,7 +401,9 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
    - J1a: data protection for all routes, in slices:
      - J1a-1: the pure privacy package and its evaluation. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1a-1-privacy-package.md`.
      - J1a-2: **done 2026-10-09**, on `feature/fact-catalog`. See `milestones/j1a-2-external-ai-guard.md`.
-     - J1a-3: server re-check of the minimized shapes (L5).
+     - J1a-3: **done 2026-10-09**, on `feature/fact-catalog`. See `milestones/j1a-3-server-recheck.md` (design §12).
+       - `server-recheck.ts` runs on both sides (client E2). The new code `not-sendable` is a 400 and gives the local handling on the client.
+       - The server accepts exact key sets only.
    - J1b: the fact model and ADR-014, in slices:
      - J1b-1: the catalogue data, types and `requiredFacts` (pure, no tree changes). **Done 2026-10-08**, on branch `feature/fact-catalog` (stacked on `design/jev-classifier`). See `milestones/j1b-1-fact-catalogue.md`;
      - J1b-2: `unknown` and `resolveUnknown`. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-2-unknown-answers.md`.
@@ -420,6 +429,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
        - Catalogue: `tch.touched` and `tch.claimed-by-opponent` became conditional; new `tch.changed-after`.
      - J1b-7: `TimeControl` periods. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-7-time-control-periods.md`.
    - J1c: the Jev port, adapter, calibrated parser and `/api/llm/facts`, with the default provider kept on `gemini`;
+     - The new `/api/llm/facts` route must use exact key sets and `recheckIncidentText(…, "facts")`, like the other routes (design §12).
    - J2: UI;
    - J3: Japanese evaluation, then the production switch by env.
 4. Later, if the user wants:
@@ -431,10 +441,10 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 1. Read `CLAUDE.md`, this file, `docs/progress/milestones/*`, then the design docs and ADRs for the next task.
 2. The current work branch is `feature/fact-catalog` (pushed to `origin`, latest J1a-1 at `52d7ebb` or later; `main` has the deployed app). Check `git log --oneline -15` on it, and `git worktree list`.
-   - **Next task:** J1a-3 (server L5 re-check, see design §7 and §11.5). Candidate after it: re-evaluate / confirm the AI send from the incident log detail (decisions left `awaiting-confirmation`, `offline` or `unavailable` cannot be retried there; see Known issues J1a-2). Then J1c (Jev port, adapter, `/api/llm/facts`; also wire `deriveTimeControlFacts` and `assessRecordingObligation`, and treat `game.record-state` as a non-blocking record fact).
+   - **Next task:** with the user's go-ahead, PR `feature/fact-catalog` to `main`, then deploy. After that: re-evaluate / confirm the AI send from the incident log detail (decisions left `awaiting-confirmation`, `offline` or `unavailable` cannot be retried there; see Known issues J1a-2). Then J1c (Jev port, adapter, `/api/llm/facts`; also wire `deriveTimeControlFacts` and `assessRecordingObligation`, and treat `game.record-state` as a non-blocking record fact).
    - The privacy package's reviews used independent reviewer agents that wrote their own synthetic sensitive phrases; keep doing that for any change to `lib/domain/privacy/` (the author's own fixtures say little).
    - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/<slice>-*.md` and update this file.
-   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (72 files / 1377 tests at J1a-2; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
+   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (73 files / 1444 tests at J1a-3; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
    - The project tsconfig has no `target` (tsc treats it as ES5): avoid regex-literal flags such as `/u` or `/s` and `matchAll`; use `new RegExp(source, flags)` and `exec` loops, as `lib/domain/privacy/` does.
    - In a nested worktree, run eslint as `npx eslint --no-eslintrc -c .eslintrc.json --ext .ts,.tsx app components lib __tests__`.
 3. Do not edit `docs/requirements/product-requirements.md` for implementation convenience.

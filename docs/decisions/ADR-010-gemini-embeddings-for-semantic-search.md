@@ -26,14 +26,18 @@
 2. **Server route `/api/llm/embed`.**
    - It has the same guard as `/api/llm/{reason,classify}`: production fail-closed without `LLM_ACCESS_TOKEN`, token checked before the rate limit, body size limit, typed errors.
    - It has its own rate limit (`LLM_RATE_LIMIT_EMBED_PER_MINUTE`, default 60) and its own daily cap (`LLM_DAILY_EMBED_REQUEST_LIMIT`, default 1000), so a PDF import cannot use up the reasoning quota.
-   - Input: 1–16 texts per request, each at most 3,000 characters. A query is exactly 1 text.
-   - Transient upstream errors are retried within the existing 30 s deadline. A response with the wrong count or dimension becomes `invalid-model-output`, without retrying.
+   - Input: 1–16 texts per request, each at most 2,000 characters (kept under the 2,048-token input limit for dense Japanese). A query is exactly 1 text.
+   - **Documents:** transient upstream errors are retried within the existing 30 s deadline.
+   - **Queries:** one attempt with a 4 s deadline, so search stays within a few seconds (§33).
+   - A response with the wrong count or dimension becomes `invalid-model-output`, without retrying.
 3. **Fair play (§23).**
    - **Queries** may contain incident descriptions. A query that mentions fair play (`mentionsFairPlay`) is never sent: the client skips it and the server rejects it. Search then uses keywords only.
    - **Documents** are rule texts the arbiter imported (FIDE/JCF rules, tournament regulations). They are not accusations about players and may mention fair play, so they are sent.
 4. **Client** (`lib/infrastructure/embeddings/generator.ts`).
-   - Documents are sent in batches of 16. Transient failures (rate-limited, upstream-unavailable, timeout, network) wait 5/15/30/60 s and retry, to cope with free-tier per-minute limits.
-   - Queries are not retried, so search is never held up.
+   - Documents are sent in batches of 16. Transient failures (rate-limited, upstream-unavailable, timeout, network) wait 5/15/30 s and retry, to cope with free-tier per-minute limits. The import progress shows the wait.
+   - If a batch still fails, the vectors created so far are attached to the error (`partialVectors`) and saved with the rules. Only the rest is left for the backfill.
+   - Queries are not retried and use a 5 s client timeout. If that runs out, the keyword results are shown on their own.
+   - The fair-play check runs on the full query, before it is truncated.
    - Responses are checked for the model key, vector count and dimension.
 5. **Creating missing embeddings** (`lib/application/embedding-backfill.ts`).
    - Rules are always saved, even when their embeddings cannot be created (offline, no token, cap reached).

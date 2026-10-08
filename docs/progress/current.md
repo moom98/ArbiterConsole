@@ -113,7 +113,7 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 **Gemini embeddings (ADR-010, 2026-10-08):**
 
 - tsc is clean.
-- 50 files / 765 tests pass, including 21 new tests for the embed route, the client, the backfill, stats and search.
+- 50 files / 769 tests pass, including 25 new tests for the embed route, the client, the backfill, stats, search and the review fixes.
 - eslint reports 0 errors.
 - `npm run build` and `npm run cf:build` succeed with no model switch. Static assets are 3.1 MB.
 - Not yet tested against the real Gemini API: the key is only in Cloudflare secrets.

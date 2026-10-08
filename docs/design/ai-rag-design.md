@@ -4,6 +4,8 @@
 **Last Updated:** 2026-10-06
 **Status:** Draft
 
+> **Update (2026-10-08):** the embedding parts of this document are outdated. The in-browser model (Transformers.js) was replaced by Gemini Embedding (`gemini-embedding-001`, 768 dimensions) through `/api/llm/embed`. Semantic search now needs the network and the access token; keyword search stays the offline fallback. See [ADR-010](../decisions/ADR-010-gemini-embeddings-for-semantic-search.md) (and [ADR-003](../decisions/ADR-003-offline-rule-search.md) for tokenization and keyword search).
+
 ---
 
 ## 1. Overview

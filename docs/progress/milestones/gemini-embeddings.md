@@ -1,6 +1,6 @@
 # Gemini Embedding for Semantic Search (ADR-010)
 
-**Status:** Implemented on `feature/gemini-embeddings`; review in progress.
+**Status:** Implemented on `feature/gemini-embeddings`. Reviewed: verdict MERGE; its two should-fix items and the nits were fixed (see below).
 **Date:** 2026-10-08
 **Decision record:** [ADR-010](../../decisions/ADR-010-gemini-embeddings-for-semantic-search.md)
 
@@ -46,6 +46,15 @@
   - ADR-003 marked partially superseded; ADR-009 consequence resolved.
   - README (features, stack, setup, env table, model notes, build/deploy) and `.env.example` updated.
 
+## Review fixes
+
+- **Search latency:** a query is one attempt with a 4 s server deadline and a 5 s client timeout, so slow Gemini or flaky Wi-Fi no longer holds back keyword results for up to 35 s.
+- **Import:** a failed batch no longer discards earlier batches. The vectors created so far are saved with the rules, and the progress message shows retry waits. Document retry waits are 5/15/30 s.
+- **Fair play:** checked on the full query before truncation.
+- **Search screen:** the banner says why semantic search was skipped (the reason plus offline / token / no-data hints).
+- **Input size:** reduced to 2,000 characters per text, for the 2,048-token limit.
+- **Design docs:** `ai-rag-design.md` and `DESIGN-SUMMARY.md` now point to ADR-010.
+
 ## Tests / verification
 
 - New: `__tests__/llm/embed-route.test.ts` (12) and `__tests__/rule-search/gemini-embeddings.test.ts` (9). They cover:
@@ -53,7 +62,7 @@
   - the backfill: active rules only, stale-model cleanup, partial failure and resume, a rule deleted mid-run, a shared run;
   - stats;
   - search: no request without embeddings, vector results with them.
-- Full suite: 50 files / 765 tests. tsc is clean and eslint reports 0 errors.
+- Full suite after the review fixes: 50 files / 769 tests. tsc is clean and eslint reports 0 errors.
 - `npm run build` and `npm run cf:build` succeed.
 - **Not tested against the real Gemini API** (the key is only in Cloudflare secrets). After deploying, check:
   - importing a PDF creates embeddings;
@@ -63,4 +72,5 @@
 
 - `vectorMinSimilarity` 0.65 needs tuning on real FIDE/JCF PDFs.
 - Semantic search needs the network and the token. Each device creates its own embeddings.
-- Free-tier limits (100 requests and 30k tokens per minute) can make imports slow. The client waits and retries; if it still fails, the rules are saved and the backfill completes them later.
+- Free-tier limits (100 requests and 30k tokens per minute) can make imports slow. The client waits and retries. If it still fails, the rules and the vectors created so far are saved, and the backfill completes the rest.
+- Over-length input behaviour (truncated or rejected) is unverified against the real API.

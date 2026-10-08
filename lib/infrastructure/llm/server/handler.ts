@@ -163,6 +163,9 @@ const defaultDeps: LlmHandlerDeps = {
   timeoutMs: { reason: 20_000, classify: 8_000 },
 };
 
+/** 検索語の埋め込みのサーバー側の締め切り（クライアントは QUERY_CLIENT_TIMEOUT_MS で打ち切る） */
+const QUERY_DEADLINE_MS = 4_000;
+
 const defaultEmbedDeps: EmbedHandlerDeps = {
   ...baseDefaults,
   embed: async () => {
@@ -422,11 +425,28 @@ export function createEmbedRouteHandler(
       return fail("quota-exceeded");
     }
 
+    // 検索語は検索の応答を待たせないよう、短い締め切りで1回だけ試す（§33 数秒以内）。
+    // 条文（取り込み）は通常の再試行を行う
+    const isQuery = v.value.taskType === "query";
+    const retry = isQuery
+      ? {
+          ...deps.retry,
+          attempts: 1,
+          totalDeadlineMs: Math.min(
+            deps.retry.totalDeadlineMs,
+            QUERY_DEADLINE_MS
+          ),
+        }
+      : deps.retry;
+    const perAttemptMs = isQuery
+      ? Math.min(deps.timeoutMs, QUERY_DEADLINE_MS)
+      : deps.timeoutMs;
+
     let invalidOutput = false;
     let vectors: number[][];
     try {
       const out = await withRetry((_attempt, remainingMs) => {
-        const timeoutMs = Math.max(1, Math.min(deps.timeoutMs, remainingMs));
+        const timeoutMs = Math.max(1, Math.min(perAttemptMs, remainingMs));
         return withTimeout(timeoutMs, async (signal) => {
           try {
             return await deps.embed({
@@ -443,7 +463,7 @@ export function createEmbedRouteHandler(
             throw error;
           }
         });
-      }, deps.retry);
+      }, retry);
       vectors = out.value;
     } catch (error) {
       if (invalidOutput) {

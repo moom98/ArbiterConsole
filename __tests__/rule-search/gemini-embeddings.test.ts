@@ -114,6 +114,34 @@ describe("Gemini embeddings client (ADR-010)", () => {
     ).rejects.toMatchObject({ code: "invalid-response" });
   });
 
+  it("returns the vectors created before a failed batch on the error", async () => {
+    const sleep = vi.fn(async () => {});
+    const call = vi
+      .fn<Call>()
+      .mockImplementationOnce(okCall())
+      .mockResolvedValue(fail("unauthorized"));
+    const texts = Array.from({ length: 20 }, (_, i) => `rule ${i}`);
+    const error = await generateEmbeddings(texts, {
+      deps: { call, sleep },
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(EmbeddingUnavailableError);
+    expect((error as EmbeddingUnavailableError).partialVectors).toHaveLength(
+      16
+    );
+  });
+
+  it("uses a short client timeout for queries and checks fair play on the full query", async () => {
+    const call = okCall();
+    await generateQueryEmbedding("違法手", { call });
+    expect(call.mock.calls[0][2]).toMatchObject({ timeoutMs: 5_000 });
+
+    const long = `${"a".repeat(LLM_LIMITS.maxEmbedTextChars + 10)} カンニング`;
+    await expect(generateQueryEmbedding(long, { call })).rejects.toMatchObject({
+      code: "fair-play",
+    });
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
   it("never sends a fair-play query, and does not retry queries", async () => {
     const call = vi.fn<Call>(async () => fail("rate-limited"));
     await expect(

@@ -181,6 +181,18 @@ describe("/api/llm/embed (ADR-010)", () => {
     expect((await errorOf(capped)).code).toBe("quota-exceeded");
   });
 
+  it("tries a query only once with a short per-attempt timeout", async () => {
+    const flaky = vi.fn<EmbedTextsFn>(async () => {
+      throw new UpstreamError("status", 503);
+    });
+    const res = await createEmbedRouteHandler(
+      makeDeps(flaky, { timeoutMs: 15_000 })
+    )(request({ taskType: "query", texts: ["違法手"] }));
+    expect(res.status).toBe(503);
+    expect(flaky).toHaveBeenCalledTimes(1);
+    expect(flaky.mock.calls[0][0].timeoutMs).toBeLessThanOrEqual(4_000);
+  });
+
   it("retries transient upstream errors and maps a malformed response to invalid-model-output without retrying", async () => {
     let calls = 0;
     const flaky = vi.fn<EmbedTextsFn>(async (req) => {
@@ -189,7 +201,7 @@ describe("/api/llm/embed (ADR-010)", () => {
       return okEmbed(req);
     });
     const ok = await createEmbedRouteHandler(makeDeps(flaky))(
-      request({ taskType: "query", texts: ["違法手"] })
+      request({ taskType: "document", texts: ["7.5.4 違法手"] })
     );
     expect(ok.status).toBe(200);
     expect(flaky).toHaveBeenCalledTimes(2);

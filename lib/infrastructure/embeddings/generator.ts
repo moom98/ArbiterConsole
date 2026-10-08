@@ -24,6 +24,9 @@ export const EMBEDDING_MODEL_ID: string = EMBEDDING_MODEL.key;
 
 /** 埋め込みを取得できなかった（オフライン・未認証・上限・上流のエラー等） */
 export class EmbeddingUnavailableError extends Error {
+  /** 条文の取り込みで、失敗する前に作成できた分（先頭から順に）。呼び出し側はこれを保存できる */
+  partialVectors: number[][] = [];
+
   constructor(
     readonly code: LlmApiErrorCode | "fair-play" | "invalid-response",
     message: string
@@ -40,6 +43,8 @@ export interface EmbeddingClientDeps extends LlmApiClientDeps {
 
 export interface GenerateEmbeddingsOptions {
   onProgress?: (done: number, total: number) => void;
+  /** 一時的な失敗で待機する前に呼ぶ（画面に「再試行中」を表示するため） */
+  onRetry?: (waitMs: number) => void;
   deps?: EmbeddingClientDeps;
 }
 
@@ -51,7 +56,9 @@ const RETRYABLE: ReadonlySet<LlmApiErrorCode> = new Set<LlmApiErrorCode>([
   "network-error",
 ]);
 /** 条文の取り込みでの再試行の待ち時間（無料枠の1分あたりの上限に備えて長めに待つ） */
-const DOCUMENT_RETRY_DELAYS_MS = [5_000, 15_000, 30_000, 60_000];
+const DOCUMENT_RETRY_DELAYS_MS = [5_000, 15_000, 30_000];
+/** 検索語の埋め込みのクライアント側のタイムアウト。超えたらキーワード検索の結果のみ表示する（§33） */
+export const QUERY_CLIENT_TIMEOUT_MS = 5_000;
 
 const defaultSleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -78,7 +85,8 @@ async function embedBatch(
   taskType: EmbeddingTaskType,
   texts: string[],
   retryDelaysMs: readonly number[],
-  deps: EmbeddingClientDeps
+  deps: EmbeddingClientDeps,
+  onRetry?: (waitMs: number) => void
 ): Promise<number[][]> {
   const call = deps.call ?? callLlmApi;
   const sleep = deps.sleep ?? defaultSleep;
@@ -97,6 +105,7 @@ async function embedBatch(
       return vectors;
     }
     if (RETRYABLE.has(res.error.code) && attempt < retryDelaysMs.length) {
+      onRetry?.(retryDelaysMs[attempt]);
       await sleep(retryDelaysMs[attempt]);
       continue;
     }
@@ -106,13 +115,14 @@ async function embedBatch(
 
 /**
  * 条文（document）の埋め込みを 16 件ずつ生成する。一時的な失敗は待って再試行する。
- * いずれかのバッチが失敗した場合は例外（呼び出し側は条文を保存し、後で作成できる）。
+ * いずれかのバッチが失敗した場合は例外。それまでに作成できた分は error.partialVectors に入れる
+ * （呼び出し側はそれを保存し、残りは後で「意味検索用データを作成」で作成できる）。
  */
 export async function generateEmbeddings(
   texts: readonly string[],
   options: GenerateEmbeddingsOptions = {}
 ): Promise<number[][]> {
-  const { onProgress, deps = {} } = options;
+  const { onProgress, onRetry, deps = {} } = options;
   const embeddings: number[][] = [];
   for (let start = 0; start < texts.length; start += LLM_LIMITS.maxEmbedTexts) {
     const batch = texts
@@ -120,9 +130,27 @@ export async function generateEmbeddings(
       .map(prepareEmbeddingText)
       // 空の条文も件数を合わせるために送る（サーバーは空文字を受け付けないため記号を入れる）
       .map((t) => (t === "" ? "-" : t));
-    embeddings.push(
-      ...(await embedBatch("document", batch, DOCUMENT_RETRY_DELAYS_MS, deps))
-    );
+    try {
+      embeddings.push(
+        ...(await embedBatch(
+          "document",
+          batch,
+          DOCUMENT_RETRY_DELAYS_MS,
+          deps,
+          onRetry
+        ))
+      );
+    } catch (error) {
+      const failure =
+        error instanceof EmbeddingUnavailableError
+          ? error
+          : new EmbeddingUnavailableError(
+              "network-error",
+              error instanceof Error ? error.message : String(error)
+            );
+      failure.partialVectors = embeddings;
+      throw failure;
+    }
     onProgress?.(embeddings.length, texts.length);
   }
   return embeddings;
@@ -136,15 +164,19 @@ export async function generateQueryEmbedding(
   query: string,
   deps: EmbeddingClientDeps = {}
 ): Promise<number[]> {
-  const text = prepareEmbeddingText(query);
-  if (!text)
-    throw new EmbeddingUnavailableError("invalid-request", "検索語が空です");
-  if (mentionsFairPlay(text))
+  // フェアプレーの確認は切り詰める前の全文で行う
+  if (mentionsFairPlay(query))
     throw new EmbeddingUnavailableError(
       "fair-play",
       "フェアプレー関連の検索語はAIへ送信しません（キーワード検索のみ）"
     );
-  const [vector] = await embedBatch("query", [text], [], deps);
+  const text = prepareEmbeddingText(query);
+  if (!text)
+    throw new EmbeddingUnavailableError("invalid-request", "検索語が空です");
+  const [vector] = await embedBatch("query", [text], [], {
+    timeoutMs: QUERY_CLIENT_TIMEOUT_MS,
+    ...deps,
+  });
   return vector;
 }
 

@@ -143,7 +143,9 @@ export default function SearchPage() {
         <>
           {response.failures.vector && (
             <p className="mb-3 text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-3">
-              意味検索を利用できないため、キーワード一致の結果のみ表示しています
+              意味検索を利用できないため、キーワード一致の結果のみ表示しています（
+              {response.failures.vector}）。
+              オフライン・AIのアクセストークン未入力・意味検索用データ未作成の場合はキーワード検索のみになります（設定画面で確認できます）
             </p>
           )}
           {response.failures.fulltext && (

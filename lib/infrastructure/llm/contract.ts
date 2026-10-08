@@ -54,10 +54,13 @@ export const LLM_LIMITS = {
   maxIdChars: 200,
   maxSourceNameChars: 200,
   maxShortChars: 50,
-  /** 1回の埋め込みリクエストで送る文の数（16 × 3,000 文字 × 3 バイトでも本文上限に収まる） */
+  /** 1回の埋め込みリクエストで送る文の数（16 × 2,000 文字 × 3 バイトでも本文上限に収まる） */
   maxEmbedTexts: 16,
-  /** 埋め込み1件あたりの文字数（モデルの入力上限 2,048 トークン以内に収める） */
-  maxEmbedTextChars: 3_000,
+  /**
+   * 埋め込み1件あたりの文字数。モデルの入力上限は 2,048 トークン。日本語は 1 文字 ≒ 1 トークン前後のため
+   * 余裕をみて 2,000 文字とする（実 API で長文条文の挙動を確認すること。ADR-010）
+   */
+  maxEmbedTextChars: 2_000,
 } as const;
 
 export type LlmApiErrorCode =

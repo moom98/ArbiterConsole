@@ -1,6 +1,6 @@
 # Current Progress
 
-**Last updated:** 2026-10-08 (J1b-5)
+**Last updated:** 2026-10-08 (J1b-6)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
@@ -81,6 +81,11 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - Templates are code, and customisation stores references to them.
   - Dexie v7. v6 is unused, and future schema versions must be ≥ 8.
 - **ADR-014 §1/§2 (J1b-5):** DT-005 Draw Claim (threefold + 50 moves, id kept as `DT-005-repetition`), DT-006 Automatic Draw (`DT-006-automatic-draw`); the side to move from `lastMover` or the confirmed history, never the clock.
+- **ADR-014 §6 (J1b-6):** DT-007 Touch Move (`DT-007-touch-move`).
+  - Subtype `touch-move` in the illegal-move category, routed before DT-001/002/003.
+  - Decides which piece must be moved or captured: 4.3 / 4.4 / 4.5, with the FEN through the port's `legalMoves`, otherwise steps to check on the board.
+  - Never sets a penalty (12.9 discretion).
+  - Violations (`Decision.touchMoveViolation`) are counted apart from 7.5 illegal moves (`IncidentCounter.touchMoveViolationsByColor`).
 - **ADR-015:** mate-possibility search in infrastructure (own 0x88 generator + best-first portfolio, Web Worker, 1.5 s), result stored on the incident and re-verified by the domain through `ChessPositionPort` every time. A search bug can only cause "unknown".
 - **ADR-009:** Cloudflare Workers through OpenNext.
   - Next.js 14.2.35 with `@opennextjs/cloudflare@~1.15.1`. Do not bump to 1.16+ without moving to Next 15.5+/16.
@@ -95,9 +100,9 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 
 - **Domain:**
   - `lib/domain/decision-engine/index.ts`
-  - `lib/domain/decision-trees/` (draw: `draw-shared.ts`, `dt-005-draw-claim.ts`, `dt-006-automatic-draw.ts`)
+  - `lib/domain/decision-trees/` (draw: `draw-shared.ts`, `dt-005-draw-claim.ts`, `dt-006-automatic-draw.ts`; touch move: `dt-007-touch-move.ts`)
   - `lib/domain/llm/` (output validator, quote match, keyword classifier, ports)
-  - `lib/domain/services/` (incident-counter, mate-material, mate-possibility, game-history, position-analysis, fair-play, round-checklist, round-planning, game-context, …)
+  - `lib/domain/services/` (incident-counter, touch-move, mate-material, mate-possibility, game-history, position-analysis, fair-play, round-checklist, round-planning, game-context, …)
   - `lib/domain/rules/citations.ts`
 - **Application:** `lib/application/` (rule-ingestion, rule-library, csv-export, llm-classification, round-checklist, tournament-management)
 - **Infrastructure:**
@@ -119,6 +124,15 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `scripts/check-cf-env.mjs` (`cf:build` env-file guard)
 
 ## Tests and verification performed
+
+**J1b-6 touch move (2026-10-08, `feature/fact-catalog`):**
+
+- tsc is clean.
+- eslint reports 0 problems.
+- 63 files / 1107 tests pass, including the new `dt-007-touch-move` and `touch-move-service` tests (real chess.js positions).
+- `npm run build` succeeds.
+- New citations (FIDE 4.2.1, 4.2.2, 4.4, 4.5, 4.8, 12.9; Manual 4.2.1 / accidental / 4.4.2; JCF p.20) were checked verbatim against the PDFs.
+- Review: FIX REQUIRED (2 must-fix on castling detection, 4 should-fix) → fixed → re-review MERGE. See `milestones/j1b-6-touch-move.md`.
 
 **J1b-5 draw trees (2026-10-08, `feature/fact-catalog`):**
 
@@ -183,6 +197,14 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 ## Known issues
 
+- **J1b-6:**
+  - Switching the subtype away from touch-move leaves stale `touchMoveFacts` on the Incident (ignored by decisions, still stored).
+  - These unknown answers give manual review, because the other branch needs an unanswered question (the J1b-2 limitation):
+    - `touchClaimedByOpponent` (the claimed branch needs `touchClaimTiming`);
+    - `touchReleased` (the released branch needs `touchChangedAfter`).
+  - Touched pieces and the FEN are typed; a board input is J2.
+  - "Opponent already made the next move" is not asked (the tree says to consult the CA).
+  - Federation practice for touch move in A.5 / B.3 games is not covered by the sources; Article 4 is applied the same in every competition type.
 - **J1b-5:**
   - `lastMover` unknown gives manual-review; the arbiter must answer the last mover to continue.
   - The 75-move result `met-checkmate` is a DT-only value; the catalogue fact `dr.manual-reconstruction` has no checkmate value yet (J1c must not map `met` without it).
@@ -291,7 +313,9 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
        - `claimantHasMove` (clock) replaced by `lastMover`; `lastMoveCheckmate` folded into the 75-move result (`met-checkmate`).
        - Draw subtypes: the 8 kinds of ADR-014 §1. Changing the kind clears the stored check.
      - ADR-014 §3 (`game.end-event` for `gameEnded` / `gameEndedBeforeFlag`) has no slice yet; do it before J1c or with J2;
-     - J1b-6: DT-007 touch move and counting;
+     - J1b-6: DT-007 touch move and counting. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-6-touch-move.md`.
+       - Quick report "タッチムーブ（触れた駒）" and the 7.5 `subtype` option 「触れた駒の規則（タッチムーブ）」 (not enumerated on unknown).
+       - Catalogue: `tch.touched` and `tch.claimed-by-opponent` became conditional; new `tch.changed-after`.
      - J1b-7: `TimeControl` periods;
    - J1c: the Jev port, adapter, calibrated parser and `/api/llm/facts`, with the default provider kept on `gemini`;
    - J2: UI;

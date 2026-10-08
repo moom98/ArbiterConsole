@@ -329,6 +329,26 @@ See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §6.
 - DT-007 decides only which piece must be moved or captured. It applies no automatic penalty.
 - `IncidentCounter` counts only Article 7.5 illegal moves (not the subtype `touch-move`). Touch-move counts are kept separately and never added to them.
 
+**Implementation (J1b-6, 2026-10-08).** See `docs/progress/milestones/j1b-6-touch-move.md`.
+
+- **Routing.** `illegal-move` with `subtype = "touch-move"` goes to DT-007 (`DT-007-touch-move`) before DT-001/002/003, in every competition type. The ruleset must still be explicit. The subtype comes from the quick report "タッチムーブ（触れた駒）" or from the 7.5 `subtype` question, which now has the option 「触れた駒の規則（タッチムーブ）」. That option has `enumerate: false`: an unknown 7.5 type is never enumerated as touch move.
+- **Facts.** `Incident.touchMoveFacts` (`TouchMoveFacts`), separate from `IllegalMoveFacts`. The toucher is `Incident.playerColor` (question `touchPlayer`).
+- **Questions → facts.** `touchPlayer` (`tch.player`), `touchHow` (`tch.how`), `touchAdjustDeclared`, `touchOnMove`, `touchClaimedByOpponent`, `touchClaimTiming` (`tch.claim-timing`: the claim came before the claimant touched a piece), `touchWhatNext`, `touchReleased`, `touchPromotion` (`tch.special`, promotion values only), `touchedPieces` (🔒 `tch.touched`), `touchFen` (🔒 `game.position`, optional).
+- **Order of the tree.**
+  1. No obligation: `brushed` (4.2.2); not on move (4.3 applies only to the player having the move; 4.2.1 adjusting only on move); adjusting declared on move (4.2.1, confidence medium, because "displaced pieces only" is not asked).
+  2. 4.8: asked **only when the arbiter did not observe** the touch. A claim made after the claimant touched a piece is forfeited → no intervention.
+  3. Touched piece moved: not released and no promotion piece placed → not final, no violation. Otherwise the move (4.7) or the promotion piece (4.4.4) is final, and `touchChangedAfter` (`tch.changed-after`, added in J1b-6) decides: changed afterwards → restore it, recorded as a violation; not changed → no violation.
+  - When the arbiter did not observe the touch and it was not the opponent's claim (for example a spectator's report, 12.7), the tree adds "両プレーヤーから事実を確認してから対応する" and lowers the confidence to medium.
+  4. Not moved yet / moved another piece → the obligation from `touchObligation` (`lib/domain/services/touch-move.ts`).
+- **Obligation.** From the ordered touched pieces:
+  - own only → first that can move (4.3.1); opponent only → first that can be captured, en passant included (4.3.2); both → first own captures first opponent, else the first touched piece that can move or be captured (4.3.3); none → any legal move (4.5);
+  - castling applies only when the **first two** own pieces touched are the king and a rook on its castling square (a1/h1, a8/h8), and no opponent piece was touched: king first → castle on that side, else a legal king move incl. the other side, else any legal move (4.4.1 / 4.4.3); rook first → no castling on that side, 4.3.1 in touched order (4.4.2). Every other combination (another piece touched first, a rook off its castling square) is plain 4.3.1 in touched order;
+  - **with a FEN** (side to move = the toucher) the port's `legalMoves` decides and the allowed SAN moves are shown (confidence high); **without** it, the piece letters are required and the tree lists the steps to check on the board (confidence medium).
+- **Competition types.** Article 4 is applied the same way in Standard, Rapid and Blitz, including A.5 / B.3 games; the tree does not read the competition type (only the explicit ruleset is required). Whether a federation treats touch move differently in inadequately supervised games is not covered by the sources.
+- **Unknown answers.** `touchAdjustDeclared` has no display condition, so it can be answered when `touchHow` is unknown. `touchClaimedByOpponent` unknown still makes the branch needing `touchClaimTiming` disagree (manual review), as in J1b-2; likewise `touchReleased` unknown, whose "released" branch needs `touchChangedAfter`.
+- **Result.** No penalty is ever set. "Moved another piece" and "changed the final move / promotion piece" set `Decision.touchMoveViolation = true` (an agreed unknown resolution keeps it only when every branch is a violation), lists the discretionary options (12.9; JCF p.20 practice: warning, time to the opponent if the clock was pressed) and the separate count ("今回を含めて n 回", from `IncidentCounter.touchMoveViolationsByColor`), with the JCF note that some tournaments forfeit on the third violation.
+- **Catalogue changes.** `tch.touched` is conditional (asked by DT-007 for not-moved / moved-other), and `tch.claimed-by-opponent` is conditional (asked by DT-007 when the arbiter did not observe). `tch.special` maps to `touchPromotion`; its castling values are computed from `tch.touched`. `im.action` no longer marks `touch-move` as unhandled: the `subtype` question offers it.
+
 ## 4. Presence check with Jev (R1, R2, R3)
 
 ### 4.1 When

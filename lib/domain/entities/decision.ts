@@ -72,7 +72,9 @@ export type DecisionTreeId =
    */
   | "DT-005-repetition"
   /** Automatic Draw: 五回同一局面（9.6.1）・75手（9.6.2） */
-  | "DT-006-automatic-draw";
+  | "DT-006-automatic-draw"
+  /** Touch Move: 触れた駒の規則（Article 4。ADR-014 §6） */
+  | "DT-007-touch-move";
 
 /** 判断の種類 */
 export type DecisionKind =
@@ -132,6 +134,11 @@ export interface Decision {
    * どの値でも同じ判断になった場合、または判断を確定できなかった場合に設定する（fact-model §3.3）。
    */
   unconfirmedFacts?: string[];
+  /**
+   * DT-007 のみ: 触れた駒の規則（4.3 / 4.4）に従わずに別の駒を動かした（違反の記録）。
+   * タッチムーブの回数として、7.5 の違法手とは別に数える（ADR-014 §6）。ペナルティではない。
+   */
+  touchMoveViolation?: boolean;
   generatedBy: "decision-tree" | "llm";
   /** 決定木の対象外で AI 参考情報を試みた場合の状態（ADR-007） */
   llm?: LlmDecisionMeta;

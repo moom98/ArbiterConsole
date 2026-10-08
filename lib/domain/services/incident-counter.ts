@@ -10,6 +10,8 @@ import {
 } from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
 import { DT_002_ID } from "@/lib/domain/decision-trees/dt-002-illegal-move-fast-competition";
 import { DT_003_ID } from "@/lib/domain/decision-trees/dt-003-illegal-move-fast-basic";
+import { DT_007_ID } from "@/lib/domain/decision-trees/dt-007-touch-move";
+import { TOUCH_MOVE_SUBTYPE } from "@/lib/domain/entities";
 
 export type { PriorIllegalMove };
 
@@ -44,6 +46,8 @@ export class IncidentCounter {
   static isPenalisedIllegalMove(record: IncidentRecord): boolean {
     const { incident, decision } = record;
     if (incident.category !== "illegal-move") return false;
+    // 触れた駒の規則（Article 4）は 7.5 の違法手として数えない（ADR-014 §6）
+    if (incident.subtype === TOUCH_MOVE_SUBTYPE) return false;
     if (!decision || decision.incidentId !== incident.id) return false;
     if (!decision.treeId || !ILLEGAL_MOVE_TREES.includes(decision.treeId))
       return false;
@@ -109,6 +113,42 @@ export class IncidentCounter {
         options
       ),
     };
+  }
+
+  /**
+   * タッチムーブ違反（DT-007 が「触れた駒の規則に従わずに別の駒を動かした」と判断した Incident）か。
+   * 7.5 の違法手とは別に数え、合算しない（ADR-014 §6）。
+   */
+  static isTouchMoveViolation(record: IncidentRecord): boolean {
+    const { incident, decision } = record;
+    return (
+      incident.category === "illegal-move" &&
+      incident.subtype === TOUCH_MOVE_SUBTYPE &&
+      decision !== undefined &&
+      decision.incidentId === incident.id &&
+      decision.treeId === DT_007_ID &&
+      decision.touchMoveViolation === true
+    );
+  }
+
+  /** 色ごとのタッチムーブ違反の回数。DecisionEngine の touchMoveViolations にそのまま渡す */
+  static touchMoveViolationsByColor(
+    records: readonly IncidentRecord[],
+    gameId: string,
+    options: { excludeIncidentId?: string } = {}
+  ): Record<PlayerColor, number> {
+    const counts: Record<PlayerColor, number> = { white: 0, black: 0 };
+    for (const r of records) {
+      const color = r.incident.playerColor;
+      if (
+        r.incident.gameId === gameId &&
+        color !== undefined &&
+        r.incident.id !== options.excludeIncidentId &&
+        IncidentCounter.isTouchMoveViolation(r)
+      )
+        counts[color] += 1;
+    }
+    return counts;
   }
 
   static countIllegalMovesByColor(

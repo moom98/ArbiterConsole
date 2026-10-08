@@ -436,6 +436,11 @@ export function unknownResolutionFields(
         ...decided.map((d) => d.confidence),
       ]),
       escalationRecommended: decided.some((d) => d.escalationRecommended),
+      // DT-007: すべての分岐が違反の場合だけ、タッチムーブ違反として記録する（ADR-014 §6）
+      touchMoveViolation:
+        decided.length > 0 && decided.every((d) => d.touchMoveViolation)
+          ? true
+          : undefined,
       // 理由が分岐で異なる場合は、どの分岐の理由かを付ける
       escalationReason:
         reasons.length === 0

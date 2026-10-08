@@ -257,7 +257,18 @@ describe("requiredFacts: Decision Tree categories (the tree is the authority)", 
     expect(tch.every((id) => id === "im.action" || id.startsWith("tch."))).toBe(
       true
     );
-    expect(tch).toContain("tch.touched");
+    expect(tch).toContain("tch.how");
+    // 触れた駒は DT-007 が要求したとき（まだ指していない・別の駒を動かした）だけ（J1b-6）
+    expect(tch).not.toContain("tch.touched");
+    expect(
+      ids({
+        category: "illegal-move",
+        subtype: "touch-move",
+        answers: {},
+        context: {},
+        dtRequestedQuestionIds: ["touchedPieces"],
+      })
+    ).toContain("tch.touched");
   });
 
   it("adds a DT-mapped conditional fact only when the tree asks its question", () => {
@@ -288,14 +299,27 @@ describe("requiredFacts: Decision Tree categories (the tree is the authority)", 
   it("facts with no condition and no DT mapping need an explicit request", () => {
     const base = {
       category: "illegal-move",
+      subtype: "illegal-move",
+      answers: {},
+      context: {},
+    } as const;
+    expect(ids(base)).not.toContain("game.history");
+    expect(ids({ ...base, requestedFactIds: ["game.history"] })).toContain(
+      "game.history"
+    );
+  });
+
+  it("tch.special follows DT-007's promotion question (J1b-6)", () => {
+    const base = {
+      category: "illegal-move",
       subtype: "touch-move",
       answers: {},
       context: {},
     } as const;
     expect(ids(base)).not.toContain("tch.special");
-    expect(ids({ ...base, requestedFactIds: ["tch.special"] })).toContain(
-      "tch.special"
-    );
+    expect(
+      ids({ ...base, dtRequestedQuestionIds: ["touchPromotion"] })
+    ).toContain("tch.special");
   });
 });
 
@@ -333,7 +357,7 @@ describe("requiredFacts: subtype, records and explicit requests", () => {
         answers: { "im.action": v("touch-move") },
         context: {},
       })
-    ).toContain("tch.touched");
+    ).toContain("tch.how");
     expect(
       ids({
         category: "illegal-move",
@@ -367,17 +391,17 @@ describe("requiredFacts: subtype, records and explicit requests", () => {
   it("lets an explicit request override a false condition, but never an optional level", () => {
     const base = {
       category: "illegal-move",
-      subtype: "touch-move",
-      answers: { "tch.what-next": v("moved-touched") },
+      subtype: "illegal-move",
+      answers: { "game.end-event": v("in-progress") },
       context: {},
     } as const;
-    expect(ids(base)).not.toContain("game.position");
-    expect(ids({ ...base, requestedFactIds: ["game.position"] })).toContain(
-      "game.position"
+    expect(ids(base)).not.toContain("game.record-state");
+    expect(ids({ ...base, requestedFactIds: ["game.record-state"] })).toContain(
+      "game.record-state"
     );
-    expect(
-      ids({ ...base, requestedFactIds: ["tch.claimed-by-opponent"] })
-    ).not.toContain("tch.claimed-by-opponent");
+    expect(ids({ ...base, requestedFactIds: ["im.count"] })).not.toContain(
+      "im.count"
+    );
   });
 
   it("maps the flag-fall questions of DT-004 to facts", () => {

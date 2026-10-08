@@ -64,7 +64,7 @@ Per §9, the 10 primary categories are:
 | `two-hands-castling` | Castling with two hands | Decision Tree | Same as general |
 | `promotion-issue` | Incorrect promotion procedure | Decision Tree | Piece placed? Clock pressed? |
 | `illegal-castling` | Castled when not allowed | Decision Tree | Why illegal? (King moved? Through check?) |
-| `touch-move` | Touched piece not moved (Article 4) | Decision Tree (DT-007, ADR-014) | Pieces touched in order? Adjust declared? On move? Released? Claim timing? |
+| `touch-move` | Touched piece not moved (Article 4) | Decision Tree (DT-007, ADR-014; implemented in J1b-6, fact-model §3.8) | Pieces touched in order? Adjust declared? On move? Released? Claim timing? |
 | `illegal-en-passant` | En passant captured when not allowed | Decision Tree | Same as general |
 | `piece-knocked-over` | Piece accidentally knocked during move | LLM+RAG | Intentional? Game affected? |
 

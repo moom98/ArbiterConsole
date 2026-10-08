@@ -1,3 +1,4 @@
+import { TOUCH_MOVE_SUBTYPE } from "@/lib/domain/entities";
 import type {
   FactCondition,
   FactDefinition,
@@ -121,7 +122,7 @@ export const ILLEGAL_MOVE_75_SUBTYPES = [
   "two-hands",
 ] as const;
 
-export const TOUCH_MOVE_SUBTYPE = "touch-move";
+export { TOUCH_MOVE_SUBTYPE };
 
 // ---------------------------------------------------------------------------
 // 定義
@@ -278,6 +279,12 @@ export const FACT_DEFINITIONS: readonly FactDefinition[] = [
   observed("tch.released", "動かした駒を、マスの上で手から離しましたか", YN, [
     fide("4.7"),
   ]),
+  observed(
+    "tch.changed-after",
+    "手を離した後（昇格では、選んだ駒が昇格のマスに触れた後）に、別のマスへ動かし直したり、別の駒に替えたりしましたか",
+    YN,
+    [fide("4.7"), fide("4.4.4"), design("J1b-6", "違反として別に数える")]
+  ),
   observed(
     "tch.claimed-by-opponent",
     "相手からの申し立てで始まりましたか",
@@ -876,9 +883,9 @@ export const FACT_USAGES: readonly FactUsage[] = [
     factId: "im.action",
     category: "illegal-move",
     level: "blocking",
+    // touch-move も subtype の選択肢。DecisionEngine が DT-001〜003 ではなく DT-007 へ
+    // 振り分ける（ADR-014 §6）
     dtQuestionIds: ["subtype"],
-    // touch-move は DT-001〜003 ではなく DT-007 へ振り分ける（ADR-014 §6）
-    dtUnhandled: [TOUCH_MOVE_SUBTYPE],
   },
   {
     factId: "im.player",
@@ -949,33 +956,90 @@ export const FACT_USAGES: readonly FactUsage[] = [
   // 記録から求めるだけで質問しない
   { factId: "im.count", ...IM, level: "optional" },
 
-  // ---- 触れた駒: DT-007
-  { factId: "tch.player", ...TCH, level: "blocking" },
-  { factId: "tch.how", ...TCH, level: "blocking" },
-  { factId: "tch.adjust-declared", ...TCH, level: "blocking" },
-  { factId: "tch.on-move", ...TCH, level: "blocking" },
-  { factId: "tch.touched", ...TCH, level: "blocking" },
-  { factId: "tch.what-next", ...TCH, level: "blocking" },
-  // 条件が構造化データ（tch.touched）にあるため、DT-007 が requestedFactIds で要求する
-  { factId: "tch.special", ...TCH, level: "conditional" },
+  // ---- 触れた駒: DT-007（J1b-6）
+  {
+    factId: "tch.player",
+    ...TCH,
+    level: "blocking",
+    dtQuestionIds: ["touchPlayer"],
+  },
+  { factId: "tch.how", ...TCH, level: "blocking", dtQuestionIds: ["touchHow"] },
+  {
+    factId: "tch.adjust-declared",
+    ...TCH,
+    level: "blocking",
+    dtQuestionIds: ["touchAdjustDeclared"],
+  },
+  {
+    factId: "tch.on-move",
+    ...TCH,
+    level: "blocking",
+    dtQuestionIds: ["touchOnMove"],
+  },
+  // 触れた駒は「まだ指していない・別の駒を動かした」の分岐だけで使う（DT-007 が要求したとき）
+  {
+    factId: "tch.touched",
+    ...TCH,
+    level: "conditional",
+    appliesWhen: is("tch.what-next", "moved-other", "not-moved"),
+    dtQuestionIds: ["touchedPieces"],
+  },
+  {
+    factId: "tch.what-next",
+    ...TCH,
+    level: "blocking",
+    dtQuestionIds: ["touchWhatNext"],
+  },
+  // DT-007 は昇格（4.4.4）だけを質問する。キャスリング（4.4.1〜4.4.3）は tch.touched の
+  // 触れた順から求める
+  {
+    factId: "tch.special",
+    ...TCH,
+    level: "conditional",
+    dtQuestionIds: ["touchPromotion"],
+    dtValues: "computed",
+  },
   {
     factId: "tch.released",
     ...TCH,
     level: "conditional",
     appliesWhen: is("tch.what-next", "moved-touched"),
+    dtQuestionIds: ["touchReleased"],
   },
-  { factId: "tch.claimed-by-opponent", ...TCH, level: "optional" },
+  // 手（または昇格の駒）が確定した後に変えたか。DT-007 が要求したときだけ（J1b-6）
+  {
+    factId: "tch.changed-after",
+    ...TCH,
+    level: "conditional",
+    appliesWhen: any(
+      is("tch.released", "true"),
+      is("tch.special", "promotion-placed")
+    ),
+    dtQuestionIds: ["touchChangedAfter"],
+  },
+  // 4.8 の判断に使う。アービターが観察した違反には申し立てに関係なく介入するため、
+  // DT-007 はアービターが観察していない場合だけ質問する
+  {
+    factId: "tch.claimed-by-opponent",
+    ...TCH,
+    level: "conditional",
+    appliesWhen: { incident: "arbiterObserved", is: false },
+    dtQuestionIds: ["touchClaimedByOpponent"],
+  },
   {
     factId: "tch.claim-timing",
     ...TCH,
     level: "conditional",
     appliesWhen: is("tch.claimed-by-opponent", "true"),
+    dtQuestionIds: ["touchClaimTiming"],
   },
   {
     factId: "game.position",
     ...TCH,
     level: "conditional",
     appliesWhen: is("tch.what-next", "moved-other", "not-moved"),
+    dtQuestionIds: ["touchFen"],
+    dtValues: "computed",
   },
 
   // ---- 時計: DT-004

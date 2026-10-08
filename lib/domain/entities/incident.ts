@@ -272,6 +272,61 @@ export interface DrawClaimFacts {
   intendedMove?: string;
 }
 
+// ---------------------------------------------------------------------------
+// 触れた駒の規則（Article 4。違法手カテゴリのサブタイプ touch-move。ADR-014 §6）
+// ---------------------------------------------------------------------------
+
+/**
+ * 違法手カテゴリのサブタイプ。7.5 の違法手（IllegalMoveSubtype）ではなく DT-007 で扱い、
+ * 違法手の回数には数えない。
+ */
+export const TOUCH_MOVE_SUBTYPE = "touch-move";
+
+/** tch.how: どのように触れたか（brushed = 袖や手が当たった。4.2.2 の明らかな偶然の接触） */
+export type TouchHow = "grasped" | "lifted" | "pushed" | "brushed";
+
+/** tch.what-next: 触れた後に何をしたか */
+export type TouchWhatNext = "moved-touched" | "moved-other" | "not-moved";
+
+/**
+ * tch.special のうち DT-007 が質問する昇格の値（4.4.4）。キャスリング（4.4.1〜4.4.3）は
+ * 触れた順（tch.touched）から求めるため質問しない。
+ */
+export type TouchPromotion =
+  "promotion-placed" | "promotion-not-placed" | "none";
+
+/** DT-007 の構造化された事実（IllegalMoveFacts とは別。ADR-014 §6） */
+export interface TouchMoveFacts {
+  /** tch.how */
+  how: TouchHow;
+  /** tch.adjust-declared: 触れる前に「整えます（j'adoube）」等と言ったか（4.2.1） */
+  adjustDeclared: boolean;
+  /** tch.on-move: 触れたのは、そのプレーヤーの手番のときか（4.3） */
+  onMove: boolean;
+  /** tch.claimed-by-opponent: 相手からの申し立てで始まったか */
+  claimedByOpponent: boolean;
+  /** tch.claim-timing: 申し立ては、相手が動かす・取る意思で駒に触れる前だったか（4.8） */
+  claimBeforeOwnTouch?: boolean;
+  /** tch.what-next */
+  whatNext: TouchWhatNext;
+  /** tch.released: 動かした駒を、マスの上で手から離したか（4.7） */
+  released?: boolean;
+  /**
+   * tch.changed-after: 手を離した後（昇格では、選んだ駒が昇格のマスに触れた後）に、
+   * 別のマスへ動かし直した・別の駒に替えたか（4.7 / 4.4.4 の違反）
+   */
+  changedAfter?: boolean;
+  /**
+   * 🔒 tch.touched: 触れた駒とマス（触れた順）のテキスト。例: "Pe2 Qd1"（白は大文字・黒は小文字）、
+   * 局面（fen）がある場合はマスだけでよい（"e2 d1"）。端末内だけで使う（ADR-012）。
+   */
+  touchedText?: string;
+  /** 🔒 game.position: 触れた時点の局面（手番は触れたプレーヤー）。端末内だけで使う */
+  fen?: string;
+  /** tch.special（昇格のみ。4.4.4） */
+  promotion?: TouchPromotion;
+}
+
 export interface Incident {
   id: string;
   gameId: string;
@@ -285,6 +340,8 @@ export interface Incident {
   flagFallFacts?: Partial<FlagFallFacts>;
   /** ドロー（クレーム・自動ドロー）の構造化された回答 */
   drawClaimFacts?: Partial<DrawClaimFacts>;
+  /** 触れた駒の規則（subtype touch-move。DT-007）の構造化された回答 */
+  touchMoveFacts?: Partial<TouchMoveFacts>;
   /**
    * 「わからない・確認できない」と回答された追加質問の ID（fact-model §3.3）。
    * 該当する事実の値は未設定のまま。未回答（needs-input）とは区別され、

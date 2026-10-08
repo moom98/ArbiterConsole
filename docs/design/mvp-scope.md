@@ -62,7 +62,7 @@ Per ADR-002, implement Decision Trees for high-frequency incidents:
 | DT-004 | Flag Fall | All | P0 | 2 days |
 | DT-005 | Draw Claim: threefold repetition (9.2) and 50 moves (9.3) (ADR-014; implemented in J1b-5) | All | P1 | 5 days* |
 | DT-006 | Automatic Draw: fivefold and 75 moves (renumbered by ADR-014; implemented in J1b-5) | All | P2 | — |
-| DT-007 | Touch Move, Article 4 (renumbered by ADR-014) | All | P1 | — |
+| DT-007 | Touch Move, Article 4 (renumbered by ADR-014; implemented in J1b-6) | All | P1 | — |
 | ~~DT-008~~ | ~~75-move Rule~~ — part of DT-006 (ADR-014) | All | — | — |
 | ~~DT-009~~ | ~~Stalemate~~ — no tree; fact plan (ADR-014 §1) | All | — | — |
 | ~~DT-010~~ | ~~Dead Position~~ — no tree; fact plan (ADR-014 §1) | All | — | — |

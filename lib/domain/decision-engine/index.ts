@@ -10,6 +10,7 @@ import type {
 } from "@/lib/domain/entities";
 import {
   SUPPORTED_RULES_VERSIONS,
+  TOUCH_MOVE_SUBTYPE,
   drawClaimBasisOf,
 } from "@/lib/domain/entities";
 import {
@@ -25,6 +26,7 @@ import { IllegalMoveFastBasicTree } from "@/lib/domain/decision-trees/dt-003-ill
 import { FlagFallTree } from "@/lib/domain/decision-trees/dt-004-flag-fall";
 import { DrawClaimTree } from "@/lib/domain/decision-trees/dt-005-draw-claim";
 import { AutomaticDrawTree } from "@/lib/domain/decision-trees/dt-006-automatic-draw";
+import { TouchMoveTree } from "@/lib/domain/decision-trees/dt-007-touch-move";
 import type { DrawTreeInput } from "@/lib/domain/decision-trees/draw-shared";
 import type { DecisionTreeResult } from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
 import {
@@ -53,6 +55,7 @@ import {
   matePositionRequest,
   type MatePossibility,
 } from "@/lib/domain/services/mate-possibility";
+import { touchObligation } from "@/lib/domain/services/touch-move";
 import type { LlmAssistOutcome, LlmAssistPort } from "@/lib/domain/llm/ports";
 import { buildLlmDecision } from "@/lib/domain/llm/llm-decision";
 import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
@@ -115,6 +118,11 @@ export interface DecisionEngineContext {
    * 件数が回数になる。評価中の Incident 自身は含めないこと。
    */
   illegalMoveHistory?: Record<PlayerColor, PriorIllegalMove[]>;
+  /**
+   * この対局で各プレーヤーに記録済みのタッチムーブ違反の回数（IncidentCounter が算出。
+   * 7.5 の違法手とは別に数える。ADR-014 §6）。評価中の Incident 自身は含めないこと。
+   */
+  touchMoveViolations?: Record<PlayerColor, number>;
   /** 大会 ID（AI 参考情報の規則検索で大会固有規定を対象にするため） */
   tournamentId?: string;
 }
@@ -392,6 +400,9 @@ export class DecisionEngine {
     const regime = ruleset.supervisionRegime;
 
     if (incident.category === "illegal-move") {
+      // 触れた駒の規則は DT-001〜003 より先に DT-007 へ（ADR-014 §6）
+      if (incident.subtype === TOUCH_MOVE_SUBTYPE)
+        return this.processTouchMove(context, rulesVersion);
       if (competitionType === "standard") {
         return this.processIllegalMoveStandard(context, rulesVersion);
       }
@@ -505,6 +516,37 @@ export class DecisionEngine {
         rulesVersion,
       },
     };
+  }
+
+  private processTouchMove(
+    context: DecisionEngineContext,
+    rulesVersion: string
+  ): DecisionEngineResult {
+    const { incident } = context;
+    const facts = incident.touchMoveFacts ?? {};
+    const player = incident.playerColor;
+    // 触れた駒と局面は端末内だけで解析する（ADR-012）
+    const obligation =
+      player &&
+      (facts.whatNext === "moved-other" || facts.whatNext === "not-moved") &&
+      facts.touchedText !== undefined
+        ? touchObligation(
+            this.deps.positions,
+            player,
+            facts.touchedText,
+            facts.fen
+          )
+        : undefined;
+    const result = new TouchMoveTree(this.providers, rulesVersion).evaluate({
+      ...facts,
+      player,
+      arbiterObserved: incident.arbiterObserved,
+      obligation,
+      priorViolations: player
+        ? context.touchMoveViolations?.[player]
+        : undefined,
+    });
+    return this.finish(incident, result, rulesVersion);
   }
 
   private processIllegalMoveStandard(
@@ -700,3 +742,4 @@ export { DT_003_ID } from "@/lib/domain/decision-trees/dt-003-illegal-move-fast-
 export { DT_004_ID } from "@/lib/domain/decision-trees/dt-004-flag-fall";
 export { DT_005_ID } from "@/lib/domain/decision-trees/dt-005-draw-claim";
 export { DT_006_ID } from "@/lib/domain/decision-trees/dt-006-automatic-draw";
+export { DT_007_ID } from "@/lib/domain/decision-trees/dt-007-touch-move";

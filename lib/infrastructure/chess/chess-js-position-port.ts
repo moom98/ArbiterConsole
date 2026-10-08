@@ -1,8 +1,11 @@
 import { Chess, validateFen } from "chess.js";
 import type {
+  BoardPiece,
   ChessPositionPort,
+  LegalMove,
   NormalizedPosition,
   PortResult,
+  PositionMoves,
 } from "@/lib/domain/services/position-analysis";
 import type { GameHistory } from "@/lib/domain/services/game-history";
 
@@ -141,5 +144,35 @@ export const chessJsPositionPort: ChessPositionPort = {
         error: `「${token}」を指せません。${notationHint(token)}`,
       };
     return { ok: true, fen: loaded.chess.fen() };
+  },
+
+  legalMoves(fen: string): PortResult<PositionMoves> {
+    const loaded = load(fen);
+    if (!loaded.ok) return loaded;
+    const { chess } = loaded;
+    const pieces: BoardPiece[] = [];
+    for (const row of chess.board())
+      for (const cell of row)
+        if (cell)
+          pieces.push({
+            square: cell.square,
+            color: cell.color === "w" ? "white" : "black",
+            kind: cell.type,
+          });
+    const moves: LegalMove[] = chess.moves({ verbose: true }).map((m) => {
+      const move: LegalMove = { san: m.san, from: m.from, to: m.to };
+      if (m.isEnPassant()) move.capturedSquare = `${m.to[0]}${m.from[1]}`;
+      else if (m.captured) move.capturedSquare = m.to;
+      if (m.isKingsideCastle()) move.castling = "king-side";
+      else if (m.isQueensideCastle()) move.castling = "queen-side";
+      if (m.isPromotion()) move.promotion = true;
+      return move;
+    });
+    return {
+      ok: true,
+      sideToMove: chess.turn() === "w" ? "white" : "black",
+      pieces,
+      moves,
+    };
   },
 };

@@ -174,12 +174,18 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
       incident.gameId,
       { excludeIncidentId: incident.id }
     );
+    const touchMoveViolations = IncidentCounter.touchMoveViolationsByColor(
+      records,
+      incident.gameId,
+      { excludeIncidentId: incident.id }
+    );
 
     // 決定木を優先し、対象外の事象のみ AI 参考情報を取得する（DecisionEngine.evaluate）
     const result = await engine.evaluate({
       incident,
       ruleset,
       illegalMoveHistory,
+      touchMoveViolations,
       tournamentId: game?.tournamentId,
     });
 

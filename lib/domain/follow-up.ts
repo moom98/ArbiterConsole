@@ -16,7 +16,12 @@ import type {
   PlayerColor,
   RepetitionClaimMode,
   SupervisionRegime,
+  TouchHow,
+  TouchMoveFacts,
+  TouchPromotion,
+  TouchWhatNext,
 } from "@/lib/domain/entities";
+import { TOUCH_MOVE_SUBTYPE } from "@/lib/domain/entities";
 
 /**
  * 追加確認質問（要件 §12）。
@@ -57,6 +62,19 @@ export type IncidentQuestionId =
   | "positionsText"
   | "historyConfirmed"
   | "intendedMove"
+  // 触れた駒の規則（DT-007。ADR-014 §6）
+  | "touchPlayer"
+  | "touchHow"
+  | "touchAdjustDeclared"
+  | "touchOnMove"
+  | "touchClaimedByOpponent"
+  | "touchClaimTiming"
+  | "touchWhatNext"
+  | "touchReleased"
+  | "touchChangedAfter"
+  | "touchPromotion"
+  | "touchedPieces"
+  | "touchFen"
   // 手動確認（決定木の対象外）
   | "situationNote";
 
@@ -67,6 +85,12 @@ export type FollowUpQuestionId = IncidentQuestionId | GameContextQuestionId;
 export interface FollowUpOption {
   value: string;
   label: string;
+  /**
+   * false の場合、unknown の回答で列挙しない（resolveUnknown。fact-model §3.3）。
+   * 例: 違法手の種類の「触れた駒の規則」は別の決定木へ移る選択肢で、7.5 の種類が
+   * 分からないことは、触れた駒の規則の可能性を意味しない
+   */
+  enumerate?: false;
 }
 
 /**
@@ -122,7 +146,9 @@ export const UNKNOWN_OPTION: FollowUpOption = {
 
 /** unknown のときに列挙する値（共通の unknown 以外の選択肢） */
 export function enumerableValues(q: FollowUpQuestion): string[] {
-  return q.options.map((o) => o.value).filter((v) => v !== UNKNOWN_VALUE);
+  return q.options
+    .filter((o) => o.value !== UNKNOWN_VALUE && o.enumerate !== false)
+    .map((o) => o.value);
 }
 
 /** showWhen の条件を満たすか（UI 用の純粋関数） */
@@ -158,6 +184,9 @@ export const SUBTYPE_LABELS: Record<IllegalMoveSubtype, string> = {
   "clock-without-move": "手を指さずに時計を押した",
   "two-hands": "両手で指した",
 };
+
+/** 違法手カテゴリの subtype の質問の選択肢（7.5 の違法手に加えて、触れた駒の規則） */
+export const TOUCH_MOVE_LABEL = "触れた駒の規則（タッチムーブ）";
 
 export const CLOCK_TIME_SUBTYPE_LABELS: Record<ClockTimeSubtype, string> = {
   "flag-fall": "フラッグが落ちた（時間切れ）",
@@ -199,10 +228,15 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     id: "subtype",
     scope: "incident",
     label: "どの違反ですか？",
-    help: "1つの手の中で複数該当する場合（例: 両手による違法キャスリング）は主なものを1つ選んでください。1回として数えます。",
-    options: (Object.keys(SUBTYPE_LABELS) as IllegalMoveSubtype[]).map(
-      (value) => ({ value, label: SUBTYPE_LABELS[value] })
-    ),
+    help: "1つの手の中で複数該当する場合（例: 両手による違法キャスリング）は主なものを1つ選んでください。1回として数えます。触れた駒の規則（タッチムーブ）は違法手の回数に数えません。",
+    options: [
+      ...(Object.keys(SUBTYPE_LABELS) as IllegalMoveSubtype[]).map((value) => ({
+        value,
+        label: SUBTYPE_LABELS[value],
+      })),
+      // 「わからない」は 7.5 の種類が分からないこと（触れた駒の規則は列挙しない）
+      { value: TOUCH_MOVE_SUBTYPE, label: TOUCH_MOVE_LABEL, enumerate: false },
+    ],
   },
   gameEnded: {
     id: "gameEnded",
@@ -469,6 +503,128 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     options: [],
   },
 
+  // ---- 触れた駒の規則（DT-007） ----
+  touchPlayer: {
+    id: "touchPlayer",
+    scope: "incident",
+    label: "駒に触れたのはどちらのプレーヤーですか？",
+    options: COLOR_OPTIONS,
+  },
+  touchHow: {
+    id: "touchHow",
+    scope: "incident",
+    label: "どのように触れましたか？",
+    help: "明らかに偶然の接触以外は、動かす・取る意思があったとみなします（4.2.2）。",
+    options: [
+      { value: "grasped", label: "指でつかんだ" },
+      { value: "lifted", label: "持ち上げた" },
+      { value: "pushed", label: "指で押した" },
+      { value: "brushed", label: "袖や手が当たった（明らかに偶然）" },
+    ],
+  },
+  touchAdjustDeclared: {
+    id: "touchAdjustDeclared",
+    scope: "incident",
+    label: "触れる前に「整えます（j'adoube）」などと言いましたか？",
+    // 偶然の接触以外では常に意味がある。touchHow が「わからない」でも質問できるよう、
+    // 表示条件を付けない（fact-model §3.3）
+    options: YES_NO,
+  },
+  touchOnMove: {
+    id: "touchOnMove",
+    scope: "incident",
+    label: "触れたのは、そのプレーヤーの手番のときでしたか？",
+    options: YES_NO,
+  },
+  touchClaimedByOpponent: {
+    id: "touchClaimedByOpponent",
+    scope: "incident",
+    label: "相手からの申し立てで始まりましたか？",
+    options: [
+      { value: "true", label: "はい（相手が申し立てた）" },
+      { value: "false", label: "いいえ（相手の申し立てではない）" },
+    ],
+  },
+  touchClaimTiming: {
+    id: "touchClaimTiming",
+    scope: "incident",
+    label:
+      "相手が申し立てたのは、相手自身が（動かす・取る意思で）駒に触れる前でしたか？",
+    help: "駒に触れた後の申し立てでは、4.1〜4.7 の違反を申し立てる権利を失っています（4.8）。",
+    options: YES_NO,
+    showWhen: { questionId: "touchClaimedByOpponent", values: ["true"] },
+  },
+  touchWhatNext: {
+    id: "touchWhatNext",
+    scope: "incident",
+    label: "触れた後、そのプレーヤーは何をしましたか？",
+    options: [
+      { value: "moved-touched", label: "触れた駒を動かした" },
+      { value: "moved-other", label: "触れた駒ではなく、別の駒を動かした" },
+      { value: "not-moved", label: "まだ指していない" },
+    ],
+  },
+  touchReleased: {
+    id: "touchReleased",
+    scope: "incident",
+    label: "動かした駒を、マスの上で手から離しましたか？",
+    options: YES_NO,
+    showWhen: { questionId: "touchWhatNext", values: ["moved-touched"] },
+  },
+  touchChangedAfter: {
+    id: "touchChangedAfter",
+    scope: "incident",
+    label:
+      "手を離した後（昇格では、選んだ駒が昇格のマスに触れた後）に、別のマスへ動かし直したり、別の駒に替えたりしましたか？",
+    options: YES_NO,
+    showWhen: { questionId: "touchReleased", values: ["true"] },
+  },
+  touchPromotion: {
+    id: "touchPromotion",
+    scope: "incident",
+    label: "昇格（プロモーション）の手でしたか？",
+    options: [
+      {
+        value: "promotion-placed",
+        label: "昇格：選んだ駒を昇格のマスに触れさせた",
+      },
+      {
+        value: "promotion-not-placed",
+        label: "昇格：まだ駒を昇格のマスに触れさせていない",
+      },
+      { value: "none", label: "昇格の手ではない" },
+    ],
+    showWhen: { questionId: "touchWhatNext", values: ["moved-touched"] },
+  },
+  touchedPieces: {
+    id: "touchedPieces",
+    scope: "incident",
+    label: "触れた駒とマス（触れた順に）",
+    help: "駒の記号（白は大文字・黒は小文字。K キング・Q クイーン・R ルーク・B ビショップ・N ナイト・P ポーン）とマスを、触れた順に書きます（例: Pe2 Qd1）。下に局面（FEN）を入力する場合は、マスだけでも構いません（例: e2 d1）。自分の駒と相手の駒のどちらを先に触れたか分からない場合は、自分の駒を先に書きます（4.3.3）。入力した内容は端末の外へ送りません。",
+    input: "text",
+    placeholder: "Pe2 Qd1",
+    options: [],
+    showWhen: {
+      questionId: "touchWhatNext",
+      values: ["moved-other", "not-moved"],
+    },
+  },
+  touchFen: {
+    id: "touchFen",
+    scope: "incident",
+    label: "（任意）触れた時点の局面の FEN（手番は触れたプレーヤー）",
+    help: "入力すると、触れた駒で指せる合法手を端末内で判定します。入力しない場合は盤上で確認してください。入力した局面は端末の外へ送りません。",
+    input: "text",
+    optional: true,
+    placeholder:
+      "例: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+    options: [],
+    showWhen: {
+      questionId: "touchWhatNext",
+      values: ["moved-other", "not-moved"],
+    },
+  },
+
   // ---- 手動確認 ----
   situationNote: {
     id: "situationNote",
@@ -527,6 +683,16 @@ const ENUMERATED_UNKNOWN: readonly IncidentQuestionId[] = [
   "claimMode",
   "moveWritten",
   "touchedPiece",
+  "touchPlayer",
+  "touchHow",
+  "touchAdjustDeclared",
+  "touchOnMove",
+  "touchClaimedByOpponent",
+  "touchClaimTiming",
+  "touchWhatNext",
+  "touchReleased",
+  "touchChangedAfter",
+  "touchPromotion",
 ];
 /** 列挙できない質問（unknown なら手動確認）。現在はなし（駒数の確認は ADR-014 §5 で廃止） */
 const MANUAL_REVIEW_UNKNOWN: readonly IncidentQuestionId[] = [];
@@ -580,6 +746,24 @@ const CONDITION_CHECK_QUESTIONS = [
   "seventyFiveCheck",
 ] as const;
 
+/** 触れた駒の規則の質問 → TouchMoveFacts のキー（touchPlayer は Incident.playerColor） */
+const TOUCH_FACT_KEYS = {
+  touchHow: "how",
+  touchAdjustDeclared: "adjustDeclared",
+  touchOnMove: "onMove",
+  touchClaimedByOpponent: "claimedByOpponent",
+  touchClaimTiming: "claimBeforeOwnTouch",
+  touchWhatNext: "whatNext",
+  touchReleased: "released",
+  touchChangedAfter: "changedAfter",
+  touchPromotion: "promotion",
+  touchedPieces: "touchedText",
+  touchFen: "fen",
+} as const satisfies Partial<Record<IncidentQuestionId, keyof TouchMoveFacts>>;
+const TOUCH_FACT_KEYS_BY_ID: Partial<
+  Record<IncidentQuestionId, keyof TouchMoveFacts>
+> = TOUCH_FACT_KEYS;
+
 /**
  * Incident スコープの回答を Incident に反映した新しい Incident を返す（純粋関数）。
  * 不正な値は無視する。
@@ -591,11 +775,13 @@ export function applyIncidentAnswers(
   const facts: Partial<IllegalMoveFacts> = { ...incident.illegalMoveFacts };
   const flag: Partial<FlagFallFacts> = { ...incident.flagFallFacts };
   const draw: Partial<DrawClaimFacts> = { ...incident.drawClaimFacts };
+  const touch: Partial<TouchMoveFacts> = { ...incident.touchMoveFacts };
   let playerColor: PlayerColor | undefined = incident.playerColor;
   let subtype: string | undefined = incident.subtype;
   let touchedIllegal = false;
   let touchedFlag = false;
   let touchedDraw = false;
+  let touchedTouch = false;
   let next_description = incident.description;
   const unknown = new Set(incident.unknownAnswers ?? []);
 
@@ -644,6 +830,16 @@ export function applyIncidentAnswers(
         delete draw[id];
         touchedDraw = true;
         break;
+      case "touchPlayer":
+        playerColor = undefined;
+        break;
+      default: {
+        const key = TOUCH_FACT_KEYS_BY_ID[id];
+        if (key !== undefined) {
+          delete touch[key];
+          touchedTouch = true;
+        }
+      }
     }
   };
 
@@ -687,6 +883,11 @@ export function applyIncidentAnswers(
       case "subtype":
         if (isOneOf(raw, Object.keys(SUBTYPE_LABELS) as IllegalMoveSubtype[])) {
           facts.subtype = raw;
+          touchedIllegal = true;
+        } else if (raw === TOUCH_MOVE_SUBTYPE) {
+          // 触れた駒の規則は 7.5 の違法手ではない（DT-007。ADR-014 §6）
+          delete facts.subtype;
+          subtype = raw;
           touchedIllegal = true;
         }
         break;
@@ -850,6 +1051,68 @@ export function applyIncidentAnswers(
           touchedDraw = true;
         }
         break;
+      // ---- 触れた駒の規則 ----
+      case "touchPlayer":
+        if (isOneOf(raw, ["white", "black"] as const)) playerColor = raw;
+        break;
+      case "touchHow":
+        if (
+          isOneOf(raw, [
+            "grasped",
+            "lifted",
+            "pushed",
+            "brushed",
+          ] as readonly TouchHow[])
+        ) {
+          touch.how = raw;
+          touchedTouch = true;
+        }
+        break;
+      case "touchAdjustDeclared":
+      case "touchOnMove":
+      case "touchClaimedByOpponent":
+      case "touchClaimTiming":
+      case "touchReleased":
+      case "touchChangedAfter": {
+        const b = parseBoolean(raw);
+        if (b !== undefined) {
+          touch[TOUCH_FACT_KEYS[id]] = b;
+          touchedTouch = true;
+        }
+        break;
+      }
+      case "touchWhatNext":
+        if (
+          isOneOf(raw, [
+            "moved-touched",
+            "moved-other",
+            "not-moved",
+          ] as readonly TouchWhatNext[])
+        ) {
+          touch.whatNext = raw;
+          touchedTouch = true;
+        }
+        break;
+      case "touchPromotion":
+        if (
+          isOneOf(raw, [
+            "promotion-placed",
+            "promotion-not-placed",
+            "none",
+          ] as readonly TouchPromotion[])
+        ) {
+          touch.promotion = raw;
+          touchedTouch = true;
+        }
+        break;
+      case "touchedPieces":
+      case "touchFen": {
+        const text = raw.trim();
+        touch[TOUCH_FACT_KEYS[id]] = text === "" ? undefined : text;
+        touchedTouch = true;
+        break;
+      }
+
       case "situationNote": {
         const note = raw.trim();
         if (note !== "") {
@@ -911,11 +1174,11 @@ export function applyIncidentAnswers(
     // 「わからない」と回答された場合は、以前の subtype を残さない（ログ・CSV・回数の明細に出さない）
     if (incident.category === "illegal-move")
       next.subtype =
-        facts.subtype ??
-        (unknown.has("subtype") ? undefined : incident.subtype);
+        facts.subtype ?? (unknown.has("subtype") ? undefined : subtype);
   }
   if (touchedFlag || incident.flagFallFacts) next.flagFallFacts = flag;
   if (touchedDraw || incident.drawClaimFacts) next.drawClaimFacts = draw;
+  if (touchedTouch || incident.touchMoveFacts) next.touchMoveFacts = touch;
   return next;
 }
 
@@ -945,6 +1208,12 @@ export interface QuickReport {
 }
 
 export const QUICK_REPORTS: readonly QuickReport[] = [
+  {
+    id: "touch-move",
+    category: "illegal-move",
+    subtype: TOUCH_MOVE_SUBTYPE,
+    label: "タッチムーブ（触れた駒）",
+  },
   {
     id: "flag-fall",
     category: "clock-time",
@@ -986,6 +1255,9 @@ export function isKnownSubtype(
     return Object.keys(CLOCK_TIME_SUBTYPE_LABELS).includes(subtype);
   if (category === "draw")
     return Object.keys(DRAW_SUBTYPE_LABELS).includes(subtype);
+  // 違法手は、決定木の振り分けが変わる touch-move だけを報告時に確定できる
+  // （7.5 の種類は決定木の質問で確認する）
+  if (category === "illegal-move") return subtype === TOUCH_MOVE_SUBTYPE;
   return false;
 }
 

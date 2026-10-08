@@ -10,8 +10,10 @@ import type { IncidentClassification } from "@/lib/domain/llm/types";
 import {
   CLOCK_TIME_SUBTYPE_LABELS,
   DRAW_SUBTYPE_LABELS,
+  TOUCH_MOVE_LABEL,
   usesStructuredQuestions,
 } from "@/lib/domain/follow-up";
+import { TOUCH_MOVE_SUBTYPE } from "@/lib/domain/entities";
 
 interface IncidentTextClassifierProps {
   disabled?: boolean;
@@ -27,6 +29,8 @@ function subtypeLabel(c: IncidentClassification): string | undefined {
     ];
   if (c.category === "draw")
     return DRAW_SUBTYPE_LABELS[c.subtype as keyof typeof DRAW_SUBTYPE_LABELS];
+  if (c.category === "illegal-move" && c.subtype === TOUCH_MOVE_SUBTYPE)
+    return TOUCH_MOVE_LABEL;
   return undefined;
 }
 

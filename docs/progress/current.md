@@ -329,7 +329,8 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 1. Read `CLAUDE.md`, this file, `docs/progress/milestones/*`, then the design docs and ADRs for the next task.
 2. The current work branch is `feature/fact-catalog` (pushed to `origin`, latest J1b-6; `main` has the deployed app). Check `git log --oneline -15` on it, and `git worktree list`.
-   - **Next task:** J1b-7, `TimeControl` periods (ADR-014 §7, fact-model §3.6). Then ADR-014 §3 (`game.end-event`), then J1c.
+   - **In progress:** J1b-7, `TimeControl` periods (ADR-014 §7, fact-model §3.6). Code and tests are committed on `feature/fact-catalog` (WIP commits `fd38586`, `a9cfed7`): `lib/domain/services/time-control.ts`, Dexie v8, `RulesetSnapshot.timeControl`, DT-004 `lastPeriod` from a single period, the profile form. **Remaining:** the separate reviewer pass (+ fixes, re-review), `milestones/j1b-7-time-control-periods.md`, ADR-014 status, fact-model §3.6 "Implementation (J1b-7)", and this file.
+   - **Then:** ADR-014 §3 (`game.end-event`), then J1c.
    - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/j1b-N-*.md` and update this file.
    - In a nested worktree, run eslint as `npx eslint --no-eslintrc -c .eslintrc.json --ext .ts,.tsx app components lib __tests__`.
 3. Do not edit `docs/requirements/product-requirements.md` for implementation convenience.

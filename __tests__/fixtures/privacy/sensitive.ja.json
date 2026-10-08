@@ -1,0 +1,773 @@
+{
+ "description": "Synthetic sensitive reports (external-ai-data-protection §8.1). Every entry must NOT be 'clear'. Never add real reports.",
+ "cases": [
+  {
+   "class": "fair-play",
+   "text": "白がエンジンを使っている疑いがある"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒が対局中にスマホを見ていたと相手が申し立てた"
+  },
+  {
+   "class": "fair-play",
+   "text": "トイレから戻らない時間が長く、不正を疑われている"
+  },
+  {
+   "class": "fair-play",
+   "text": "観客が白にサインを送っていたようだ"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒がイヤホンをしていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "カンニングしているのではと相手が言う"
+  },
+  {
+   "class": "fair-play",
+   "text": "相手がずるをしていると訴えた"
+  },
+  {
+   "class": "fair-play",
+   "text": "白が外部から助言を受けていたとの報告"
+  },
+  {
+   "class": "fair-play",
+   "text": "金属探知機での検査を拒否した"
+  },
+  {
+   "class": "fair-play",
+   "text": "ボディチェックを断った"
+  },
+  {
+   "class": "fair-play",
+   "text": "不正行為の疑いで相手がクレーム"
+  },
+  {
+   "class": "fair-play",
+   "text": "フェアプレーに関する申し立てがあった"
+  },
+  {
+   "class": "fair-play",
+   "text": "ソフトを使っているのではないかと怪しまれている"
+  },
+  {
+   "class": "fair-play",
+   "text": "白がスマートフォンを操作していた"
+  },
+  {
+   "class": "fair-play",
+   "text": "かんにんぐの疑い"
+  },
+  {
+   "class": "fair-play",
+   "text": "ちーとを使っていると言われた"
+  },
+  {
+   "class": "fair-play",
+   "text": "Opponent suspects engine assistance"
+  },
+  {
+   "class": "fair-play",
+   "text": "He was accused of cheating during round 3"
+  },
+  {
+   "class": "fair-play",
+   "text": "仲間が手でサインを出していた"
+  },
+  {
+   "class": "fair-play",
+   "text": "対局中に携帯で調べていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "何度も離席してスマホを触っていたらしい"
+  },
+  {
+   "class": "fair-play",
+   "text": "カンペのような紙を持っていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "白が席を外したあと様子がおかしい、不正を心配する声"
+  },
+  {
+   "class": "fair-play",
+   "text": "時計を押した後、白が頻繁に離席している"
+  },
+  {
+   "class": "fair-play",
+   "text": "外部の情報を見たと疑われている"
+  },
+  {
+   "class": "fair-play",
+   "text": "エンジンを利用したと黒が主張"
+  },
+  {
+   "class": "fair-play",
+   "text": "違法手の後、相手が不正だと騒いだ"
+  },
+  {
+   "class": "fair-play",
+   "text": "スマホの画面を見ていたと観客が通報"
+  },
+  {
+   "class": "fair-play",
+   "text": "白の応援者が合図を送っていた"
+  },
+  {
+   "class": "fair-play",
+   "text": "黒がトイレでスマホを使っていたようだ"
+  },
+  {
+   "class": "fair-play",
+   "text": "不審な動きが何度もあった"
+  },
+  {
+   "class": "fair-play",
+   "text": "エンジン使用の疑いで調査を求められた"
+  },
+  {
+   "class": "health",
+   "text": "白が体調不良を訴えた"
+  },
+  {
+   "class": "health",
+   "text": "黒の気分が悪くなった"
+  },
+  {
+   "class": "health",
+   "text": "対局中に選手が倒れた"
+  },
+  {
+   "class": "health",
+   "text": "白が頭が痛いと言って席を立った"
+  },
+  {
+   "class": "health",
+   "text": "お腹が痛いと訴えている"
+  },
+  {
+   "class": "health",
+   "text": "救急車を呼んだ"
+  },
+  {
+   "class": "health",
+   "text": "選手が発作を起こした"
+  },
+  {
+   "class": "health",
+   "text": "持病の薬を飲む時間だと言った"
+  },
+  {
+   "class": "health",
+   "text": "白が吐き気を訴えた"
+  },
+  {
+   "class": "health",
+   "text": "黒が嘔吐した"
+  },
+  {
+   "class": "health",
+   "text": "ぐったりしていた"
+  },
+  {
+   "class": "health",
+   "text": "顔色が悪いので声をかけた"
+  },
+  {
+   "class": "health",
+   "text": "意識がもうろうとしている"
+  },
+  {
+   "class": "health",
+   "text": "めまいがすると言っている"
+  },
+  {
+   "class": "health",
+   "text": "熱があるようだ"
+  },
+  {
+   "class": "health",
+   "text": "発熱のため棄権したいと言う"
+  },
+  {
+   "class": "health",
+   "text": "鼻血が出た"
+  },
+  {
+   "class": "health",
+   "text": "怪我をしたので手当てが必要"
+  },
+  {
+   "class": "health",
+   "text": "ケガで駒を持てない"
+  },
+  {
+   "class": "health",
+   "text": "アレルギーの症状が出た"
+  },
+  {
+   "class": "health",
+   "text": "車椅子の選手の盤の配置"
+  },
+  {
+   "class": "health",
+   "text": "補聴器の電池が切れたと申し出"
+  },
+  {
+   "class": "health",
+   "text": "白が具合が悪そうにしている"
+  },
+  {
+   "class": "health",
+   "text": "気持ち悪いと言って退席"
+  },
+  {
+   "class": "health",
+   "text": "過呼吸になった"
+  },
+  {
+   "class": "health",
+   "text": "薬を持っていないと困っている"
+  },
+  {
+   "class": "health",
+   "text": "病院に行くため中断したい"
+  },
+  {
+   "class": "health",
+   "text": "The player felt sick and left the hall"
+  },
+  {
+   "class": "health",
+   "text": "He fainted near the board"
+  },
+  {
+   "class": "health",
+   "text": "対局者がぐったりして動かない"
+  },
+  {
+   "class": "health",
+   "text": "手が震えて痙攣している"
+  },
+  {
+   "class": "health",
+   "text": "妊娠中のため配慮を求められた"
+  },
+  {
+   "class": "harassment",
+   "text": "相手に暴言を吐かれた"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒を叩いた"
+  },
+  {
+   "class": "harassment",
+   "text": "観客が選手を殴った"
+  },
+  {
+   "class": "harassment",
+   "text": "セクハラを受けたと訴えがあった"
+  },
+  {
+   "class": "harassment",
+   "text": "対局後に相手を突き飛ばした"
+  },
+  {
+   "class": "harassment",
+   "text": "差別的な発言があった"
+  },
+  {
+   "class": "harassment",
+   "text": "いじめられていると相談を受けた"
+  },
+  {
+   "class": "harassment",
+   "text": "バカと言われた"
+  },
+  {
+   "class": "harassment",
+   "text": "死ねと書かれたメモがあった"
+  },
+  {
+   "class": "harassment",
+   "text": "相手に体を触られた"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒を押しのけた"
+  },
+  {
+   "class": "harassment",
+   "text": "脅されたと言っている"
+  },
+  {
+   "class": "harassment",
+   "text": "しつこくつきまとわれている"
+  },
+  {
+   "class": "harassment",
+   "text": "怒鳴り声で威圧してきた"
+  },
+  {
+   "class": "harassment",
+   "text": "肩を叩かれて不快だった"
+  },
+  {
+   "class": "harassment",
+   "text": "足を蹴ったと黒が主張"
+  },
+  {
+   "class": "harassment",
+   "text": "パワハラを受けた"
+  },
+  {
+   "class": "harassment",
+   "text": "盗撮されたと訴えがあった"
+  },
+  {
+   "class": "harassment",
+   "text": "大声で叫んで相手を脅した"
+  },
+  {
+   "class": "harassment",
+   "text": "相手が顔を叩いた"
+  },
+  {
+   "class": "harassment",
+   "text": "子どもを叩いた保護者がいる"
+  },
+  {
+   "class": "harassment",
+   "text": "性的な発言をされた"
+  },
+  {
+   "class": "harassment",
+   "text": "Player was harassed by spectator"
+  },
+  {
+   "class": "harassment",
+   "text": "He threatened his opponent after the game"
+  },
+  {
+   "class": "harassment",
+   "text": "選手同士が殴り合いになった"
+  },
+  {
+   "class": "harassment",
+   "text": "白が黒の頭をたたいた"
+  },
+  {
+   "class": "harassment",
+   "text": "威圧的な態度で相手を怒鳴った"
+  },
+  {
+   "class": "harassment",
+   "text": "差別用語を言われたと苦情"
+  },
+  {
+   "class": "harassment",
+   "text": "相手を押した"
+  },
+  {
+   "class": "harassment",
+   "text": "泣きながら暴力を受けたと話す"
+  },
+  {
+   "class": "harassment",
+   "text": "痴漢の被害を訴えた"
+  },
+  {
+   "class": "harassment",
+   "text": "選手を蹴った"
+  },
+  {
+   "class": "crime",
+   "text": "財布を盗まれた"
+  },
+  {
+   "class": "crime",
+   "text": "スマホを取られたと言っている"
+  },
+  {
+   "class": "crime",
+   "text": "警察を呼んだ"
+  },
+  {
+   "class": "crime",
+   "text": "盗難の被害があった"
+  },
+  {
+   "class": "crime",
+   "text": "バッグがなくなった"
+  },
+  {
+   "class": "crime",
+   "text": "荷物が無くなったと訴えた"
+  },
+  {
+   "class": "crime",
+   "text": "窃盗の疑いがある"
+  },
+  {
+   "class": "crime",
+   "text": "被害届を出すと言っている"
+  },
+  {
+   "class": "crime",
+   "text": "110番に通報した"
+  },
+  {
+   "class": "crime",
+   "text": "警備員を呼んだ"
+  },
+  {
+   "class": "crime",
+   "text": "かばんをとられた"
+  },
+  {
+   "class": "crime",
+   "text": "会場で盗まれた物がある"
+  },
+  {
+   "class": "crime",
+   "text": "財布を失くしたと言う"
+  },
+  {
+   "class": "crime",
+   "text": "携帯がなくなった"
+  },
+  {
+   "class": "crime",
+   "text": "時計を盗まれたと言っている"
+  },
+  {
+   "class": "crime",
+   "text": "警察に相談したいと言う"
+  },
+  {
+   "class": "crime",
+   "text": "通報すると言っている"
+  },
+  {
+   "class": "crime",
+   "text": "弁護士に相談すると言った"
+  },
+  {
+   "class": "crime",
+   "text": "Someone stole his wallet"
+  },
+  {
+   "class": "crime",
+   "text": "The police were called"
+  },
+  {
+   "class": "crime",
+   "text": "財布がなくなった直後に相手が帰った"
+  },
+  {
+   "class": "crime",
+   "text": "スマホが盗まれたかもしれない"
+  },
+  {
+   "class": "crime",
+   "text": "荷物を紛失した"
+  },
+  {
+   "class": "crime",
+   "text": "警察沙汰になった"
+  },
+  {
+   "class": "crime",
+   "text": "鞄から財布がなくなっていた"
+  },
+  {
+   "class": "crime",
+   "text": "盗まれたチェスセット"
+  },
+  {
+   "class": "crime",
+   "text": "盗難届を出したい"
+  },
+  {
+   "class": "crime",
+   "text": "バッグが取られた"
+  },
+  {
+   "class": "crime",
+   "text": "警備に連絡した"
+  },
+  {
+   "class": "crime",
+   "text": "不審な人物がかばんを持ち去った"
+  },
+  {
+   "class": "crime",
+   "text": "通報があった"
+  },
+  {
+   "class": "crime",
+   "text": "財布を取られたと泣いている"
+  },
+  {
+   "class": "religion",
+   "text": "宗教上の理由で対局時間の変更を求めた"
+  },
+  {
+   "class": "religion",
+   "text": "礼拝の時間なので中断したい"
+  },
+  {
+   "class": "religion",
+   "text": "お祈りのため席を外したい"
+  },
+  {
+   "class": "religion",
+   "text": "信仰上の理由で握手を拒否"
+  },
+  {
+   "class": "religion",
+   "text": "宗教的な服装について質問"
+  },
+  {
+   "class": "religion",
+   "text": "宗派の違いで口論"
+  },
+  {
+   "class": "religion",
+   "text": "礼拝のため早退したい"
+  },
+  {
+   "class": "religion",
+   "text": "お祈りの時間を考慮してほしい"
+  },
+  {
+   "class": "religion",
+   "text": "宗教の話をされて不快"
+  },
+  {
+   "class": "religion",
+   "text": "信仰について相手に聞かれた"
+  },
+  {
+   "class": "religion",
+   "text": "祈りの時間が対局と重なる"
+  },
+  {
+   "class": "religion",
+   "text": "宗教上の食事制限について相談"
+  },
+  {
+   "class": "religion",
+   "text": "礼拝所の場所を聞かれた"
+  },
+  {
+   "class": "religion",
+   "text": "宗教的な理由で黒番を希望"
+  },
+  {
+   "class": "religion",
+   "text": "宗教行事のため不戦を希望"
+  },
+  {
+   "class": "religion",
+   "text": "祈祷のため離席"
+  },
+  {
+   "class": "religion",
+   "text": "宗教団体の勧誘をしていた"
+  },
+  {
+   "class": "religion",
+   "text": "信仰を理由に辞退"
+  },
+  {
+   "class": "religion",
+   "text": "宗教上の休日に対局できない"
+  },
+  {
+   "class": "religion",
+   "text": "お祈りをしていて手番に気付かなかった"
+  },
+  {
+   "class": "religion",
+   "text": "He needed to pray during the game"
+  },
+  {
+   "class": "religion",
+   "text": "Religious reasons for the request"
+  },
+  {
+   "class": "religion",
+   "text": "礼拝の時間に時計を止めたいと言う"
+  },
+  {
+   "class": "religion",
+   "text": "祈りをささげるため離席"
+  },
+  {
+   "class": "religion",
+   "text": "宗教のことで相手と揉めた"
+  },
+  {
+   "class": "religion",
+   "text": "信仰の話を対局中にされた"
+  },
+  {
+   "class": "religion",
+   "text": "宗教上の理由で写真撮影を拒否"
+  },
+  {
+   "class": "religion",
+   "text": "お祈りを始めた"
+  },
+  {
+   "class": "religion",
+   "text": "礼拝のため棄権"
+  },
+  {
+   "class": "religion",
+   "text": "宗教的配慮を求められた"
+  },
+  {
+   "class": "religion",
+   "text": "祈ってから指した"
+  },
+  {
+   "class": "religion",
+   "text": "宗教上の理由で帽子を外せない"
+  },
+  {
+   "class": "family-minors",
+   "text": "家庭の事情で途中棄権したい"
+  },
+  {
+   "class": "family-minors",
+   "text": "保護者とトラブルになった"
+  },
+  {
+   "class": "family-minors",
+   "text": "保護者が抗議してきた"
+  },
+  {
+   "class": "family-minors",
+   "text": "虐待の話を聞いた"
+  },
+  {
+   "class": "family-minors",
+   "text": "保護者同士が口論になった"
+  },
+  {
+   "class": "family-minors",
+   "text": "子どもが泣いている"
+  },
+  {
+   "class": "family-minors",
+   "text": "親が会場で怒鳴った"
+  },
+  {
+   "class": "family-minors",
+   "text": "保護者が子どもを叱りつけた"
+  },
+  {
+   "class": "family-minors",
+   "text": "家族の不幸で帰宅したい"
+  },
+  {
+   "class": "family-minors",
+   "text": "子どもが迷子になった"
+  },
+  {
+   "class": "family-minors",
+   "text": "未成年の選手の保護者から苦情"
+  },
+  {
+   "class": "family-minors",
+   "text": "保護者が対局中の子に話しかけた"
+  },
+  {
+   "class": "family-minors",
+   "text": "親が来て選手を連れて帰った"
+  },
+  {
+   "class": "family-minors",
+   "text": "子供が親から叩かれていた"
+  },
+  {
+   "class": "family-minors",
+   "text": "家族が急病"
+  },
+  {
+   "class": "family-minors",
+   "text": "保護者から苦情があった"
+  },
+  {
+   "class": "family-minors",
+   "text": "小学生が泣き出した"
+  },
+  {
+   "class": "family-minors",
+   "text": "中学生の選手の親が乱入"
+  },
+  {
+   "class": "family-minors",
+   "text": "こどもが泣いて対局できない"
+  },
+  {
+   "class": "family-minors",
+   "text": "家族に連絡がつかない"
+  },
+  {
+   "class": "family-minors",
+   "text": "保護者が審判に詰め寄った"
+  },
+  {
+   "class": "family-minors",
+   "text": "親と子が口論している"
+  },
+  {
+   "class": "family-minors",
+   "text": "The parent shouted at the child"
+  },
+  {
+   "class": "family-minors",
+   "text": "Child was crying and wants to go home"
+  },
+  {
+   "class": "family-minors",
+   "text": "家庭のことで集中できないと言う"
+  },
+  {
+   "class": "family-minors",
+   "text": "保護者が会場で口論"
+  },
+  {
+   "class": "family-minors",
+   "text": "子どもが親に叱られて泣いている"
+  },
+  {
+   "class": "family-minors",
+   "text": "親が離婚で揉めていると話す"
+  },
+  {
+   "class": "family-minors",
+   "text": "保護者のトラブル"
+  },
+  {
+   "class": "family-minors",
+   "text": "家族の事情で欠席"
+  },
+  {
+   "class": "family-minors",
+   "text": "未成年者が保護者なしで来場"
+  },
+  {
+   "class": "family-minors",
+   "text": "子どもの保護者が怒っている"
+  }
+ ]
+}

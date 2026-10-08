@@ -1,6 +1,6 @@
 # ADR-012: Sensitive Gate and PII Redaction for Every External AI Send
 
-**Status:** Accepted. The user decided it on 2026-10-08, and answered Q-DP1 and Q-DP2 the same day. Not implemented.
+**Status:** Accepted. The user decided it on 2026-10-08, and answered Q-DP1 and Q-DP2 the same day. Partly implemented: the pure privacy package and its evaluation (J1a-1, design §10). The guard on every route (J1a-2) and the server re-check (J1a-3) are not implemented yet.
 
 **Date:** 2026-10-08
 

@@ -1,6 +1,6 @@
 # Design: Data Protection for External AI (Gemini and TypeSafe)
 
-**Status:** Proposed design, based on the user's decisions of 2026-10-08. Not implemented. Decision record: [ADR-012](../decisions/ADR-012-external-ai-data-protection.md).
+**Status:** Accepted design, based on the user's decisions of 2026-10-08. Partly implemented: the pure package `lib/domain/privacy/` and the evaluation fixtures in J1a-1 (§10). The guard on every route (J1a-2) and the server re-check (J1a-3) are not implemented yet. Decision record: [ADR-012](../decisions/ADR-012-external-ai-data-protection.md).
 
 **Date:** 2026-10-08
 
@@ -349,6 +349,34 @@ Only synthetic data is used. Real tournament reports are never sent to any provi
 
 - **Q-DP1 (answered 2026-10-08).** Sensitive incidents are not sent to external AI services. They are handled locally by Decision Trees, the rule engine and fixed forms. Future on-device AI is not forbidden. Fair play stays unconditionally blocked. See D10.
 - **Q-DP2 (answered 2026-10-08).** The list may exist, but not as a word list. It is a registry of context-dependent expressions with context patterns and evaluation cases. Undecidable means local fallback. See D11 and Appendix A.2. 抗議 and 苦情 are now an entry (`protest`) with benign contexts, such as "裁定に抗議".
+
+## 10. Implementation (J1a-1, 2026-10-08)
+
+The pure package exists and is tested; nothing calls it yet (J1a-2 wires it into every route, J1a-3 adds the server re-check).
+
+- **Files** (`lib/domain/privacy/`):
+  - `normalize.ts`: NFKC, kana folding (length-preserving, so match positions agree), `DualPattern` (the NFKC pass and the folded pass of Appendix A), name normalization with the original positions.
+  - `sensitive-terms.ts`: Appendix A.1 (`SENSITIVE_EXPRESSIONS`) and the A.2 registry (`CONTEXT_EXPRESSIONS`, including one entry per "other doubtful term").
+  - `sensitive-gate.ts`: `evaluateSensitivity` with L0–L4. L5 (server) will call the same function.
+  - `placeholders.ts`: `PlaceholderMap` (indexed placeholders; `toJSON()` is empty so the map cannot be serialized by mistake), placeholder-protected replacement.
+  - `pii-redaction.ts`: `redactPii` with the §5.2 rule order; `mode: "regulation"` applies only rules 1, 4, 5 and 12 (§5.5).
+  - `residual-check.ts`, `minimization.ts`, `reidentify.ts`.
+  - `protect.ts`: `protectIncidentText`, steps A–E for one incident-derived text and a route (`classify`, `facts`, `reason-description`, `embed-query`). It never returns the original text when it stops.
+- **Decisions made while implementing:**
+  - **Existing placeholders are reserved.** A `〈…〉` already in the input (typed, or from another map) keeps its number, and new placeholders skip it, so the mapping stays one to one.
+  - **Re-identification restores the registered form** of a name (`田中 太郎`), because a family-name-only mention shares the placeholder.
+  - **A title followed by a Latin name** (`IM Smith`) replaces both: the title as `〈属性N〉` and the name as `〈人物N〉`.
+  - **Chess notation is protected from the board and round rules:** lower-case `b4` is a square; `Bd3` / `Rd1` are moves, so `Bd` / `Rd` need a space or a dot before the number; `1/2-1/2` is not a date.
+  - **Raw input limits (L4 `too-long`):** 2,000 characters for classify, facts and the reasoning description, 1,000 for an embedding query. Longer input goes to the local fallback instead of being silently truncated.
+  - **Residual check, "family name alone":** for a name stored without a space and starting with two kanji, the first two characters are also checked.
+- **Term additions from the evaluation** (Appendix A.3 allows only strengthening):
+  - L2 fair play: `フェア\s*プレ`, `ボディ\s*チェック`, `(身体|所持品|持ち物|手荷物)(の)?(検査|チェック)` (false negatives "ボディチェックを断った", "フェアプレーに関する申し立て");
+  - L3 terms without a benign context: 家庭, 離婚, 親権 (false negative "家庭のことで集中できない");
+  - L3 `smartphone`, sensitive context: also 見た and 使った.
+- **Evaluation results (synthetic data, `__tests__/fixtures/privacy/`):**
+  - Sensitive Gate: 192 reports (at least 30 per class), **0 false negatives**. 324 registry cases, all with the expected verdict. False positives: 1 of 76 non-sensitive reports ("騒音で集中できないと苦情", `protest` uncertain), at most 12.5% per category.
+  - PII: 117 reports, **0 identifiers left** in a payload that would be sent, for the covered types. Known residual risks, counted separately: unregistered names without an honorific (3 cases) and **the kana reading of a name registered in kanji** (2 cases, a new class like romaji: the reading cannot be derived without a stored reading).
+- **Tests:** `__tests__/privacy/{sensitive-gate,gate-evaluation,pii-redaction,protect}.test.ts`.
 
 ## Appendix A. Sensitive terms (for review)
 

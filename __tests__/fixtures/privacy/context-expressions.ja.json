@@ -1,0 +1,1625 @@
+{
+ "description": "Evaluation cases for the context-dependent expression registry (external-ai-data-protection Appendix A.2, §8.1). Every case must give its expected verdict. Terms with no benign context have no clear cases; terms that A.1 always blocks have no uncertain cases.",
+ "cases": [
+  {
+   "entry": "smartphone",
+   "expected": "blocked",
+   "text": "白がスマホを見ていた"
+  },
+  {
+   "entry": "smartphone",
+   "expected": "blocked",
+   "text": "対局中にスマホで調べていた"
+  },
+  {
+   "entry": "smartphone",
+   "expected": "blocked",
+   "text": "スマホを取られた"
+  },
+  {
+   "entry": "smartphone",
+   "expected": "clear",
+   "text": "黒のスマホが鳴った"
+  },
+  {
+   "entry": "smartphone",
+   "expected": "clear",
+   "text": "スマホをバッグに入れていた"
+  },
+  {
+   "entry": "smartphone",
+   "expected": "clear",
+   "text": "スマホの電源を切っていた"
+  },
+  {
+   "entry": "smartphone",
+   "expected": "uncertain",
+   "text": "スマホを持っていた"
+  },
+  {
+   "entry": "smartphone",
+   "expected": "uncertain",
+   "text": "スマホについて相手が抗議"
+  },
+  {
+   "entry": "smartphone",
+   "expected": "uncertain",
+   "text": "スマホがポケットにあった"
+  },
+  {
+   "entry": "suspicion",
+   "expected": "blocked",
+   "text": "エンジン使用の疑い"
+  },
+  {
+   "entry": "suspicion",
+   "expected": "blocked",
+   "text": "怪しい行動をしていた"
+  },
+  {
+   "entry": "suspicion",
+   "expected": "blocked",
+   "text": "不審な人物が近くにいた"
+  },
+  {
+   "entry": "suspicion",
+   "expected": "clear",
+   "text": "違法手の疑いがある"
+  },
+  {
+   "entry": "suspicion",
+   "expected": "clear",
+   "text": "同一局面の疑いでクレーム"
+  },
+  {
+   "entry": "suspicion",
+   "expected": "clear",
+   "text": "時間切れの疑い"
+  },
+  {
+   "entry": "suspicion",
+   "expected": "uncertain",
+   "text": "相手が疑っている"
+  },
+  {
+   "entry": "suspicion",
+   "expected": "uncertain",
+   "text": "怪しいと言われた"
+  },
+  {
+   "entry": "suspicion",
+   "expected": "uncertain",
+   "text": "疑いをかけられた"
+  },
+  {
+   "entry": "fell",
+   "expected": "blocked",
+   "text": "選手が倒れた"
+  },
+  {
+   "entry": "fell",
+   "expected": "blocked",
+   "text": "観客が倒れている"
+  },
+  {
+   "entry": "fell",
+   "expected": "blocked",
+   "text": "白が椅子から倒れた"
+  },
+  {
+   "entry": "fell",
+   "expected": "clear",
+   "text": "駒が倒れた"
+  },
+  {
+   "entry": "fell",
+   "expected": "clear",
+   "text": "キングを倒して投了"
+  },
+  {
+   "entry": "fell",
+   "expected": "clear",
+   "text": "時計が倒れた"
+  },
+  {
+   "entry": "fell",
+   "expected": "uncertain",
+   "text": "倒れそうになった"
+  },
+  {
+   "entry": "fell",
+   "expected": "uncertain",
+   "text": "倒れていた"
+  },
+  {
+   "entry": "fell",
+   "expected": "uncertain",
+   "text": "急に倒れた"
+  },
+  {
+   "entry": "medicine",
+   "expected": "blocked",
+   "text": "薬を飲む時間だと言った"
+  },
+  {
+   "entry": "medicine",
+   "expected": "blocked",
+   "text": "薬の副作用で眠い"
+  },
+  {
+   "entry": "medicine",
+   "expected": "blocked",
+   "text": "薬を持っていた"
+  },
+  {
+   "entry": "medicine",
+   "expected": "clear",
+   "text": "薬指で駒を動かした"
+  },
+  {
+   "entry": "medicine",
+   "expected": "clear",
+   "text": "薬指が触れた"
+  },
+  {
+   "entry": "medicine",
+   "expected": "clear",
+   "text": "左手の薬指で時計を押した"
+  },
+  {
+   "entry": "medicine",
+   "expected": "uncertain",
+   "text": "薬と書かれた袋があった"
+  },
+  {
+   "entry": "medicine",
+   "expected": "uncertain",
+   "text": "くすりについて質問された"
+  },
+  {
+   "entry": "medicine",
+   "expected": "uncertain",
+   "text": "薬局へ行った"
+  },
+  {
+   "entry": "sign",
+   "expected": "blocked",
+   "text": "観客がサインを送っていた"
+  },
+  {
+   "entry": "sign",
+   "expected": "blocked",
+   "text": "仲間が手でサインを出した"
+  },
+  {
+   "entry": "sign",
+   "expected": "blocked",
+   "text": "目でサインしていた"
+  },
+  {
+   "entry": "sign",
+   "expected": "clear",
+   "text": "サイン漏れ"
+  },
+  {
+   "entry": "sign",
+   "expected": "clear",
+   "text": "棋譜にサインしていない"
+  },
+  {
+   "entry": "sign",
+   "expected": "clear",
+   "text": "両者のサインがない"
+  },
+  {
+   "entry": "sign",
+   "expected": "uncertain",
+   "text": "サインについてもめた"
+  },
+  {
+   "entry": "sign",
+   "expected": "uncertain",
+   "text": "サインを求められた"
+  },
+  {
+   "entry": "sign",
+   "expected": "uncertain",
+   "text": "サインがおかしい"
+  },
+  {
+   "entry": "outside",
+   "expected": "blocked",
+   "text": "外部から助言を受けていた"
+  },
+  {
+   "entry": "outside",
+   "expected": "blocked",
+   "text": "外部と連絡を取っていた"
+  },
+  {
+   "entry": "outside",
+   "expected": "blocked",
+   "text": "外部の情報を見た"
+  },
+  {
+   "entry": "outside",
+   "expected": "clear",
+   "text": "外部からの騒音で集中できない"
+  },
+  {
+   "entry": "outside",
+   "expected": "clear",
+   "text": "外部から雑音が聞こえた"
+  },
+  {
+   "entry": "outside",
+   "expected": "clear",
+   "text": "外からの声がうるさい"
+  },
+  {
+   "entry": "outside",
+   "expected": "uncertain",
+   "text": "外部の人が近くにいた"
+  },
+  {
+   "entry": "outside",
+   "expected": "uncertain",
+   "text": "外の人と話した"
+  },
+  {
+   "entry": "outside",
+   "expected": "uncertain",
+   "text": "外部に出た"
+  },
+  {
+   "entry": "left-seat",
+   "expected": "blocked",
+   "text": "何度も離席していた"
+  },
+  {
+   "entry": "left-seat",
+   "expected": "blocked",
+   "text": "離席してスマホを触っていた"
+  },
+  {
+   "entry": "left-seat",
+   "expected": "blocked",
+   "text": "離席後なかなか戻らない"
+  },
+  {
+   "entry": "left-seat",
+   "expected": "clear",
+   "text": "離席中に時計が0になった"
+  },
+  {
+   "entry": "left-seat",
+   "expected": "clear",
+   "text": "離席していた間に相手が指した"
+  },
+  {
+   "entry": "left-seat",
+   "expected": "clear",
+   "text": "席を離れたので時計を止めた"
+  },
+  {
+   "entry": "left-seat",
+   "expected": "uncertain",
+   "text": "白が離席した"
+  },
+  {
+   "entry": "left-seat",
+   "expected": "uncertain",
+   "text": "離席を注意した"
+  },
+  {
+   "entry": "left-seat",
+   "expected": "uncertain",
+   "text": "席を外していた"
+  },
+  {
+   "entry": "toilet",
+   "expected": "blocked",
+   "text": "何度もトイレに行く"
+  },
+  {
+   "entry": "toilet",
+   "expected": "blocked",
+   "text": "トイレから戻らない"
+  },
+  {
+   "entry": "toilet",
+   "expected": "blocked",
+   "text": "トイレでスマホ"
+  },
+  {
+   "entry": "toilet",
+   "expected": "uncertain",
+   "text": "トイレに行った"
+  },
+  {
+   "entry": "toilet",
+   "expected": "uncertain",
+   "text": "トイレの場所を聞かれた"
+  },
+  {
+   "entry": "toilet",
+   "expected": "uncertain",
+   "text": "手洗いに行った"
+  },
+  {
+   "entry": "hit",
+   "expected": "blocked",
+   "text": "相手を叩いた"
+  },
+  {
+   "entry": "hit",
+   "expected": "blocked",
+   "text": "顔を殴った"
+  },
+  {
+   "entry": "hit",
+   "expected": "blocked",
+   "text": "選手を蹴った"
+  },
+  {
+   "entry": "hit",
+   "expected": "clear",
+   "text": "時計を叩いた"
+  },
+  {
+   "entry": "hit",
+   "expected": "clear",
+   "text": "相手の時計を叩いた"
+  },
+  {
+   "entry": "hit",
+   "expected": "clear",
+   "text": "時計を強く叩いた"
+  },
+  {
+   "entry": "hit",
+   "expected": "uncertain",
+   "text": "机を叩いた"
+  },
+  {
+   "entry": "hit",
+   "expected": "uncertain",
+   "text": "手を叩いた"
+  },
+  {
+   "entry": "hit",
+   "expected": "uncertain",
+   "text": "叩くような音"
+  },
+  {
+   "entry": "condition",
+   "expected": "blocked",
+   "text": "体の具合が悪い"
+  },
+  {
+   "entry": "condition",
+   "expected": "blocked",
+   "text": "気分が悪いと言う"
+  },
+  {
+   "entry": "condition",
+   "expected": "blocked",
+   "text": "お腹が痛い"
+  },
+  {
+   "entry": "condition",
+   "expected": "clear",
+   "text": "時計の具合が悪い"
+  },
+  {
+   "entry": "condition",
+   "expected": "clear",
+   "text": "盤の調子がおかしい"
+  },
+  {
+   "entry": "condition",
+   "expected": "clear",
+   "text": "照明の具合"
+  },
+  {
+   "entry": "condition",
+   "expected": "uncertain",
+   "text": "具合が悪そう"
+  },
+  {
+   "entry": "condition",
+   "expected": "uncertain",
+   "text": "調子が悪い"
+  },
+  {
+   "entry": "condition",
+   "expected": "uncertain",
+   "text": "具合を聞いた"
+  },
+  {
+   "entry": "heat",
+   "expected": "blocked",
+   "text": "熱がある"
+  },
+  {
+   "entry": "heat",
+   "expected": "blocked",
+   "text": "発熱している"
+  },
+  {
+   "entry": "heat",
+   "expected": "blocked",
+   "text": "熱が出た"
+  },
+  {
+   "entry": "heat",
+   "expected": "clear",
+   "text": "熱戦の末に時間切れ"
+  },
+  {
+   "entry": "heat",
+   "expected": "clear",
+   "text": "熱心に観戦"
+  },
+  {
+   "entry": "heat",
+   "expected": "clear",
+   "text": "熱戦が続いた"
+  },
+  {
+   "entry": "heat",
+   "expected": "uncertain",
+   "text": "熱っぽい"
+  },
+  {
+   "entry": "heat",
+   "expected": "uncertain",
+   "text": "熱い"
+  },
+  {
+   "entry": "heat",
+   "expected": "uncertain",
+   "text": "熱中症"
+  },
+  {
+   "entry": "protest",
+   "expected": "blocked",
+   "text": "保護者が抗議してきた"
+  },
+  {
+   "entry": "protest",
+   "expected": "blocked",
+   "text": "暴言について訴えがあった"
+  },
+  {
+   "entry": "protest",
+   "expected": "blocked",
+   "text": "保護者から苦情"
+  },
+  {
+   "entry": "protest",
+   "expected": "clear",
+   "text": "裁定に抗議した"
+  },
+  {
+   "entry": "protest",
+   "expected": "clear",
+   "text": "結果に異議を申し立てた"
+  },
+  {
+   "entry": "protest",
+   "expected": "clear",
+   "text": "ペアリングに苦情"
+  },
+  {
+   "entry": "protest",
+   "expected": "uncertain",
+   "text": "相手が抗議した"
+  },
+  {
+   "entry": "protest",
+   "expected": "uncertain",
+   "text": "苦情があった"
+  },
+  {
+   "entry": "protest",
+   "expected": "uncertain",
+   "text": "訴えを聞いた"
+  },
+  {
+   "entry": "minor",
+   "expected": "blocked",
+   "text": "保護者とトラブル"
+  },
+  {
+   "entry": "minor",
+   "expected": "blocked",
+   "text": "家庭の事情で"
+  },
+  {
+   "entry": "minor",
+   "expected": "blocked",
+   "text": "虐待の話"
+  },
+  {
+   "entry": "minor",
+   "expected": "clear",
+   "text": "親指で駒を押さえた"
+  },
+  {
+   "entry": "minor",
+   "expected": "clear",
+   "text": "子どもの部の対局"
+  },
+  {
+   "entry": "minor",
+   "expected": "clear",
+   "text": "小学生大会"
+  },
+  {
+   "entry": "minor",
+   "expected": "uncertain",
+   "text": "子どもが来ていた"
+  },
+  {
+   "entry": "minor",
+   "expected": "uncertain",
+   "text": "保護者が呼びに来た"
+  },
+  {
+   "entry": "minor",
+   "expected": "uncertain",
+   "text": "親が来た"
+  },
+  {
+   "entry": "term:吐",
+   "expected": "blocked",
+   "text": "吐き気がする"
+  },
+  {
+   "entry": "term:吐",
+   "expected": "blocked",
+   "text": "嘔吐した"
+  },
+  {
+   "entry": "term:吐",
+   "expected": "blocked",
+   "text": "吐いたと聞いた"
+  },
+  {
+   "entry": "term:吐",
+   "expected": "uncertain",
+   "text": "吐きそうな顔"
+  },
+  {
+   "entry": "term:吐",
+   "expected": "uncertain",
+   "text": "吐息が聞こえた"
+  },
+  {
+   "entry": "term:吐",
+   "expected": "uncertain",
+   "text": "本音を吐露した"
+  },
+  {
+   "entry": "term:気持ち",
+   "expected": "blocked",
+   "text": "気持ち悪いと言った"
+  },
+  {
+   "entry": "term:気持ち",
+   "expected": "blocked",
+   "text": "気持ち悪くて退席"
+  },
+  {
+   "entry": "term:気持ち",
+   "expected": "blocked",
+   "text": "気持ち悪そうに顔色が悪い"
+  },
+  {
+   "entry": "term:気持ち",
+   "expected": "uncertain",
+   "text": "気持ちが落ち着かない"
+  },
+  {
+   "entry": "term:気持ち",
+   "expected": "uncertain",
+   "text": "気持ちを切り替えた"
+  },
+  {
+   "entry": "term:気持ち",
+   "expected": "uncertain",
+   "text": "気持ちの問題だと言った"
+  },
+  {
+   "entry": "term:顔色",
+   "expected": "blocked",
+   "text": "顔色が悪い"
+  },
+  {
+   "entry": "term:顔色",
+   "expected": "blocked",
+   "text": "顔色が真っ青"
+  },
+  {
+   "entry": "term:顔色",
+   "expected": "blocked",
+   "text": "顔色を見て救急を呼んだ"
+  },
+  {
+   "entry": "term:意識",
+   "expected": "blocked",
+   "text": "意識がない"
+  },
+  {
+   "entry": "term:意識",
+   "expected": "blocked",
+   "text": "意識が戻った"
+  },
+  {
+   "entry": "term:意識",
+   "expected": "blocked",
+   "text": "意識がはっきりしない"
+  },
+  {
+   "entry": "term:ずる",
+   "expected": "blocked",
+   "text": "ずるをした"
+  },
+  {
+   "entry": "term:ずる",
+   "expected": "blocked",
+   "text": "ずるいと言われた"
+  },
+  {
+   "entry": "term:ずる",
+   "expected": "blocked",
+   "text": "ずるずると時間を使い不正を疑われた"
+  },
+  {
+   "entry": "term:イヤホン",
+   "expected": "blocked",
+   "text": "イヤホンをしていた"
+  },
+  {
+   "entry": "term:イヤホン",
+   "expected": "blocked",
+   "text": "イヤホンを外さない"
+  },
+  {
+   "entry": "term:イヤホン",
+   "expected": "blocked",
+   "text": "片耳にイヤホン"
+  },
+  {
+   "entry": "term:戻らな",
+   "expected": "blocked",
+   "text": "トイレから戻らない"
+  },
+  {
+   "entry": "term:戻らな",
+   "expected": "blocked",
+   "text": "離席して戻らない"
+  },
+  {
+   "entry": "term:戻らな",
+   "expected": "blocked",
+   "text": "トイレに行ったきり戻らない"
+  },
+  {
+   "entry": "term:戻らな",
+   "expected": "uncertain",
+   "text": "盤に戻らない駒"
+  },
+  {
+   "entry": "term:戻らな",
+   "expected": "uncertain",
+   "text": "局面が戻らない"
+  },
+  {
+   "entry": "term:戻らな",
+   "expected": "uncertain",
+   "text": "時計の表示が戻らない"
+  },
+  {
+   "entry": "term:様子がおかし",
+   "expected": "blocked",
+   "text": "様子がおかしく、選手が倒れた"
+  },
+  {
+   "entry": "term:様子がおかし",
+   "expected": "blocked",
+   "text": "様子がおかしいので救急"
+  },
+  {
+   "entry": "term:様子がおかし",
+   "expected": "blocked",
+   "text": "様子がおかしい、体調が心配"
+  },
+  {
+   "entry": "term:様子がおかし",
+   "expected": "uncertain",
+   "text": "様子がおかしい"
+  },
+  {
+   "entry": "term:様子がおかし",
+   "expected": "uncertain",
+   "text": "白の様子がおかしかった"
+  },
+  {
+   "entry": "term:様子がおかし",
+   "expected": "uncertain",
+   "text": "様子がおかしいと感じた"
+  },
+  {
+   "entry": "term:ぐったり",
+   "expected": "blocked",
+   "text": "ぐったりして救急車"
+  },
+  {
+   "entry": "term:ぐったり",
+   "expected": "blocked",
+   "text": "ぐったりして意識がない"
+  },
+  {
+   "entry": "term:ぐったり",
+   "expected": "blocked",
+   "text": "ぐったりして嘔吐"
+  },
+  {
+   "entry": "term:ぐったり",
+   "expected": "uncertain",
+   "text": "ぐったりしていた"
+  },
+  {
+   "entry": "term:ぐったり",
+   "expected": "uncertain",
+   "text": "ぐったりした様子"
+  },
+  {
+   "entry": "term:ぐったり",
+   "expected": "uncertain",
+   "text": "対局後にぐったり"
+  },
+  {
+   "entry": "term:押しのけ",
+   "expected": "blocked",
+   "text": "相手を押しのけた暴力"
+  },
+  {
+   "entry": "term:押しのけ",
+   "expected": "blocked",
+   "text": "押しのけて暴言"
+  },
+  {
+   "entry": "term:押しのけ",
+   "expected": "blocked",
+   "text": "押しのけたのはいじめだ"
+  },
+  {
+   "entry": "term:押しのけ",
+   "expected": "uncertain",
+   "text": "押しのけた"
+  },
+  {
+   "entry": "term:押しのけ",
+   "expected": "uncertain",
+   "text": "押しのけて前へ出た"
+  },
+  {
+   "entry": "term:押しのけ",
+   "expected": "uncertain",
+   "text": "押しのけられた"
+  },
+  {
+   "entry": "term:突き飛ば",
+   "expected": "blocked",
+   "text": "突き飛ばして暴力をふるった"
+  },
+  {
+   "entry": "term:突き飛ば",
+   "expected": "blocked",
+   "text": "突き飛ばされて怪我をした"
+  },
+  {
+   "entry": "term:突き飛ば",
+   "expected": "blocked",
+   "text": "突き飛ばして暴言"
+  },
+  {
+   "entry": "term:突き飛ば",
+   "expected": "uncertain",
+   "text": "突き飛ばされた"
+  },
+  {
+   "entry": "term:突き飛ば",
+   "expected": "uncertain",
+   "text": "突き飛ばしそうになった"
+  },
+  {
+   "entry": "term:突き飛ば",
+   "expected": "uncertain",
+   "text": "突き飛ばすような動き"
+  },
+  {
+   "entry": "term:痛",
+   "expected": "blocked",
+   "text": "頭が痛い"
+  },
+  {
+   "entry": "term:痛",
+   "expected": "blocked",
+   "text": "お腹が痛いと言う"
+  },
+  {
+   "entry": "term:痛",
+   "expected": "blocked",
+   "text": "体が痛い"
+  },
+  {
+   "entry": "term:痛",
+   "expected": "uncertain",
+   "text": "痛恨のミス"
+  },
+  {
+   "entry": "term:痛",
+   "expected": "uncertain",
+   "text": "痛いミスをした"
+  },
+  {
+   "entry": "term:痛",
+   "expected": "uncertain",
+   "text": "痛手だった"
+  },
+  {
+   "entry": "term:血",
+   "expected": "blocked",
+   "text": "出血している"
+  },
+  {
+   "entry": "term:血",
+   "expected": "blocked",
+   "text": "鼻から出血"
+  },
+  {
+   "entry": "term:血",
+   "expected": "blocked",
+   "text": "出血が止まらない"
+  },
+  {
+   "entry": "term:血",
+   "expected": "uncertain",
+   "text": "血相を変えて抗議"
+  },
+  {
+   "entry": "term:血",
+   "expected": "uncertain",
+   "text": "血が出た"
+  },
+  {
+   "entry": "term:血",
+   "expected": "uncertain",
+   "text": "血のついた紙"
+  },
+  {
+   "entry": "term:医",
+   "expected": "blocked",
+   "text": "医務室へ行った"
+  },
+  {
+   "entry": "term:医",
+   "expected": "blocked",
+   "text": "医務の人を呼んだ"
+  },
+  {
+   "entry": "term:医",
+   "expected": "blocked",
+   "text": "医務室で休んでいる"
+  },
+  {
+   "entry": "term:医",
+   "expected": "uncertain",
+   "text": "医者を呼んで"
+  },
+  {
+   "entry": "term:医",
+   "expected": "uncertain",
+   "text": "医師が来た"
+  },
+  {
+   "entry": "term:医",
+   "expected": "uncertain",
+   "text": "医療関係者"
+  },
+  {
+   "entry": "term:病",
+   "expected": "blocked",
+   "text": "病気で棄権"
+  },
+  {
+   "entry": "term:病",
+   "expected": "blocked",
+   "text": "病院に行った"
+  },
+  {
+   "entry": "term:病",
+   "expected": "blocked",
+   "text": "持病がある"
+  },
+  {
+   "entry": "term:病",
+   "expected": "uncertain",
+   "text": "病み上がり"
+  },
+  {
+   "entry": "term:病",
+   "expected": "uncertain",
+   "text": "病欠"
+  },
+  {
+   "entry": "term:病",
+   "expected": "uncertain",
+   "text": "病的に時間を使う"
+  },
+  {
+   "entry": "term:救",
+   "expected": "blocked",
+   "text": "救急車を呼んだ"
+  },
+  {
+   "entry": "term:救",
+   "expected": "blocked",
+   "text": "救護室へ"
+  },
+  {
+   "entry": "term:救",
+   "expected": "blocked",
+   "text": "救急隊が来た"
+  },
+  {
+   "entry": "term:救",
+   "expected": "uncertain",
+   "text": "救いの手"
+  },
+  {
+   "entry": "term:救",
+   "expected": "uncertain",
+   "text": "救われた"
+  },
+  {
+   "entry": "term:救",
+   "expected": "uncertain",
+   "text": "救済措置"
+  },
+  {
+   "entry": "term:障害",
+   "expected": "blocked",
+   "text": "障害がある"
+  },
+  {
+   "entry": "term:障害",
+   "expected": "blocked",
+   "text": "障害者の選手"
+  },
+  {
+   "entry": "term:障害",
+   "expected": "blocked",
+   "text": "障害があり配慮が必要"
+  },
+  {
+   "entry": "term:障害",
+   "expected": "uncertain",
+   "text": "障害物"
+  },
+  {
+   "entry": "term:障害",
+   "expected": "uncertain",
+   "text": "進行の障害"
+  },
+  {
+   "entry": "term:障害",
+   "expected": "uncertain",
+   "text": "通信障害"
+  },
+  {
+   "entry": "term:障が",
+   "expected": "blocked",
+   "text": "障がいのある選手"
+  },
+  {
+   "entry": "term:障が",
+   "expected": "blocked",
+   "text": "障がい者席"
+  },
+  {
+   "entry": "term:障が",
+   "expected": "blocked",
+   "text": "障がいがある"
+  },
+  {
+   "entry": "term:泣",
+   "expected": "blocked",
+   "text": "泣きながら暴力を受けたと話す"
+  },
+  {
+   "entry": "term:泣",
+   "expected": "blocked",
+   "text": "泣いて体調不良を訴えた"
+  },
+  {
+   "entry": "term:泣",
+   "expected": "blocked",
+   "text": "いじめられて泣いている"
+  },
+  {
+   "entry": "term:泣",
+   "expected": "uncertain",
+   "text": "泣いている"
+  },
+  {
+   "entry": "term:泣",
+   "expected": "uncertain",
+   "text": "泣き出した"
+  },
+  {
+   "entry": "term:泣",
+   "expected": "uncertain",
+   "text": "悔しくて泣いた"
+  },
+  {
+   "entry": "term:怒鳴",
+   "expected": "blocked",
+   "text": "怒鳴って暴言"
+  },
+  {
+   "entry": "term:怒鳴",
+   "expected": "blocked",
+   "text": "怒鳴り散らしバカと言った"
+  },
+  {
+   "entry": "term:怒鳴",
+   "expected": "blocked",
+   "text": "怒鳴って脅した"
+  },
+  {
+   "entry": "term:怒鳴",
+   "expected": "uncertain",
+   "text": "怒鳴った"
+  },
+  {
+   "entry": "term:怒鳴",
+   "expected": "uncertain",
+   "text": "怒鳴り声が聞こえた"
+  },
+  {
+   "entry": "term:怒鳴",
+   "expected": "uncertain",
+   "text": "相手を怒鳴りつけた"
+  },
+  {
+   "entry": "term:叫",
+   "expected": "blocked",
+   "text": "叫んで暴言を吐いた"
+  },
+  {
+   "entry": "term:叫",
+   "expected": "blocked",
+   "text": "叫んでバカと言った"
+  },
+  {
+   "entry": "term:叫",
+   "expected": "blocked",
+   "text": "叫びながら暴力"
+  },
+  {
+   "entry": "term:叫",
+   "expected": "uncertain",
+   "text": "叫んだ"
+  },
+  {
+   "entry": "term:叫",
+   "expected": "uncertain",
+   "text": "大声で叫んだ"
+  },
+  {
+   "entry": "term:叫",
+   "expected": "uncertain",
+   "text": "叫び声"
+  },
+  {
+   "entry": "term:脅",
+   "expected": "blocked",
+   "text": "脅迫された"
+  },
+  {
+   "entry": "term:脅",
+   "expected": "blocked",
+   "text": "脅された"
+  },
+  {
+   "entry": "term:脅",
+   "expected": "blocked",
+   "text": "脅しをかけてきた"
+  },
+  {
+   "entry": "term:脅",
+   "expected": "uncertain",
+   "text": "脅威だ"
+  },
+  {
+   "entry": "term:脅",
+   "expected": "uncertain",
+   "text": "脅かすような手"
+  },
+  {
+   "entry": "term:脅",
+   "expected": "uncertain",
+   "text": "脅かす"
+  },
+  {
+   "entry": "term:威圧",
+   "expected": "blocked",
+   "text": "威圧してパワハラ"
+  },
+  {
+   "entry": "term:威圧",
+   "expected": "blocked",
+   "text": "威圧的な暴言"
+  },
+  {
+   "entry": "term:威圧",
+   "expected": "blocked",
+   "text": "威圧していじめた"
+  },
+  {
+   "entry": "term:威圧",
+   "expected": "uncertain",
+   "text": "威圧的な態度"
+  },
+  {
+   "entry": "term:威圧",
+   "expected": "uncertain",
+   "text": "威圧された"
+  },
+  {
+   "entry": "term:威圧",
+   "expected": "uncertain",
+   "text": "威圧感がある"
+  },
+  {
+   "entry": "term:家族",
+   "expected": "blocked",
+   "text": "家族に虐待されている"
+  },
+  {
+   "entry": "term:家族",
+   "expected": "blocked",
+   "text": "家族の事情で家庭の事情により棄権"
+  },
+  {
+   "entry": "term:家族",
+   "expected": "blocked",
+   "text": "家族が警察に通報"
+  },
+  {
+   "entry": "term:家族",
+   "expected": "uncertain",
+   "text": "家族が見に来た"
+  },
+  {
+   "entry": "term:家族",
+   "expected": "uncertain",
+   "text": "家族と話した"
+  },
+  {
+   "entry": "term:家族",
+   "expected": "uncertain",
+   "text": "家族連れ"
+  },
+  {
+   "entry": "term:家庭",
+   "expected": "blocked",
+   "text": "家庭の事情で棄権"
+  },
+  {
+   "entry": "term:家庭",
+   "expected": "blocked",
+   "text": "家庭の事情があり"
+  },
+  {
+   "entry": "term:家庭",
+   "expected": "blocked",
+   "text": "家庭の事情を話された"
+  },
+  {
+   "entry": "term:家庭",
+   "expected": "uncertain",
+   "text": "家庭のこと"
+  },
+  {
+   "entry": "term:家庭",
+   "expected": "uncertain",
+   "text": "家庭で練習した"
+  },
+  {
+   "entry": "term:家庭",
+   "expected": "uncertain",
+   "text": "家庭的な雰囲気"
+  },
+  {
+   "entry": "term:離婚",
+   "expected": "blocked",
+   "text": "離婚して家庭の事情で"
+  },
+  {
+   "entry": "term:離婚",
+   "expected": "blocked",
+   "text": "離婚のトラブルで警察"
+  },
+  {
+   "entry": "term:離婚",
+   "expected": "blocked",
+   "text": "離婚と虐待の話"
+  },
+  {
+   "entry": "term:離婚",
+   "expected": "uncertain",
+   "text": "離婚の話"
+  },
+  {
+   "entry": "term:離婚",
+   "expected": "uncertain",
+   "text": "離婚したと言った"
+  },
+  {
+   "entry": "term:離婚",
+   "expected": "uncertain",
+   "text": "親が離婚"
+  },
+  {
+   "entry": "term:親権",
+   "expected": "blocked",
+   "text": "親権と虐待の問題"
+  },
+  {
+   "entry": "term:親権",
+   "expected": "blocked",
+   "text": "親権争いで警察"
+  },
+  {
+   "entry": "term:親権",
+   "expected": "blocked",
+   "text": "親権の件で家庭の事情"
+  },
+  {
+   "entry": "term:親権",
+   "expected": "uncertain",
+   "text": "親権の話"
+  },
+  {
+   "entry": "term:親権",
+   "expected": "uncertain",
+   "text": "親権について"
+  },
+  {
+   "entry": "term:親権",
+   "expected": "uncertain",
+   "text": "親権者"
+  },
+  {
+   "entry": "term:性的",
+   "expected": "blocked",
+   "text": "性的な嫌がらせでセクハラ"
+  },
+  {
+   "entry": "term:性的",
+   "expected": "blocked",
+   "text": "性的な暴言"
+  },
+  {
+   "entry": "term:性的",
+   "expected": "blocked",
+   "text": "性的ないじめ"
+  },
+  {
+   "entry": "term:性的",
+   "expected": "uncertain",
+   "text": "性的な話"
+  },
+  {
+   "entry": "term:性的",
+   "expected": "uncertain",
+   "text": "性的な発言"
+  },
+  {
+   "entry": "term:性的",
+   "expected": "uncertain",
+   "text": "性的なこと"
+  },
+  {
+   "entry": "term:性別",
+   "expected": "blocked",
+   "text": "性別で差別された"
+  },
+  {
+   "entry": "term:性別",
+   "expected": "blocked",
+   "text": "性別による差別"
+  },
+  {
+   "entry": "term:性別",
+   "expected": "blocked",
+   "text": "性別をからかうパワハラ"
+  },
+  {
+   "entry": "term:性別",
+   "expected": "uncertain",
+   "text": "性別を聞かれた"
+  },
+  {
+   "entry": "term:性別",
+   "expected": "uncertain",
+   "text": "性別の欄"
+  },
+  {
+   "entry": "term:性別",
+   "expected": "uncertain",
+   "text": "性別による部門"
+  },
+  {
+   "entry": "term:宗",
+   "expected": "blocked",
+   "text": "宗教上の理由"
+  },
+  {
+   "entry": "term:宗",
+   "expected": "blocked",
+   "text": "宗教の話"
+  },
+  {
+   "entry": "term:宗",
+   "expected": "blocked",
+   "text": "宗教団体"
+  },
+  {
+   "entry": "term:宗",
+   "expected": "uncertain",
+   "text": "宗派"
+  },
+  {
+   "entry": "term:宗",
+   "expected": "uncertain",
+   "text": "改宗"
+  },
+  {
+   "entry": "term:宗",
+   "expected": "uncertain",
+   "text": "宗旨"
+  },
+  {
+   "entry": "term:祈",
+   "expected": "blocked",
+   "text": "お祈りの時間"
+  },
+  {
+   "entry": "term:祈",
+   "expected": "blocked",
+   "text": "お祈りを始めた"
+  },
+  {
+   "entry": "term:祈",
+   "expected": "blocked",
+   "text": "お祈りのため離席"
+  },
+  {
+   "entry": "term:祈",
+   "expected": "uncertain",
+   "text": "祈った"
+  },
+  {
+   "entry": "term:祈",
+   "expected": "uncertain",
+   "text": "祈るように"
+  },
+  {
+   "entry": "term:祈",
+   "expected": "uncertain",
+   "text": "祈願"
+  },
+  {
+   "entry": "term:盗",
+   "expected": "blocked",
+   "text": "盗まれた"
+  },
+  {
+   "entry": "term:盗",
+   "expected": "blocked",
+   "text": "盗難にあった"
+  },
+  {
+   "entry": "term:盗",
+   "expected": "blocked",
+   "text": "窃盗"
+  },
+  {
+   "entry": "term:盗",
+   "expected": "uncertain",
+   "text": "盗用"
+  },
+  {
+   "entry": "term:盗",
+   "expected": "uncertain",
+   "text": "盗み見た"
+  },
+  {
+   "entry": "term:盗",
+   "expected": "uncertain",
+   "text": "盗塁"
+  },
+  {
+   "entry": "term:失くし",
+   "expected": "blocked",
+   "text": "財布を失くしてなくなった"
+  },
+  {
+   "entry": "term:失くし",
+   "expected": "blocked",
+   "text": "スマホがなくなって失くしたと言う"
+  },
+  {
+   "entry": "term:失くし",
+   "expected": "blocked",
+   "text": "警察に失くしたと届けた"
+  },
+  {
+   "entry": "term:失くし",
+   "expected": "uncertain",
+   "text": "失くした"
+  },
+  {
+   "entry": "term:失くし",
+   "expected": "uncertain",
+   "text": "鍵を失くした"
+  },
+  {
+   "entry": "term:失くし",
+   "expected": "uncertain",
+   "text": "ペンを失くした"
+  },
+  {
+   "entry": "term:紛失",
+   "expected": "blocked",
+   "text": "紛失して警察に届けた"
+  },
+  {
+   "entry": "term:紛失",
+   "expected": "blocked",
+   "text": "紛失して盗難を疑う"
+  },
+  {
+   "entry": "term:紛失",
+   "expected": "blocked",
+   "text": "紛失物を盗まれた"
+  },
+  {
+   "entry": "term:紛失",
+   "expected": "uncertain",
+   "text": "紛失した"
+  },
+  {
+   "entry": "term:紛失",
+   "expected": "uncertain",
+   "text": "スコアシートを紛失"
+  },
+  {
+   "entry": "term:紛失",
+   "expected": "uncertain",
+   "text": "紛失物"
+  },
+  {
+   "entry": "term:警察",
+   "expected": "blocked",
+   "text": "警察を呼んだ"
+  },
+  {
+   "entry": "term:警察",
+   "expected": "blocked",
+   "text": "警察に通報"
+  },
+  {
+   "entry": "term:警察",
+   "expected": "blocked",
+   "text": "警察が来た"
+  },
+  {
+   "entry": "term:警備",
+   "expected": "blocked",
+   "text": "警備員が盗難を確認"
+  },
+  {
+   "entry": "term:警備",
+   "expected": "blocked",
+   "text": "警備と警察が来た"
+  },
+  {
+   "entry": "term:警備",
+   "expected": "blocked",
+   "text": "警備員に盗まれたと訴えた"
+  },
+  {
+   "entry": "term:警備",
+   "expected": "uncertain",
+   "text": "警備員がいた"
+  },
+  {
+   "entry": "term:警備",
+   "expected": "uncertain",
+   "text": "警備の人"
+  },
+  {
+   "entry": "term:警備",
+   "expected": "uncertain",
+   "text": "警備員に声をかけた"
+  },
+  {
+   "entry": "term:弁護",
+   "expected": "blocked",
+   "text": "弁護士と警察に相談"
+  },
+  {
+   "entry": "term:弁護",
+   "expected": "blocked",
+   "text": "弁護士が被害届"
+  },
+  {
+   "entry": "term:弁護",
+   "expected": "blocked",
+   "text": "弁護士に盗難を相談"
+  },
+  {
+   "entry": "term:弁護",
+   "expected": "uncertain",
+   "text": "弁護士に相談"
+  },
+  {
+   "entry": "term:弁護",
+   "expected": "uncertain",
+   "text": "弁護する"
+  },
+  {
+   "entry": "term:弁護",
+   "expected": "uncertain",
+   "text": "弁護士が来た"
+  },
+  {
+   "entry": "term:通報",
+   "expected": "blocked",
+   "text": "警察に通報"
+  },
+  {
+   "entry": "term:通報",
+   "expected": "blocked",
+   "text": "110番通報"
+  },
+  {
+   "entry": "term:通報",
+   "expected": "blocked",
+   "text": "通報して警察が来た"
+  },
+  {
+   "entry": "term:通報",
+   "expected": "uncertain",
+   "text": "通報があった"
+  },
+  {
+   "entry": "term:通報",
+   "expected": "uncertain",
+   "text": "通報した"
+  },
+  {
+   "entry": "term:通報",
+   "expected": "uncertain",
+   "text": "通報する"
+  }
+ ]
+}

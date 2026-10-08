@@ -1,0 +1,75 @@
+import { describe, it, expect } from "vitest";
+import sensitive from "../fixtures/privacy/sensitive.ja.json";
+import context from "../fixtures/privacy/context-expressions.ja.json";
+import benign from "../fixtures/privacy/benign.ja.json";
+import { CONTEXT_EXPRESSIONS, evaluateSensitivity } from "@/lib/domain/privacy";
+
+/**
+ * Sensitive Gate の評価（external-ai-data-protection §8.1。リリースの条件）。
+ * 合成データだけを使う。偽陰性は重大度1: 見逃した表現は修正とともにここへ加える。
+ */
+describe("Sensitive Gate evaluation (release gate)", () => {
+  const CLASSES = [
+    "fair-play",
+    "health",
+    "harassment",
+    "crime",
+    "religion",
+    "family-minors",
+  ];
+
+  it("has at least 30 synthetic reports per sensitive class (>= 180)", () => {
+    expect(sensitive.cases.length).toBeGreaterThanOrEqual(180);
+    for (const cls of CLASSES)
+      expect(
+        sensitive.cases.filter((c) => c.class === cls).length,
+        cls
+      ).toBeGreaterThanOrEqual(30);
+  });
+
+  it("0 false negatives: no sensitive report reaches clear", () => {
+    const falseNegatives = sensitive.cases.filter(
+      (c) => evaluateSensitivity({ text: c.text }).verdict === "clear"
+    );
+    expect(falseNegatives).toEqual([]);
+  });
+
+  it("every context-expression case gives its expected verdict", () => {
+    const wrong = context.cases
+      .map((c) => ({
+        ...c,
+        actual: evaluateSensitivity({ text: c.text }).verdict,
+      }))
+      .filter((c) => c.actual !== c.expected);
+    expect(wrong).toEqual([]);
+  });
+
+  it("every registry entry has its evaluation cases", () => {
+    for (const e of CONTEXT_EXPRESSIONS) {
+      const cases = context.cases.filter((c) => c.entry === e.id);
+      const count = (v: string) => cases.filter((c) => c.expected === v).length;
+      expect(count("blocked"), `${e.id} blocked`).toBeGreaterThanOrEqual(3);
+      if (e.benign.length > 0)
+        expect(count("clear"), `${e.id} clear`).toBeGreaterThanOrEqual(3);
+      else expect(count("clear"), `${e.id} clear`).toBe(0);
+      // A.1 が常に止める語（顔色・意識・警察 など）には uncertain の例がない
+      const alwaysBlocked = cases.every((c) => c.expected === "blocked");
+      if (!alwaysBlocked)
+        expect(count("uncertain"), `${e.id} uncertain`).toBeGreaterThanOrEqual(
+          3
+        );
+    }
+  });
+
+  it("false-positive rate on the non-sensitive set is at most 15% per category (secondary, tracked)", () => {
+    const byCategory = new Map<string, { total: number; fp: number }>();
+    for (const c of benign.cases) {
+      const s = byCategory.get(c.category) ?? { total: 0, fp: 0 };
+      s.total++;
+      if (evaluateSensitivity({ text: c.text }).verdict !== "clear") s.fp++;
+      byCategory.set(c.category, s);
+    }
+    for (const [category, s] of Array.from(byCategory))
+      expect(s.fp / s.total, category).toBeLessThanOrEqual(0.15);
+  });
+});

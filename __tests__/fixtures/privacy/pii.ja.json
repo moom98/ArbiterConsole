@@ -1,0 +1,865 @@
+{
+ "description": "Synthetic PII reports (external-ai-data-protection §8.2). For every case without residualRisk, no mustNotContain string may be in a payload that passes the residual check. 'keep' items must survive redaction. residualRisk classes (reported separately, not release-blocking): unregistered-no-honorific, romaji, reading (a kana reading of a name registered in kanji).",
+ "identifiers": {
+  "players": [
+   {
+    "name": "田中 太郎",
+    "fideId": "12345678",
+    "title": "FM"
+   },
+   {
+    "name": "佐藤花子"
+   },
+   {
+    "name": "鈴木 一郎"
+   },
+   {
+    "name": "Magnus Carlsen",
+    "fideId": "1503014"
+   },
+   {
+    "name": "高橋 健"
+   },
+   {
+    "name": "伊藤 誠"
+   },
+   {
+    "name": "渡辺 さくら"
+   },
+   {
+    "name": "林 太郎"
+   },
+   {
+    "name": "ヤマダ ハナ"
+   }
+  ],
+  "tournaments": [
+   "東京春季オープン"
+  ],
+  "venues": [
+   "中央公民館"
+  ],
+  "officials": [
+   "山本 一郎"
+  ]
+ },
+ "cases": [
+  {
+   "text": "田中太郎が違法手を指した",
+   "mustNotContain": [
+    "田中",
+    "太郎"
+   ]
+  },
+  {
+   "text": "田中 太郎が時計を押し忘れた",
+   "mustNotContain": [
+    "田中",
+    "太郎"
+   ]
+  },
+  {
+   "text": "白の田中が2回目の違法手",
+   "mustNotContain": [
+    "田中"
+   ]
+  },
+  {
+   "text": "太郎が投了した",
+   "mustNotContain": [
+    "太郎"
+   ]
+  },
+  {
+   "text": "たなか たろうが違法手",
+   "mustNotContain": [
+    "たなか",
+    "たろう"
+   ],
+   "residualRisk": "reading"
+  },
+  {
+   "text": "タナカタロウのフラッグが落ちた",
+   "mustNotContain": [
+    "タナカ",
+    "タロウ"
+   ],
+   "residualRisk": "reading"
+  },
+  {
+   "text": "佐藤花子が三回同一局面をクレーム",
+   "mustNotContain": [
+    "佐藤",
+    "花子"
+   ]
+  },
+  {
+   "text": "佐藤 花子のスマホが鳴った",
+   "mustNotContain": [
+    "佐藤",
+    "花子"
+   ]
+  },
+  {
+   "text": "鈴木一郎と高橋健の対局で時計トラブル",
+   "mustNotContain": [
+    "鈴木",
+    "一郎",
+    "高橋",
+    "健"
+   ]
+  },
+  {
+   "text": "鈴木が棋譜を書いていない",
+   "mustNotContain": [
+    "鈴木"
+   ]
+  },
+  {
+   "text": "Magnus Carlsen made an illegal move",
+   "mustNotContain": [
+    "Magnus",
+    "Carlsen"
+   ]
+  },
+  {
+   "text": "Carlsenのフラッグが落ちた",
+   "mustNotContain": [
+    "Carlsen"
+   ]
+  },
+  {
+   "text": "magnus carlsenが投了",
+   "mustNotContain": [
+    "magnus",
+    "carlsen"
+   ]
+  },
+  {
+   "text": "伊藤誠と渡辺さくらの結果が食い違う",
+   "mustNotContain": [
+    "伊藤",
+    "誠",
+    "渡辺",
+    "さくら"
+   ]
+  },
+  {
+   "text": "渡辺が駒を落とした",
+   "mustNotContain": [
+    "渡辺"
+   ]
+  },
+  {
+   "text": "林太郎が違法手",
+   "mustNotContain": [
+    "林太郎"
+   ]
+  },
+  {
+   "text": "林さんが時計を止めた",
+   "mustNotContain": [
+    "林"
+   ]
+  },
+  {
+   "text": "東京春季オープンの第2ラウンドで違法手",
+   "mustNotContain": [
+    "東京春季オープン",
+    "第2ラウンド"
+   ]
+  },
+  {
+   "text": "会場は中央公民館、黒が遅刻",
+   "mustNotContain": [
+    "中央公民館"
+   ]
+  },
+  {
+   "text": "山本一郎CAに確認した",
+   "mustNotContain": [
+    "山本",
+    "一郎"
+   ]
+  },
+  {
+   "text": "山本CAが裁定",
+   "mustNotContain": [
+    "山本"
+   ]
+  },
+  {
+   "text": "FMの田中が違法手",
+   "mustNotContain": [
+    "田中"
+   ]
+  },
+  {
+   "text": "FIDE ID 12345678 の選手が時間切れ",
+   "mustNotContain": [
+    "12345678"
+   ]
+  },
+  {
+   "text": "ID:1503014の選手",
+   "mustNotContain": [
+    "1503014"
+   ]
+  },
+  {
+   "text": "田中(12345678)が違法手",
+   "mustNotContain": [
+    "12345678",
+    "田中"
+   ]
+  },
+  {
+   "text": "中村さんが違法手を指した",
+   "mustNotContain": [
+    "中村"
+   ]
+  },
+  {
+   "text": "小林君のフラッグが落ちた",
+   "mustNotContain": [
+    "小林"
+   ]
+  },
+  {
+   "text": "加藤くんが投了",
+   "mustNotContain": [
+    "加藤"
+   ]
+  },
+  {
+   "text": "吉田ちゃんが泣いている",
+   "mustNotContain": [
+    "吉田"
+   ]
+  },
+  {
+   "text": "山田選手が時間切れ",
+   "mustNotContain": [
+    "山田"
+   ]
+  },
+  {
+   "text": "松本氏が抗議",
+   "mustNotContain": [
+    "松本"
+   ]
+  },
+  {
+   "text": "井上様から苦情",
+   "mustNotContain": [
+    "井上"
+   ]
+  },
+  {
+   "text": "木村先生が見ていた",
+   "mustNotContain": [
+    "木村"
+   ]
+  },
+  {
+   "text": "ヤマグチさんが遅刻",
+   "mustNotContain": [
+    "ヤマグチ"
+   ]
+  },
+  {
+   "text": "斎藤さんと清水さんの対局",
+   "mustNotContain": [
+    "斎藤",
+    "清水"
+   ]
+  },
+  {
+   "text": "黒の森さんが違法手",
+   "mustNotContain": [
+    "森"
+   ]
+  },
+  {
+   "text": "昨日来た池田さんが2回目",
+   "mustNotContain": [
+    "池田"
+   ]
+  },
+  {
+   "text": "相手の橋本選手が抗議",
+   "mustNotContain": [
+    "橋本"
+   ]
+  },
+  {
+   "text": "石川さん、石川さん",
+   "mustNotContain": [
+    "石川"
+   ]
+  },
+  {
+   "text": "Mr Smith claimed a draw",
+   "mustNotContain": [
+    "Smith"
+   ]
+  },
+  {
+   "text": "Dr. Brown was late",
+   "mustNotContain": [
+    "Brown"
+   ]
+  },
+  {
+   "text": "John Smith made an illegal move",
+   "mustNotContain": [
+    "John",
+    "Smith"
+   ]
+  },
+  {
+   "text": "中村が違法手を指した",
+   "mustNotContain": [
+    "中村"
+   ],
+   "residualRisk": "unregistered-no-honorific"
+  },
+  {
+   "text": "小川と大野の対局でトラブル",
+   "mustNotContain": [
+    "小川",
+    "大野"
+   ],
+   "residualRisk": "unregistered-no-honorific"
+  },
+  {
+   "text": "smithが時間切れ",
+   "mustNotContain": [
+    "smith"
+   ],
+   "residualRisk": "unregistered-no-honorific"
+  },
+  {
+   "text": "Tanaka Taro made an illegal move",
+   "mustNotContain": [
+    "Tanaka",
+    "Taro"
+   ],
+   "residualRisk": "romaji"
+  },
+  {
+   "text": "会員番号: A12345の選手",
+   "mustNotContain": [
+    "A12345"
+   ]
+  },
+  {
+   "text": "JCF会員 123456",
+   "mustNotContain": [
+    "123456"
+   ]
+  },
+  {
+   "text": "登録番号 9876543",
+   "mustNotContain": [
+    "9876543"
+   ]
+  },
+  {
+   "text": "No. 4521 の選手",
+   "mustNotContain": [
+    "4521"
+   ]
+  },
+  {
+   "text": "JCF-20391 が違法手",
+   "mustNotContain": [
+    "20391"
+   ]
+  },
+  {
+   "text": "番号:XY-889",
+   "mustNotContain": [
+    "XY-889"
+   ]
+  },
+  {
+   "text": "ID: ab123",
+   "mustNotContain": [
+    "ab123"
+   ]
+  },
+  {
+   "text": "選手番号 77821 のスマホが鳴った",
+   "mustNotContain": [
+    "77821"
+   ]
+  },
+  {
+   "text": "第3ラウンド5番ボードで違法手",
+   "mustNotContain": [
+    "第3ラウンド",
+    "5番ボード"
+   ]
+  },
+  {
+   "text": "3回戦2盤でフラッグ",
+   "mustNotContain": [
+    "3回戦",
+    "2盤"
+   ]
+  },
+  {
+   "text": "第三局でトラブル",
+   "mustNotContain": [
+    "第三局"
+   ]
+  },
+  {
+   "text": "盤12で違法手",
+   "mustNotContain": [
+    "盤12"
+   ]
+  },
+  {
+   "text": "テーブル7の白",
+   "mustNotContain": [
+    "テーブル7"
+   ]
+  },
+  {
+   "text": "4番テーブルで抗議",
+   "mustNotContain": [
+    "4番テーブル"
+   ]
+  },
+  {
+   "text": "Board 12 で時間切れ",
+   "mustNotContain": [
+    "Board 12"
+   ]
+  },
+  {
+   "text": "Round 4 の結果",
+   "mustNotContain": [
+    "Round 4"
+   ]
+  },
+  {
+   "text": "R3 B5 で違法手",
+   "mustNotContain": [
+    "R3",
+    "B5"
+   ]
+  },
+  {
+   "text": "第5R、7番席",
+   "mustNotContain": [
+    "第5R",
+    "7番席"
+   ]
+  },
+  {
+   "text": "十番盤で駒が倒れた",
+   "mustNotContain": [
+    "十番盤"
+   ]
+  },
+  {
+   "text": "席3の選手",
+   "mustNotContain": [
+    "席3"
+   ]
+  },
+  {
+   "text": "Bd. 4 で両方のフラッグ",
+   "mustNotContain": [
+    "Bd. 4"
+   ]
+  },
+  {
+   "text": "Rd 2 の第一局",
+   "mustNotContain": [
+    "Rd 2",
+    "第一局"
+   ]
+  },
+  {
+   "text": "2026-10-08に発生",
+   "mustNotContain": [
+    "2026-10-08"
+   ]
+  },
+  {
+   "text": "2026/10/08の対局",
+   "mustNotContain": [
+    "2026/10/08"
+   ]
+  },
+  {
+   "text": "2026年10月8日の第2ラウンド",
+   "mustNotContain": [
+    "2026年",
+    "10月8日",
+    "第2ラウンド"
+   ]
+  },
+  {
+   "text": "10/8の対局で違法手",
+   "mustNotContain": [
+    "10/8"
+   ]
+  },
+  {
+   "text": "10月8日に時間切れ",
+   "mustNotContain": [
+    "10月8日"
+   ]
+  },
+  {
+   "text": "十月八日の対局",
+   "mustNotContain": [
+    "十月八日"
+   ]
+  },
+  {
+   "text": "土曜日の対局",
+   "mustNotContain": [
+    "土曜"
+   ]
+  },
+  {
+   "text": "(日)の第1ラウンド",
+   "mustNotContain": [
+    "(日)",
+    "第1ラウンド"
+   ]
+  },
+  {
+   "text": "14時30分頃に違法手",
+   "mustNotContain": [
+    "14時30分"
+   ]
+  },
+  {
+   "text": "午後2時に時計トラブル",
+   "mustNotContain": [
+    "午後2時"
+   ]
+  },
+  {
+   "text": "午前10:15に遅刻",
+   "mustNotContain": [
+    "10:15"
+   ]
+  },
+  {
+   "text": "15:40に違法手があった",
+   "mustNotContain": [
+    "15:40"
+   ]
+  },
+  {
+   "text": "10時半ごろフラッグ",
+   "mustNotContain": [
+    "10時半"
+   ]
+  },
+  {
+   "text": "9時頃に開始",
+   "mustNotContain": [
+    "9時"
+   ]
+  },
+  {
+   "text": "連絡先は090-1234-5678",
+   "mustNotContain": [
+    "090-1234-5678"
+   ]
+  },
+  {
+   "text": "電話 03-1234-5678 に連絡",
+   "mustNotContain": [
+    "03-1234-5678"
+   ]
+  },
+  {
+   "text": "メール taro@example.com",
+   "mustNotContain": [
+    "taro@example.com"
+   ]
+  },
+  {
+   "text": "https://example.com/report を参照",
+   "mustNotContain": [
+    "example.com"
+   ]
+  },
+  {
+   "text": "+81 90 1234 5678 に電話",
+   "mustNotContain": [
+    "1234"
+   ]
+  },
+  {
+   "text": "09012345678に連絡",
+   "mustNotContain": [
+    "09012345678"
+   ]
+  },
+  {
+   "text": "www.example.jp に掲載",
+   "mustNotContain": [
+    "example.jp"
+   ]
+  },
+  {
+   "text": "第12回市民選手権で違法手",
+   "mustNotContain": [
+    "第12回市民選手権"
+   ]
+  },
+  {
+   "text": "県民杯の第2ラウンド",
+   "mustNotContain": [
+    "県民杯"
+   ]
+  },
+  {
+   "text": "全国高校選手権でトラブル",
+   "mustNotContain": [
+    "全国高校選手権"
+   ]
+  },
+  {
+   "text": "第5回オープン大会の結果",
+   "mustNotContain": [
+    "第5回オープン大会"
+   ]
+  },
+  {
+   "text": "北高校の選手が遅刻",
+   "mustNotContain": [
+    "北高校"
+   ]
+  },
+  {
+   "text": "青葉中学の選手",
+   "mustNotContain": [
+    "青葉中学"
+   ]
+  },
+  {
+   "text": "南小学校の子",
+   "mustNotContain": [
+    "南小学校"
+   ]
+  },
+  {
+   "text": "東大学のチーム",
+   "mustNotContain": [
+    "東大学"
+   ]
+  },
+  {
+   "text": "駅前チェスクラブの選手",
+   "mustNotContain": [
+    "駅前チェスクラブ"
+   ]
+  },
+  {
+   "text": "港支部の団体戦",
+   "mustNotContain": [
+    "港支部"
+   ]
+  },
+  {
+   "text": "中央道場の選手",
+   "mustNotContain": [
+    "中央道場"
+   ]
+  },
+  {
+   "text": "市民チェス教室の生徒",
+   "mustNotContain": [
+    "市民チェス教室"
+   ]
+  },
+  {
+   "text": "レーティング1850の選手",
+   "mustNotContain": [
+    "1850"
+   ]
+  },
+  {
+   "text": "2100の白が違法手",
+   "mustNotContain": [
+    "2100"
+   ]
+  },
+  {
+   "text": "12歳の選手が時間切れ",
+   "mustNotContain": [
+    "12歳"
+   ]
+  },
+  {
+   "text": "小学5年の選手",
+   "mustNotContain": [
+    "小学5年"
+   ]
+  },
+  {
+   "text": "3年生の選手が投了",
+   "mustNotContain": [
+    "3年生"
+   ]
+  },
+  {
+   "text": "GMが抗議した",
+   "mustNotContain": [
+    "GM"
+   ]
+  },
+  {
+   "text": "IM Smithが遅刻",
+   "mustNotContain": [
+    "IM",
+    "Smith"
+   ]
+  },
+  {
+   "text": "WGMの選手のフラッグ",
+   "mustNotContain": [
+    "WGM"
+   ]
+  },
+  {
+   "text": "2026年10月8日、東京春季オープン第3ラウンド5番ボードで田中太郎(FIDE ID 12345678)が2回目の違法手。相手の佐藤花子が指摘。連絡先090-1111-2222。",
+   "mustNotContain": [
+    "2026年",
+    "東京春季オープン",
+    "第3ラウンド",
+    "5番ボード",
+    "田中",
+    "12345678",
+    "佐藤",
+    "090-1111-2222"
+   ]
+  },
+  {
+   "text": "中央公民館で14時頃、北高校の鈴木一郎くん(15歳)のフラッグが落ちた。",
+   "mustNotContain": [
+    "中央公民館",
+    "14時",
+    "北高校",
+    "鈴木",
+    "一郎",
+    "15歳"
+   ]
+  },
+  {
+   "text": "Round 2 Board 7: Magnus Carlsen vs John Smith, illegal move at 15:20",
+   "mustNotContain": [
+    "Round 2",
+    "Board 7",
+    "Carlsen",
+    "John Smith",
+    "15:20"
+   ]
+  },
+  {
+   "text": "山本CAへ報告。白の渡辺さくらさん、黒の伊藤誠さん、第一局、10月8日。",
+   "mustNotContain": [
+    "山本",
+    "渡辺",
+    "さくら",
+    "伊藤",
+    "誠",
+    "第一局",
+    "10月8日"
+   ]
+  },
+  {
+   "text": "会員番号A12345の小林さんが県民杯で遅刻。電話 03-9999-8888。",
+   "mustNotContain": [
+    "A12345",
+    "小林",
+    "県民杯",
+    "03-9999-8888"
+   ]
+  },
+  {
+   "text": "やまだはなが違法手",
+   "mustNotContain": [
+    "やまだ",
+    "はな"
+   ]
+  },
+  {
+   "text": "ﾔﾏﾀﾞ ﾊﾅのフラッグ",
+   "mustNotContain": [
+    "ﾔﾏﾀﾞ",
+    "ﾊﾅ",
+    "ヤマダ",
+    "ハナ"
+   ]
+  },
+  {
+   "text": "ヤマダが投了",
+   "mustNotContain": [
+    "ヤマダ"
+   ]
+  }
+ ],
+ "keep": [
+  {
+   "text": "残り1:05で白が時間切れを主張",
+   "kept": "1:05"
+  },
+  {
+   "text": "持ち時間90分+30秒",
+   "kept": "90分+30秒"
+  },
+  {
+   "text": "50手ルールのクレーム",
+   "kept": "50手"
+  },
+  {
+   "text": "2回目の違法手",
+   "kept": "2回目"
+  },
+  {
+   "text": "スマホ2台を持っていた",
+   "kept": "2台"
+  },
+  {
+   "text": "相手選手が抗議",
+   "kept": "相手選手"
+  },
+  {
+   "text": "白がe4、黒がb4",
+   "kept": "b4"
+  },
+  {
+   "text": "Bd3の後にRd1",
+   "kept": "Rd1"
+  },
+  {
+   "text": "1/2-1/2で合意",
+   "kept": "1/2-1/2"
+  },
+  {
+   "text": "時計の表示 0:00",
+   "kept": "0:00"
+  },
+  {
+   "text": "150手の対局",
+   "kept": "150手"
+  },
+  {
+   "text": "30秒加算",
+   "kept": "30秒"
+  }
+ ]
+}

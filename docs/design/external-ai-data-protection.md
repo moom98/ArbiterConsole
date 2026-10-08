@@ -34,6 +34,13 @@ From 2026-10-08:
   - When the gate cannot decide, or the text looks doubtful, use the local fallback.
 - **D8.** The PII redaction and minimization are **separate** from the Sensitive Gate.
 - **D9.** The gate evaluation must measure **false-negative rates**, not only false positives. Any false negative is a more serious error than a false positive.
+- **D10 (Q-DP1, 2026-10-08).** The rule is "**sensitive incidents are not sent to external AI services**". It is not "no AI is ever used for them".
+  - The first implementation handles them with the local Decision Trees, the rule engine and fixed forms.
+  - On-device AI in the future is **not** forbidden by this requirement. It would need its own ADR.
+  - Fair play stays unconditionally blocked from external sends.
+- **D11 (Q-DP2, 2026-10-08).** The doubtful vocabulary is **not a word allow/block list**.
+  - Expressions such as スマホ, 疑い, 倒れた, 薬, サイン, 外部 and 離席 are managed as **context-dependent expressions**, each with patterns that include the surrounding words, and with evaluation cases.
+  - When the gate cannot tell whether a report is sensitive, it is **not** treated as safe: it goes to the local fallback.
 
 ## 2. Scope: every external AI send
 
@@ -105,7 +112,7 @@ Regexes are only one layer, so no single layer is trusted alone (D7).
 | L0 Explicit category | The arbiter **selected** fair-play, or the incident already has category fair-play. | `blocked`, without condition (D6). This check runs before any text is looked at. |
 | L1 Explicit flags | The incident or the arbiter's answers carry a sensitive marker: the "外部AIに送らない" switch (§4.4), or a fair-play flag set earlier in the flow. | `blocked` |
 | L2 Known sensitive expressions | High-precision, contextual regexes per class (Appendix A.1): the existing `mentionsFairPlay`, health or medical, harassment or violence or sexual misconduct or discrimination, crime or police, religion or belief, family or minors. The keyword classifier's `fair-play` result also counts. | `blocked` |
-| L3 Doubtful vocabulary | A **broad** list of bare terms (Appendix A.2). Each hit is `uncertain`, **unless the matched span lies completely inside one phrase of a closed exception list** (Appendix A.3, for example "駒が倒れ" and "時計を叩"). A partial overlap does not count as an exception. | `uncertain` |
+| L3 Context-dependent expressions | A registry of ambiguous expressions (Appendix A.2, D11). Each occurrence is judged in its surrounding context: a sensitive context gives `blocked`; a benign context that covers the occurrence and its surroundings gives `clear`; **anything else gives `uncertain`** (local fallback). It is not a word list. | `blocked` / `clear` / `uncertain` per occurrence; the report takes the most severe |
 | L4 Unanalyzable input | Any of these: more than 10% of characters outside Japanese, Latin, digits and common punctuation; **text that is mostly Latin letters (more than 50% of its letters)**, because the English term lists are small; text over the route's input limit before truncation; a failed residual check (§5.4). | `uncertain` |
 | L5 Server re-check | The server runs L2–L4 again on the redacted payload. For `/reason` it also runs L0 on the category it receives. | 400, nothing sent |
 
@@ -113,11 +120,13 @@ Regexes are only one layer, so no single layer is trusted alone (D7).
 
 ### 4.3 What the local fallback means
 
+Sensitive incidents are not sent to external AI services (D10). The local fallback is the local Decision Trees, the rule engine and fixed forms. It is not a rule against AI in general: on-device AI could later be added through its own ADR.
+
 | Route | Local fallback |
 | --- | --- |
 | classify | the on-device keyword classifier (as today), with the notice "外部AIには送信していません（理由: …）" |
 | facts | none: every required fact is treated as missing and asked ([fact-model.md](./fact-model.md)) |
-| reason | the decision becomes `manual-review`: "CAへ確認してください", plus the keyword rule search results on the device. This matches the existing offline path. |
+| reason | **Local handling only:** the Decision Tree where one exists; otherwise the fact plan's fixed form (the observed facts are recorded), the keyword rule search on the device, and a `manual-review` decision "CAへ確認してください". This matches the existing offline path. |
 | embed query | keyword search only (as offline) |
 | embed document | the document is stored without a vector. It is still found by keyword search. |
 
@@ -253,9 +262,9 @@ FIDE and JCF texts get no redaction at all. The residual check and the gate do n
 ### 6.4 Sensitive Gate for Gemini
 
 - The gate applies to **every** external route, Gemini included (D6 says "before any external send").
-- So a health-related incident no longer gets Gemini reasoning. It gets the local `manual-review` ("CAへ確認してください") plus the rule search on the device.
+- So a health-related incident is **not sent to Gemini** (D10). It is handled locally, as in §4.3: the Decision Tree or fixed form, the rule search on the device, and "CAへ確認してください" where no local tree decides.
 - This is stricter than today, where only fair play is blocked. It follows §34 (fail safe) and D9.
-- **The user should confirm this** (Q-DP1 in §9).
+- The user confirmed this on 2026-10-08 (Q-DP1).
 
 ## 7. Server side
 
@@ -284,7 +293,12 @@ Only synthetic data is used. Real tournament reports are never sent to any provi
 **Secondary metric: the false-positive rate** is the share of the non-sensitive set (the classification evaluation set) that becomes `uncertain` or `blocked`, per category.
 
 - It is reported and tracked, with a target of at most 15% per category. It never outweighs a false negative.
-- Reducing false positives is allowed only by adding exact exception phrases (Appendix A.3) with fixtures. Weakening L2 or L3 is not allowed.
+- Reducing false positives is allowed only by adding a benign context to a registry entry, with evaluation cases (Appendix A.3). Weakening L2 or L3 is not allowed.
+
+**Registry evaluation (D11).** `__tests__/fixtures/privacy/context-expressions.ja.json` holds, for every entry in Appendix A.2, at least 3 cases that must be `blocked`, 3 that must be `clear`, and 3 that must be `uncertain` (entries without a benign context have none that are `clear`).
+
+- **Release requires every case to give its expected verdict.**
+- A sensitive case that comes out `clear` is a severity-1 false negative.
 
 ### 8.2 PII redaction (separate metric)
 
@@ -333,8 +347,8 @@ Only synthetic data is used. Real tournament reports are never sent to any provi
 
 ## 9. Open questions
 
-- **Q-DP1.** Applying the gate to Gemini means AI reasoning is not available for health, harassment and other sensitive incidents. They get "CAへ確認してください" and the local rule search. Is that acceptable? The design assumes yes, because it is the safe side.
-- **Q-DP2.** Please review Appendix A, especially the L3 doubtful vocabulary. It is broad on purpose, and its false-positive cost will be measured (§8.1). **抗議 and 苦情** in L3 will probably push game-result and draw over the 15% false-positive target, because players often protest results. Keep them (safer) or remove them (more AI help)?
+- **Q-DP1 (answered 2026-10-08).** Sensitive incidents are not sent to external AI services. They are handled locally by Decision Trees, the rule engine and fixed forms. Future on-device AI is not forbidden. Fair play stays unconditionally blocked. See D10.
+- **Q-DP2 (answered 2026-10-08).** The list may exist, but not as a word list. It is a registry of context-dependent expressions with context patterns and evaluation cases. Undecidable means local fallback. See D11 and Appendix A.2. 抗議 and 苦情 are now an entry (`protest`) with benign contexts, such as "裁定に抗議".
 
 ## Appendix A. Sensitive terms (for review)
 
@@ -345,8 +359,8 @@ How the terms are applied:
   - the same terms folded to hiragana, on the text folded to hiragana, to catch spelling variants.
 - A term marked *(unfolded only)* runs only on the NFKC text, to avoid false positives created by folding.
 - A.1 lists regexes that **block**.
-- A.2 lists bare terms that make a report **uncertain**, which also means local fallback.
-- A.3 lists the only exceptions to A.2. An exception applies only when the whole matched span lies inside one of these phrases.
+- A.2 is the registry of context-dependent expressions (L3). Each occurrence is `blocked`, `clear` or `uncertain` depending on its context.
+- A.3 says how false positives may be reduced.
 
 ### A.1 Known sensitive expressions (L2, `blocked`)
 
@@ -361,13 +375,47 @@ How the terms are applied:
 | Family or minors | `家庭の事情\|虐待\|保護者.{0,6}(トラブル\|抗議\|口論)` |
 | English (for mixed text; mostly-English text is already `uncertain` by L4) | `\b(sick\|ill\|injur\w*\|faint\w*\|collaps\w*\|bleed\w*\|vomit\w*\|ambulance\|medic\w*\|hospital\|harass\w*\|assault\w*\|hit\|punch\w*\|threat\w*\|police\|stol\w*\|theft\|relig\w*\|pray\w*\|abuse\w*)\b` |
 
-### A.2 Doubtful vocabulary (L3, `uncertain`)
+### A.2 Context-dependent expressions (L3; user decision Q-DP2, 2026-10-08)
 
-These terms each send the report to the local fallback, unless A.3 applies:
+**This is not a word allow/block list.**
 
-疑, うたが, 怪し, あやし, 不審, 通報, 吐, 気持ち, 顔色, 意識, ずる, イヤホン, トイレ, 戻らな, 様子がおかし, ぐったり, 倒れ, 叩, たたい, 殴, 蹴, 押しのけ, 突き飛ば, 具合, 痛, 血, 熱, 薬, 医, 病, 救, 障害, 障が, 泣, 怒鳴, 叫, 脅, 威圧, 保護者, 親, 家族, 子ども, 子供, 未成年, 小学生, 中学生, 性的, 性別, 宗, 祈, 盗, 失くし, 紛失, 警察, 警備, 弁護, 訴え, 抗議, 苦情
+- Each expression below is ambiguous on its own. It is managed as an entry in a registry (`lib/domain/privacy/context-expressions.ts`).
+- Each entry has:
+  - **triggers**: the expression and its spelling variants;
+  - **sensitive contexts**: patterns that include the surrounding words, and make the occurrence `blocked`;
+  - **benign contexts**: patterns that must cover the trigger occurrence **and** its surroundings, and make that occurrence `clear`;
+  - **evaluation cases**: at least 3 each for blocked, clear and uncertain, kept in `__tests__/fixtures/privacy/context-expressions.ja.json`.
+- **Every occurrence is judged separately:**
+  - a sensitive context makes it `blocked`;
+  - a benign context covering it makes it `clear`;
+  - **anything else makes it `uncertain`, which means local fallback.** It is never treated as safe.
+- The report's verdict is the most severe verdict of any occurrence and of the L2 expressions in A.1.
+- Matching uses the rule above: the NFKC text and the hiragana-folded text.
 
-These are deliberately **not** listed, because they occur in ordinary reports:
+| ID | Triggers | Sensitive context → `blocked` | Benign context → `clear` (must cover the occurrence) | Evaluation cases (blocked / clear / uncertain) |
+| --- | --- | --- | --- | --- |
+| `smartphone` | スマホ, スマートフォン, 携帯, 電話 | `(スマホ\|携帯).{0,10}(見て\|操作\|画面を\|使って\|調べ\|疑\|怪し)` (possible outside help), `(スマホ\|携帯).{0,6}(取られ\|盗ま\|なくなっ)` (theft) | `(スマホ\|携帯\|電話)(が\|の)?(音\|着信音\|アラーム)?.{0,3}(鳴っ\|鳴り)`, `(スマホ\|携帯)を?(バッグ\|鞄\|指定の場所)に(入れ\|しまっ\|置い)`, `(スマホ\|携帯)の電源(を切\|が切れ\|オフ)` | blocked: 「白がスマホを見ていた」「対局中にスマホで調べていた」「スマホを取られた」 / clear: 「黒のスマホが鳴った」「スマホをバッグに入れていた」「スマホの電源を切っていた」 / uncertain: 「スマホを持っていた」「スマホについて相手が抗議」「スマホがポケットにあった」 |
+| `suspicion` | 疑, うたが, 怪し, あやし, 不審 | the A.1 fair-play expressions; `(疑\|怪し\|不審).{0,10}(行動\|動き\|離席\|様子\|人物)` | `(違法手\|反則\|イリーガル\|時間切れ\|フラッグ\|ドロー\|同一局面\|50手\|75手\|タッチ\|触れた駒)(の\|が)(疑\|うたが)` | blocked: 「エンジン使用の疑い」「怪しい行動をしていた」「不審な人物が近くにいた」 / clear: 「違法手の疑いがある」「同一局面の疑いでクレーム」「時間切れの疑い」 / uncertain: 「相手が疑っている」「怪しいと言われた」「疑いをかけられた」 |
+| `fell` | 倒れ, 倒し, たおれ | `(人\|選手\|プレーヤー\|観客\|子ども\|子供\|方\|白\|黒)(が\|は)?.{0,4}倒れ` (A.1) | `(駒\|キング\|クイーン\|ルーク\|ビショップ\|ナイト\|ポーン\|時計\|盤)(が\|を)(倒れ\|倒し\|たおれ\|たおし)`, `キングを倒して投了` | blocked: 「選手が倒れた」「観客が倒れている」「白が椅子から倒れた」 / clear: 「駒が倒れた」「キングを倒して投了」「時計が倒れた」 / uncertain: 「倒れそうになった」「倒れていた」「急に倒れた」 |
+| `medicine` | 薬, くすり | `服薬\|薬を(飲\|の)\|薬の(服用\|副作用)` (A.1), `(薬\|くすり).{0,6}(必要\|持って\|時間)` | `薬指` | blocked: 「薬を飲む時間だと言った」「薬の副作用で眠い」「服薬のため離席」「薬を持っていた」 / clear: 「薬指で駒を動かした」「薬指が触れた」「左手の薬指で時計を押した」 / uncertain: 「薬と書かれた袋があった」「くすりについて質問された」「薬局へ行った」 |
+| `sign` | サイン | `サインを?(送\|出)\|(手\|目\|指)で(サイン\|合図)` (A.1, signals to a player) | `(結果用紙\|棋譜\|スコアシート\|記録用紙)?.{0,8}サイン(漏れ\|忘れ\|がない\|していない\|をしていない\|した\|済み)`, `両者(が\|の)サイン` | blocked: 「観客がサインを送っていた」「仲間が手でサインを出した」「目でサインしていた」 / clear: 「サイン漏れ」「棋譜にサインしていない」「両者のサインがない」 / uncertain: 「サインについてもめた」「サインを求められた」「サインがおかしい」 |
+| `outside` | 外部, 外から, 外の人 | `外部.{0,4}(情報\|助言\|援助\|機器\|と連絡)` (A.1) | `外(部)?から(の)?(騒音\|音\|声\|雑音)` | blocked: 「外部から助言を受けていた」「外部と連絡を取っていた」「外部の情報を見た」 / clear: 「外部からの騒音で集中できない」「外部から雑音が聞こえた」「外からの声がうるさい」 / uncertain: 「外部の人が近くにいた」「外の人と話した」「外部に出た」 |
+| `left-seat` | 離席, 席を外, 席を離 | `(何度も\|頻繁\|繰り返し\|長時間\|たびたび\|しょっちゅう).{0,8}(離席\|席を外\|席を離\|トイレ)`, `(離席\|席を外).{0,12}(疑\|スマホ\|携帯\|戻らな)` (§23: unusual absences) | `(離席(し)?\|席を外し\|席を離れ)(た\|ていた\|中)(間\|ため\|ので\|に)?.{0,10}(時計\|手番\|時間\|フラッグ\|相手が(指\|手を))` | blocked: 「何度も離席していた」「離席してスマホを触っていた」「離席後なかなか戻らない」 / clear: 「離席中に時計が0になった」「離席していた間に相手が指した」「席を離れたので時計を止めた」 / uncertain: 「白が離席した」「離席を注意した」「席を外していた」 |
+| `toilet` | トイレ, 手洗い | `(何度も\|頻繁\|繰り返し\|長時間).{0,6}トイレ`, `トイレ.{0,10}(戻らな\|疑\|スマホ)` | (none: always `uncertain` unless sensitive) | blocked: 「何度もトイレに行く」「トイレから戻らない」「トイレでスマホ」 / clear: — / uncertain: 「トイレに行った」「トイレの場所を聞かれた」「手洗いに行った」 |
+| `hit` | 叩, たたい, 殴, 蹴 | the A.1 violence expressions | `時計を(叩\|たたい)`, `(相手の)?時計を強く(叩\|押)` | blocked: 「相手を叩いた」「顔を殴った」「足を蹴った」 / clear: 「時計を叩いた」「相手の時計を叩いた」「時計を強く叩いた」 / uncertain: 「机を叩いた」「手を叩いた」「叩くような音」 |
+| `condition` | 具合, 調子 | `体の具合\|(気分\|体\|お腹\|頭)(が\|の)?.{0,2}(悪\|わる\|痛)` (A.1) | `(時計\|盤\|駒\|照明\|椅子\|机)の(具合\|調子)` | blocked: 「体の具合が悪い」「気分が悪いと言う」「お腹が痛い」 / clear: 「時計の具合が悪い」「盤の調子がおかしい」「照明の具合」 / uncertain: 「具合が悪そう」「調子が悪い」「具合を聞いた」 |
+| `heat` | 熱 | `発熱\|熱が(ある\|出)` (A.1) | `熱戦`, `熱心` | blocked: 「熱がある」「発熱している」「熱が出た」 / clear: 「熱戦の末に時間切れ」「熱心に観戦」「熱戦が続いた」 / uncertain: 「熱っぽい」「熱い」「熱中症」 |
+| `protest` | 抗議, 苦情, 訴え, 異議 | `保護者.{0,6}(抗議\|苦情\|トラブル)`, `(差別\|ハラスメント\|暴言).{0,8}(抗議\|苦情\|訴え)` | `(裁定\|判定\|結果\|クレーム\|時計\|ペアリング\|違法手)(に\|へ)(の)?(抗議\|異議\|苦情)` | blocked: 「保護者が抗議してきた」「暴言について訴えがあった」「保護者から苦情」 / clear: 「裁定に抗議した」「結果に異議を申し立てた」「ペアリングに苦情」 / uncertain: 「相手が抗議した」「苦情があった」「訴えを聞いた」 |
+| `minor` | 子ども, 子供, こども, 未成年, 小学生, 中学生, 親, 保護者 | `虐待\|家庭の事情\|保護者.{0,6}(トラブル\|抗議\|口論)` (A.1) | `親指`, `(子ども\|子供\|小学生\|中学生)(の部\|大会\|クラス\|の対局)` | blocked: 「保護者とトラブル」「家庭の事情で」「虐待の話」 / clear: 「親指で駒を押さえた」「子どもの部の対局」「小学生大会」 / uncertain: 「子どもが泣いている」「保護者が呼びに来た」「親が来た」 |
+
+**Other doubtful terms with no benign context.** These are always `uncertain`, unless an A.1 expression makes them `blocked`:
+
+吐, 気持ち, 顔色, 意識, ずる, イヤホン, 戻らな, 様子がおかし, ぐったり, 押しのけ, 突き飛ば, 痛, 血, 医, 病, 救, 障害, 障が, 泣, 怒鳴, 叫, 脅, 威圧, 家族, 性的, 性別, 宗, 祈, 盗, 失くし, 紛失, 警察, 警備, 弁護, 通報
+
+- Each of these is also a registry entry, with an empty benign context and its own evaluation cases.
+- A benign context is added only through review, with evaluation cases.
+
+These are deliberately **not** triggers, because they occur in ordinary reports and say nothing sensitive:
 
 - `押した` ("時計を押した")
 - `性` ("可能性")
@@ -375,18 +423,18 @@ These are deliberately **not** listed, because they occur in ordinary reports:
 - `たた` ("ふたたび")
 - `いた` ("置いた")
 
-### A.3 Exceptions (the only way to reduce A.2 false positives)
+### A.3 How false positives may be reduced
 
-An exception applies only when the whole matched span lies inside one of these phrases:
-
-駒が倒れ, 駒を倒し, キングを倒し, 時計を叩, 時計をたたい, 時計の具合, 盤の具合, 違法手の疑い, 反則の疑い, 熱戦, 薬指, 親指
+- **Only by adding a benign context to an entry.** It must be a pattern that includes the surrounding words, together with at least 3 clear and 3 uncertain evaluation cases.
+- Removing a trigger, or weakening an L2 expression, is not allowed.
+- Every change must keep the sensitive evaluation set at **0 false negatives** (§8.1).
 
 ### A.4 Regression phrases
 
-These must be `clear`:
+These must be `clear`. They are taken from the benign contexts above:
 
-駒が倒れた, 時計を叩いた, 相手の時計を叩いた, 時計の具合が悪い, 違法手の疑いがある, サイン漏れ, 熱戦の末に時間切れ, 薬指で駒を動かした, スマホが2台鳴った, 手を指さずに時計を押した, 2回目の違法手で警告, メイトの可能性がある, ふたたび同じ局面
+駒が倒れた, 時計を叩いた, 相手の時計を叩いた, 時計の具合が悪い, 違法手の疑いがある, サイン漏れ, 熱戦の末に時間切れ, 薬指で駒を動かした, スマホが鳴った, 手を指さずに時計を押した, 2回目の違法手で警告, メイトの可能性がある, ふたたび同じ局面, 離席中に時計が0になった, 裁定に抗議した
 
-These are expected to be `uncertain`. They are listed so that the review sees the cost of putting false negatives first (D9):
+These must be `uncertain`, which means local fallback. They are ambiguous, and not safe:
 
-白が手を叩いて時計を押した, 相手が抗議した, 子どもの大会で…
+白が離席した, スマホを持っていた, 相手が抗議した, 手を叩いた, 倒れそうになった, 子どもが泣いている

@@ -1,6 +1,6 @@
 # ADR-012: Sensitive Gate and PII Redaction for Every External AI Send
 
-**Status:** Accepted (the direction). The user decided it on 2026-10-08. Q-DP1 and Q-DP2 are open. Not implemented.
+**Status:** Accepted. The user decided it on 2026-10-08, and answered Q-DP1 and Q-DP2 the same day. Not implemented.
 
 **Date:** 2026-10-08
 
@@ -39,7 +39,7 @@ Today the incident description, the article text and search queries go to Gemini
    - L0: the fair-play category, with no condition;
    - L1: explicit flags and the arbiter's "外部AIに送らない" switch;
    - L2: contextual regexes;
-   - L3: broad doubtful vocabulary with exact-phrase exceptions;
+   - L3: a **registry of context-dependent expressions** (スマホ, 疑い, 倒れた, 薬, サイン, 外部, 離席 …). Each has context patterns and evaluation cases, and it is not a word list. Undecidable occurrences go to the local fallback (Q-DP2);
    - L4: unanalyzable input;
    - L5: the server re-check.
 3. **PII redaction is a separate module**, with a fixed rule order and protected `〈…〉` placeholders, so it is idempotent. It uses known identifiers from `PlayerProfile`, `Game.white`/`Game.black` and `Tournament`. The board and round numbers are never sent: the case-by-case check found no decision that needs them.
@@ -66,7 +66,7 @@ Today the incident description, the article text and search queries go to Gemini
 
 **Negative and trade-offs**
 
-- Sensitive incidents (health, harassment and so on) get no AI reasoning: they get "CAへ確認してください" plus the local rule search (Q-DP1).
+- Sensitive incidents (health, harassment and so on) are **not sent to external AI services**. They are handled by the local Decision Trees, the rule engine and fixed forms, with "CAへ確認してください" where no local tree decides (Q-DP1). Future on-device AI is not forbidden, and would need its own ADR.
 - The broad L3 vocabulary causes false positives that cost AI help.
 - Changing the reasoning payload and re-embedding tournament regulations is extra work.
 - Unregistered names without an honorific, and romaji spellings, remain residual risks. They are measured and mitigated, not eliminated.

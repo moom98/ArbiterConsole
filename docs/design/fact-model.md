@@ -306,20 +306,37 @@ interface JevCalibration {
   - A **fact absent** from `presence` is never `present`.
 - So before evaluation, or after a model change, nothing is trusted. The system asks everything.
 
-### 5.2 How the eval script chooses a threshold
+### 5.2 How the eval script chooses a threshold (user decision Q-F2, 2026-10-08)
 
-The script is `scripts/eval-classifier.mjs`, extended. It uses synthetic data only, de-identified exactly as in production.
+**The main metric is the precision of "present".** A false "present" (a fact that is not in the report but is judged present) is the dangerous error, because it could make the arbiter skip a check. Overall accuracy is **not** a success criterion. A lower recall, which means more questions, is accepted.
 
-- **Presence.** The dangerous error is a false "present": the arbiter would see the question lower on the list. So for each fact the script chooses the **lowest** threshold `t` that meets **both** of these on the tuning set:
-  - precision(present) ≥ 0.97, with a Wilson 95% lower bound ≥ 0.90;
-  - at least **60** present predictions at `t` in the tuning set. A Wilson lower bound of 0.90 at precision 0.97 needs roughly this many; 20 can never pass.
-- If no `t` meets them, the fact gets no threshold and is always missing.
-- The held-out set then confirms the precision. A fact that fails is removed.
-- **Category.** It also tunes on the tuning set and confirms on the held-out set. `medium` is the lowest `t` with tuning accuracy ≥ 0.90 among answers with `p ≥ t`, and the held-out set must confirm ≥ 0.90. `prefill` is the same with 0.80. If either fails on the held-out set, the model is not adopted (jev-classifier-design §9).
-- **Presence dataset.** It is separate from the classification set: `__tests__/fixtures/presence-eval.ja.json`, synthetic and de-identified.
-  - For each presence-checkable fact: at least 60 reports that state it explicitly, and at least 60 that do not. The second group must include reports where the fact could only be **inferred**, since inference must count as not present.
-  - A fact without enough data simply gets no threshold, and is always missing. This is safe: it only means the arbiter is asked.
-- The calibration file records the dataset version and the metrics. A change to the dataset, the model or the de-identification means **running the script again**.
+**Targets, per fact:**
+
+| Fact level | Present precision |
+| --- | --- |
+| blocking (it directly decides the ruling) | **≥ 0.995** |
+| conditional and optional | **≥ 0.99** |
+
+**How a threshold is chosen.** The script is `scripts/eval-classifier.mjs`, extended. It uses synthetic data only, de-identified exactly as in production.
+
+1. **Tuning set.** For each fact, choose the lowest `t` where the "present" predictions with `p ≥ t` reach the fact's precision target. There must also be enough of them to show it: the Wilson 95% lower bound must be at least **0.98** for blocking facts and at least **0.97** for the others.
+   - With no errors, that needs about **190 present predictions for a blocking fact** and about **125 for the others**.
+   - One error needs more.
+2. **Held-out set.** The same targets must hold. A fact that fails gets **no threshold**.
+3. **No threshold means the fact is always "missing"**, so the arbiter is asked. This is safe, and it is the normal result for facts with too little data.
+4. **The borderline range.** Every `p` below a fact's threshold counts as missing. There is no "probably present".
+5. **Reported but not targeted:** recall, the re-ask rate per fact, and the category metrics.
+
+**Presence dataset.** `__tests__/fixtures/presence-eval.ja.json` is synthetic and de-identified. For each presence-checkable fact it holds:
+
+- at least **250** reports that state the fact explicitly (blocking facts) or **160** (others);
+- at least as many reports that do **not** state it. These must include reports where the fact could only be inferred, and reports that state a near-miss, for example "clock pressed by the opponent" against `im.clock-pressed`.
+- Facts are added to the dataset in priority order (blocking first). A fact without data stays "always missing".
+
+**Category thresholds** (`medium` and `prefill`) are unchanged. They use accuracy, because a wrong category is corrected by the arbiter at the first screen: they tune on the tuning set and confirm on the held-out set.
+
+- The calibration file records the dataset version, the per-fact precision and its Wilson bound, the support and the recall.
+- A change to the dataset, the model or the de-identification means **running the script again**.
 
 ## 6. Code layout
 
@@ -370,4 +387,4 @@ The script is `scripts/eval-classifier.mjs`, extended. It uses synthetic data on
 ## 8. Open questions
 
 - **Q-F1** (§4.3): should Jev later suggest values, with confirmation by the arbiter? Not planned.
-- **Q-F2:** the 0.97 precision target (§5.2). It is a draft and the user may change it.
+- **Q-F2 (answered 2026-10-08):** the present precision is the main metric: ≥ 0.99, and ≥ 0.995 for blocking facts. Thresholds are per fact, and borderline answers count as missing (§5.2).

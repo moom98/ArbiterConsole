@@ -4,6 +4,8 @@
 
 Accepted (2026-10-06)
 
+**Partially superseded by [ADR-010](./ADR-010-gemini-embeddings-for-semantic-search.md) (2026-10-08).** The self-hosted embedding model (Transformers.js, `public/models/`, `public/ort/`) was replaced by Gemini Embedding through `/api/llm/embed`. Japanese tokenization, keyword search and the `RuleSource` handling below still apply.
+
 Supersedes the embedding model choice in `docs/design/ai-rag-design.md` §4.2 and
 the runtime model loading in ADR-001 (Transformers.js section).
 

@@ -157,7 +157,8 @@ describe("hybridSearch", () => {
   it("falls back to vector results when fulltext search fails", async () => {
     const response = await hybridSearch(
       "illegal",
-      { tournamentId: undefined },
+      // フォールバックの確認のため、類似度の下限は固定する（既定値はモデルごとに調整する）
+      { tournamentId: undefined, vectorMinSimilarity: 0.5 },
       deps({ fulltext: vi.fn().mockRejectedValue(new Error("index broken")) })
     );
     expect(response.failures.fulltext).toBe("index broken");

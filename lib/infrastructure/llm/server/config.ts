@@ -14,6 +14,12 @@ export const DEFAULT_CLASSIFIER_MODEL = "gemini-flash-lite-latest";
 export const DEFAULT_RATE_LIMIT_PER_MINUTE = 10;
 /** 既定の1日あたりの上限（プロセス全体、UTC 日付で集計） */
 export const DEFAULT_DAILY_REQUEST_LIMIT = 500;
+/**
+ * 埋め込みの既定値（ADR-010）。PDF 取り込みでは 16 件ずつ連続して送るため、推論・分類とは別の枠にする。
+ * 1回あたりの費用は小さい（Gemini Embedding は入力トークン課金のみ）。
+ */
+export const DEFAULT_EMBED_RATE_LIMIT_PER_MINUTE = 60;
+export const DEFAULT_DAILY_EMBED_REQUEST_LIMIT = 1_000;
 
 /**
  * 思考（thinking）の量。"off" は設定を送らない（モデルの既定）。
@@ -38,9 +44,11 @@ export interface LlmServerConfig {
   requireAccessToken: boolean;
   /** X-Forwarded-For / X-Real-IP を信頼する（信頼できるリバースプロキシの背後のみ） */
   trustProxy: boolean;
-  rateLimitPerMinute: { reason: number; classify: number };
-  /** プロセス全体の1日あたりの上限（0 は無制限） */
+  rateLimitPerMinute: { reason: number; classify: number; embed: number };
+  /** プロセス全体の1日あたりの上限（推論・分類。0 は無制限） */
   dailyRequestLimit: number;
+  /** プロセス全体の1日あたりの埋め込みリクエストの上限（0 は無制限。ADR-010） */
+  dailyEmbedRequestLimit: number;
   thinkingLevel: LlmThinkingLevel;
   /** 明示的な思考トークン数（GEMINI_THINKING_BUDGET。設定時は thinkingLevel より優先） */
   thinkingBudget?: number;
@@ -139,10 +147,21 @@ export function readLlmConfig(
           DEFAULT_RATE_LIMIT_PER_MINUTE
         )
       ),
+      embed: Math.max(
+        1,
+        nonNegativeInt(
+          env.LLM_RATE_LIMIT_EMBED_PER_MINUTE,
+          DEFAULT_EMBED_RATE_LIMIT_PER_MINUTE
+        )
+      ),
     },
     dailyRequestLimit: nonNegativeInt(
       env.LLM_DAILY_REQUEST_LIMIT,
       DEFAULT_DAILY_REQUEST_LIMIT
+    ),
+    dailyEmbedRequestLimit: nonNegativeInt(
+      env.LLM_DAILY_EMBED_REQUEST_LIMIT,
+      DEFAULT_DAILY_EMBED_REQUEST_LIMIT
     ),
     thinkingLevel: thinking(env.GEMINI_THINKING_LEVEL),
     // 未設定・不正な値は undefined（-1 は「不正」を表す番兵）

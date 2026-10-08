@@ -14,6 +14,7 @@ import {
   type GenerateEmbeddingsOptions,
 } from "@/lib/infrastructure/embeddings/generator";
 import type { PDFExtractionResult } from "@/lib/infrastructure/pdf/extractor";
+import { embeddingTextForRule } from "./embedding-backfill";
 import {
   findActiveSourcesInScope,
   getImportScopeInfo,
@@ -208,18 +209,15 @@ export async function ingestRulesFromPDF(
   let embeddings: Embedding[] = [];
   let embeddingError: string | undefined;
   try {
-    const vectors = await deps.embed(
-      rules.map((r) => `${r.article} ${r.title}\n${r.content}`),
-      {
-        onProgress: (done, total) =>
-          onProgress?.({
-            stage: "generating-embeddings",
-            current: done,
-            total,
-            message: `Embedding生成中... (${done}/${total})`,
-          }),
-      }
-    );
+    const vectors = await deps.embed(rules.map(embeddingTextForRule), {
+      onProgress: (done, total) =>
+        onProgress?.({
+          stage: "generating-embeddings",
+          current: done,
+          total,
+          message: `意味検索用データを作成中... (${done}/${total})`,
+        }),
+    });
     embeddings = vectors.map((vector, i) => ({
       id: crypto.randomUUID(),
       ruleId: rules[i].id,

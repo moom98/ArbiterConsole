@@ -1,110 +1,151 @@
 /**
- * ブラウザ内 Embedding 生成（Transformers.js v2）
+ * 意味検索の埋め込み（ブラウザ側）。ADR-010。
  *
- * オフライン要件（§31）のため、モデル・WASMは同一オリジンの /public 配下から
- * 読み込む（scripts/fetch-model-assets.mjs, scripts/copy-runtime-assets.mjs）。
- * HF Hub / jsDelivr には実行時にアクセスしない。詳細は ADR-003。
+ * Gemini Embedding をサーバールート /api/llm/embed 経由で呼び出す（API キーはサーバーのみ）。
+ * 端末内のモデル（Transformers.js）は使わない（ADR-003 の自前配信モデルを置き換え）。
+ * - 条文（document）: PDF 取り込み時・「意味検索用データを作成」時に 16 件ずつ送る
+ * - 検索語（query）: 検索のたびに1件送る。フェアプレーに触れる検索語は送らない（§23）
+ * オフライン・トークン未設定・失敗時は呼び出し側がキーワード検索のみで継続する。
  */
+import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
+import {
+  EMBEDDING_MODEL,
+  LLM_LIMITS,
+  type EmbeddingTaskType,
+  type LlmApiErrorCode,
+} from "@/lib/infrastructure/llm/contract";
+import {
+  callLlmApi,
+  type LlmApiClientDeps,
+} from "@/lib/infrastructure/llm/llm-api-client";
 
-/** 日本語・英語の両方に対応した多言語モデル（384次元） */
-export const EMBEDDING_MODEL_ID =
-  "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
+/** Embedding.model に保存する識別子（モデルと次元の組）。これと一致するベクトルのみ比較する */
+export const EMBEDDING_MODEL_ID: string = EMBEDDING_MODEL.key;
 
-/** モデルファイルの配置先（public/models/<model id>/...） */
-export const LOCAL_MODEL_PATH = "/models/";
-/** onnxruntime-web の .wasm 配置先（public/ort/） */
-export const ORT_WASM_PATH = "/ort/";
-
-interface FeatureExtractionOutput {
-  data: Float32Array;
-  dims: number[];
-  tolist(): number[][] | number[];
+/** 埋め込みを取得できなかった（オフライン・未認証・上限・上流のエラー等） */
+export class EmbeddingUnavailableError extends Error {
+  constructor(
+    readonly code: LlmApiErrorCode | "fair-play" | "invalid-response",
+    message: string
+  ) {
+    super(message);
+    this.name = "EmbeddingUnavailableError";
+  }
 }
 
-type FeatureExtractor = (
-  texts: string | string[],
-  options: { pooling: "mean"; normalize: boolean }
-) => Promise<FeatureExtractionOutput>;
-
-let modelPromise: Promise<FeatureExtractor> | null = null;
-
-/**
- * Embedding modelの初期化（読み込み中のPromiseを共有し二重ロードを防ぐ）
- */
-export function initEmbeddingModel(): Promise<FeatureExtractor> {
-  if (!modelPromise) {
-    modelPromise = loadModel().catch((error) => {
-      // 失敗時は次回再試行できるようにする
-      modelPromise = null;
-      throw error;
-    });
-  }
-  return modelPromise;
-}
-
-async function loadModel(): Promise<FeatureExtractor> {
-  if (typeof window === "undefined") {
-    throw new Error("Embedding generation is only available in the browser");
-  }
-
-  // SSR時に評価されないよう動的import
-  const { pipeline, env } = await import("@xenova/transformers");
-
-  env.allowLocalModels = true;
-  env.allowRemoteModels = false;
-  env.localModelPath = LOCAL_MODEL_PATH;
-  // Service Worker (next-pwa) の CacheFirst でキャッシュするため、二重保存を避ける
-  env.useBrowserCache = false;
-  if (env.backends.onnx.wasm) {
-    env.backends.onnx.wasm.wasmPaths = ORT_WASM_PATH;
-  }
-
-  const extractor = await pipeline("feature-extraction", EMBEDDING_MODEL_ID, {
-    quantized: true,
-  });
-  return extractor as unknown as FeatureExtractor;
-}
-
-/**
- * テキストからembedding vectorを生成
- */
-export async function generateEmbedding(text: string): Promise<number[]> {
-  const [embedding] = await generateEmbeddings([text]);
-  return embedding;
+export interface EmbeddingClientDeps extends LlmApiClientDeps {
+  call?: typeof callLlmApi;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export interface GenerateEmbeddingsOptions {
-  batchSize?: number;
   onProgress?: (done: number, total: number) => void;
+  deps?: EmbeddingClientDeps;
 }
 
-const yieldToEventLoop = () =>
-  new Promise<void>((resolve) => setTimeout(resolve, 0));
+/** 一時的な失敗（レート制限・混雑・タイムアウト・通信断）。条文の取り込みでは待って再試行する */
+const RETRYABLE: ReadonlySet<LlmApiErrorCode> = new Set<LlmApiErrorCode>([
+  "rate-limited",
+  "upstream-unavailable",
+  "upstream-timeout",
+  "network-error",
+]);
+/** 条文の取り込みでの再試行の待ち時間（無料枠の1分あたりの上限に備えて長めに待つ） */
+const DOCUMENT_RETRY_DELAYS_MS = [5_000, 15_000, 30_000, 60_000];
+
+const defaultSleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** 送信用に整える（前後の空白を除き、モデルの入力上限に収まるよう切り詰める） */
+export function prepareEmbeddingText(text: string): string {
+  return text.trim().slice(0, LLM_LIMITS.maxEmbedTextChars);
+}
+
+function isVectorList(v: unknown, count: number): v is number[][] {
+  return (
+    Array.isArray(v) &&
+    v.length === count &&
+    v.every(
+      (row) =>
+        Array.isArray(row) &&
+        row.length === EMBEDDING_MODEL.dimensions &&
+        row.every((x) => typeof x === "number" && Number.isFinite(x))
+    )
+  );
+}
+
+async function embedBatch(
+  taskType: EmbeddingTaskType,
+  texts: string[],
+  retryDelaysMs: readonly number[],
+  deps: EmbeddingClientDeps
+): Promise<number[][]> {
+  const call = deps.call ?? callLlmApi;
+  const sleep = deps.sleep ?? defaultSleep;
+  for (let attempt = 0; ; attempt++) {
+    const res = await call("embed", { taskType, texts }, deps);
+    if (res.ok) {
+      const vectors = (res.result as { vectors?: unknown } | null)?.vectors;
+      if (
+        res.model !== EMBEDDING_MODEL.key ||
+        !isVectorList(vectors, texts.length)
+      )
+        throw new EmbeddingUnavailableError(
+          "invalid-response",
+          "意味検索用データの応答が不正です"
+        );
+      return vectors;
+    }
+    if (RETRYABLE.has(res.error.code) && attempt < retryDelaysMs.length) {
+      await sleep(retryDelaysMs[attempt]);
+      continue;
+    }
+    throw new EmbeddingUnavailableError(res.error.code, res.error.message);
+  }
+}
 
 /**
- * 複数テキストのembeddingsをバッチ単位で生成
- * バッチ間でイベントループに制御を返し、UIのフリーズを避ける。
+ * 条文（document）の埋め込みを 16 件ずつ生成する。一時的な失敗は待って再試行する。
+ * いずれかのバッチが失敗した場合は例外（呼び出し側は条文を保存し、後で作成できる）。
  */
 export async function generateEmbeddings(
   texts: readonly string[],
   options: GenerateEmbeddingsOptions = {}
 ): Promise<number[][]> {
-  const { batchSize = 8, onProgress } = options;
-  const extractor = await initEmbeddingModel();
+  const { onProgress, deps = {} } = options;
   const embeddings: number[][] = [];
-
-  for (let start = 0; start < texts.length; start += batchSize) {
-    const batch = texts.slice(start, start + batchSize);
-    const output = await extractor(batch, { pooling: "mean", normalize: true });
-    const [rows, dim] = output.dims;
-    for (let i = 0; i < rows; i++) {
-      embeddings.push(Array.from(output.data.subarray(i * dim, (i + 1) * dim)));
-    }
+  for (let start = 0; start < texts.length; start += LLM_LIMITS.maxEmbedTexts) {
+    const batch = texts
+      .slice(start, start + LLM_LIMITS.maxEmbedTexts)
+      .map(prepareEmbeddingText)
+      // 空の条文も件数を合わせるために送る（サーバーは空文字を受け付けないため記号を入れる）
+      .map((t) => (t === "" ? "-" : t));
+    embeddings.push(
+      ...(await embedBatch("document", batch, DOCUMENT_RETRY_DELAYS_MS, deps))
+    );
     onProgress?.(embeddings.length, texts.length);
-    await yieldToEventLoop();
   }
-
   return embeddings;
+}
+
+/**
+ * 検索語（query）の埋め込み。検索の応答を待たせないよう再試行しない。
+ * フェアプレーに触れる検索語は送らない（キーワード検索のみになる）。
+ */
+export async function generateQueryEmbedding(
+  query: string,
+  deps: EmbeddingClientDeps = {}
+): Promise<number[]> {
+  const text = prepareEmbeddingText(query);
+  if (!text)
+    throw new EmbeddingUnavailableError("invalid-request", "検索語が空です");
+  if (mentionsFairPlay(text))
+    throw new EmbeddingUnavailableError(
+      "fair-play",
+      "フェアプレー関連の検索語はAIへ送信しません（キーワード検索のみ）"
+    );
+  const [vector] = await embedBatch("query", [text], [], deps);
+  return vector;
 }
 
 /**
@@ -131,11 +172,4 @@ export function cosineSimilarity(vecA: number[], vecB: number[]): number {
   }
 
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-}
-
-/**
- * Embedding modelのクリーンアップ
- */
-export function cleanupEmbeddingModel(): void {
-  modelPromise = null;
 }

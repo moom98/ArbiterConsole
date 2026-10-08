@@ -433,8 +433,9 @@ describe("readLlmConfig", () => {
       accessToken: undefined,
       requireAccessToken: false,
       trustProxy: false,
-      rateLimitPerMinute: { reason: 10, classify: 10 },
+      rateLimitPerMinute: { reason: 10, classify: 10, embed: 60 },
       dailyRequestLimit: 500,
+      dailyEmbedRequestLimit: 1000,
       thinkingLevel: "low",
       thinkingBudget: undefined,
     });

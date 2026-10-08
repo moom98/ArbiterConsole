@@ -175,7 +175,7 @@ export default function SettingsPage() {
         result.embeddingError
           ? {
               kind: "warning",
-              text: `${result.ruleCount}件の条文を登録しました。意味検索用モデルを読み込めなかったため、キーワード検索のみ利用できます（${result.embeddingError}）`,
+              text: `${result.ruleCount}件の条文を登録しました。意味検索用データを作成できなかったため、現在はキーワード検索のみ利用できます（${result.embeddingError}）。オンラインで「意味検索用データを作成」から作成できます`,
             }
           : {
               kind: "success",
@@ -189,6 +189,48 @@ export default function SettingsPage() {
       setNotice({
         kind: "error",
         text: `インポートに失敗しました: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    } finally {
+      setProgress(null);
+      importingRef.current = false;
+      setImporting(false);
+    }
+  };
+
+  // 取り込み時に作成できなかった意味検索用データを後から作成する（ADR-010）
+  const handleBackfill = async () => {
+    if (importingRef.current) return;
+    importingRef.current = true;
+    setImporting(true);
+    setNotice(null);
+    setConfirmDeleteId(null);
+    try {
+      const { generateMissingEmbeddings } =
+        await import("@/lib/application/embedding-backfill");
+      const result = await generateMissingEmbeddings((done, total) =>
+        setProgress({
+          stage: "generating-embeddings",
+          current: done,
+          total,
+          message: `意味検索用データを作成中... (${done}/${total})`,
+        })
+      );
+      setNotice(
+        result.error
+          ? {
+              kind: "warning",
+              text: `${result.total}件中${result.created}件を作成しました。残りは作成できませんでした（${result.error}）。時間をおいて再度お試しください`,
+            }
+          : {
+              kind: "success",
+              text: `意味検索用データを${result.created}件作成しました`,
+            }
+      );
+      await loadStats();
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text: `意味検索用データの作成に失敗しました: ${error instanceof Error ? error.message : String(error)}`,
       });
     } finally {
       setProgress(null);
@@ -440,6 +482,23 @@ export default function SettingsPage() {
                 </button>
               </div>
             </form>
+          )}
+
+          {stats && stats.missingEmbeddingCount > 0 && (
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm">
+              <p className="text-yellow-900">
+                意味検索用データが未作成の条文が{stats.missingEmbeddingCount}
+                件あります（キーワード検索は利用できます）。作成にはオンラインとAI機能のアクセストークンが必要です。
+              </p>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleBackfill()}
+                className="mt-2 w-full min-h-12 px-4 bg-blue-600 text-white rounded-lg font-semibold disabled:opacity-50"
+              >
+                意味検索用データを作成
+              </button>
+            </div>
           )}
 
           {stats && stats.sources.length > 0 && (

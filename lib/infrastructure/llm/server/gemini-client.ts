@@ -1,6 +1,10 @@
 import { FinishReason, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import type { ThinkingSetting } from "./config";
-import type { GenerateJsonFn } from "./generate";
+import {
+  InvalidEmbeddingOutput,
+  type EmbedTextsFn,
+  type GenerateJsonFn,
+} from "./generate";
 
 const THINKING_LEVELS: Record<
   Extract<ThinkingSetting, { mode: "level" }>["level"],
@@ -71,4 +75,35 @@ export const geminiGenerateJson: GenerateJsonFn = async (req) => {
     blocked,
     truncated: finishReason === FinishReason.MAX_TOKENS,
   };
+};
+
+const TASK_TYPES: Record<"document" | "query", string> = {
+  document: "RETRIEVAL_DOCUMENT",
+  query: "RETRIEVAL_QUERY",
+};
+
+/** Gemini Embedding による EmbedTextsFn の実装（ADR-010）。件数・次元が合わない応答はエラー */
+export const geminiEmbedTexts: EmbedTextsFn = async (req) => {
+  const response = await clientFor(req.apiKey).models.embedContent({
+    model: req.model,
+    contents: req.texts,
+    config: {
+      taskType: TASK_TYPES[req.taskType],
+      outputDimensionality: req.dimensions,
+      abortSignal: req.signal,
+      httpOptions: { timeout: req.timeoutMs, retryOptions: { attempts: 1 } },
+    },
+  });
+  const vectors = (response.embeddings ?? []).map((e) => e.values ?? []);
+  if (
+    vectors.length !== req.texts.length ||
+    vectors.some(
+      (v) =>
+        v.length !== req.dimensions ||
+        v.some((x) => typeof x !== "number" || !Number.isFinite(x))
+    )
+  ) {
+    throw new InvalidEmbeddingOutput();
+  }
+  return vectors;
 };

@@ -1,10 +1,12 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import {
+  EMBEDDING_MODEL,
   LLM_ACCESS_TOKEN_HEADER,
   LLM_LIMITS,
   type LlmApiErrorCode,
   type LlmApiKind,
   type LlmApiResponse,
+  type LlmGenerateKind,
 } from "../contract";
 import { readLlmConfig, resolveThinking, type LlmServerConfig } from "./config";
 import {
@@ -12,6 +14,8 @@ import {
   UpstreamError,
   withRetry,
   withTimeout,
+  InvalidEmbeddingOutput,
+  type EmbedTextsFn,
   type GenerateJsonFn,
   type RetryOptions,
 } from "./generate";
@@ -31,6 +35,7 @@ import {
 } from "./rate-limiter";
 import {
   validateClassificationRequest,
+  validateEmbedRequest,
   validateReasoningRequest,
 } from "./request-validation";
 
@@ -45,20 +50,30 @@ import {
  * - 応答・エラーは型付き。API キーや入力本文はログ・応答に含めない
  */
 
-export interface LlmHandlerDeps {
+interface BaseHandlerDeps {
   config: () => LlmServerConfig;
-  generate: GenerateJsonFn;
   /** 未指定ならルートごとに config の上限で作成する（プロセス内で共有） */
   rateLimiter?: { take(key: string): RateLimitDecision };
   dailyCounter: { take(limit: number): boolean };
   retry: RetryOptions;
-  /** 1回の試行のタイムアウト（ミリ秒） */
-  timeoutMs: Record<LlmApiKind, number>;
   /** 最小限のログ（エラーコード・上流ステータス・試行回数のみ） */
   log: (event: Record<string, string | number | undefined>) => void;
 }
 
-const MAX_OUTPUT_TOKENS: Record<LlmApiKind, number> = {
+export interface LlmHandlerDeps extends BaseHandlerDeps {
+  generate: GenerateJsonFn;
+  /** 1回の試行のタイムアウト（ミリ秒） */
+  timeoutMs: Record<LlmGenerateKind, number>;
+}
+
+/** /api/llm/embed の依存（ADR-010）。1日の上限は推論・分類とは別に数える */
+export interface EmbedHandlerDeps extends BaseHandlerDeps {
+  embed: EmbedTextsFn;
+  /** 1回の試行のタイムアウト（ミリ秒） */
+  timeoutMs: number;
+}
+
+const MAX_OUTPUT_TOKENS: Record<LlmGenerateKind, number> = {
   reason: 6_000,
   classify: 1_024,
 };
@@ -128,20 +143,33 @@ function upstreamCode(error: UpstreamError): LlmApiErrorCode {
   return "upstream-error";
 }
 
-const defaultDeps: LlmHandlerDeps = {
+const baseDefaults: Omit<BaseHandlerDeps, "dailyCounter"> = {
   config: () => readLlmConfig(),
-  generate: async () => {
-    throw new Error("generate is not configured");
-  },
-  dailyCounter: new DailyRequestCounter(),
   retry: {
     ...DEFAULT_RETRY,
     now: Date.now,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     random: Math.random,
   },
-  timeoutMs: { reason: 20_000, classify: 8_000 },
   log: (event) => console.warn("[llm]", JSON.stringify(event)),
+};
+
+const defaultDeps: LlmHandlerDeps = {
+  ...baseDefaults,
+  generate: async () => {
+    throw new Error("generate is not configured");
+  },
+  dailyCounter: new DailyRequestCounter(),
+  timeoutMs: { reason: 20_000, classify: 8_000 },
+};
+
+const defaultEmbedDeps: EmbedHandlerDeps = {
+  ...baseDefaults,
+  embed: async () => {
+    throw new Error("embed is not configured");
+  },
+  dailyCounter: new DailyRequestCounter(),
+  timeoutMs: 15_000,
 };
 
 /** プロセス内で共有する既定のレート制限（ルートごと） */
@@ -220,66 +248,89 @@ async function readBody(
   }
 }
 
-export function createLlmRouteHandler(
+type Guarded =
+  | { ok: true; config: LlmServerConfig & { apiKey: string }; body: unknown }
+  | { ok: false; response: Response };
+
+/**
+ * 全ルート共通の前処理: Content-Type → アクセストークン（本番では必須）→ レート制限
+ * → API キー → 本文（サイズ上限・JSON）
+ */
+async function guard(
   kind: LlmApiKind,
+  req: Request,
+  deps: BaseHandlerDeps
+): Promise<Guarded> {
+  const contentType = req.headers.get("content-type") ?? "";
+  if (!/^application\/json\b/i.test(contentType)) {
+    return { ok: false, response: fail("unsupported-media-type") };
+  }
+
+  const config = deps.config();
+  // 本番ではアクセストークン未設定の公開を拒否する（明示的にプラットフォーム側で保護している場合を除く）
+  if (!config.accessToken && config.requireAccessToken) {
+    deps.log({ route: kind, code: "not-configured" });
+    return { ok: false, response: fail("not-configured") };
+  }
+
+  // トークンの確認はレート制限より先に行う（未認証の要求で正規利用者の枠を消費させない）
+  if (
+    config.accessToken &&
+    !tokenMatches(req.headers.get(LLM_ACCESS_TOKEN_HEADER), config.accessToken)
+  ) {
+    return { ok: false, response: fail("unauthorized") };
+  }
+
+  const limiter =
+    deps.rateLimiter ?? defaultLimiter(kind, config.rateLimitPerMinute[kind]);
+  const limit = limiter.take(clientKey(req.headers, config.trustProxy));
+  if (!limit.allowed) {
+    return {
+      ok: false,
+      response: fail("rate-limited", undefined, {
+        "Retry-After": String(limit.retryAfterSeconds),
+      }),
+    };
+  }
+
+  if (!config.apiKey) {
+    deps.log({ route: kind, code: "not-configured" });
+    return { ok: false, response: fail("not-configured") };
+  }
+
+  const read = await readBody(req);
+  if (!read.ok) return read;
+  return {
+    ok: true,
+    config: { ...config, apiKey: config.apiKey },
+    body: read.body,
+  };
+}
+
+export function createLlmRouteHandler(
+  kind: LlmGenerateKind,
   overrides: Partial<LlmHandlerDeps> = {}
 ): (req: Request) => Promise<Response> {
   const deps: LlmHandlerDeps = { ...defaultDeps, ...overrides };
 
   return async (req) => {
-    const contentType = req.headers.get("content-type") ?? "";
-    if (!/^application\/json\b/i.test(contentType)) {
-      return fail("unsupported-media-type");
-    }
-
-    const config = deps.config();
-    // 本番ではアクセストークン未設定の公開を拒否する（明示的にプラットフォーム側で保護している場合を除く）
-    if (!config.accessToken && config.requireAccessToken) {
-      deps.log({ route: kind, code: "not-configured" });
-      return fail("not-configured");
-    }
-
-    // トークンの確認はレート制限より先に行う（未認証の要求で正規利用者の枠を消費させない）
-    if (
-      config.accessToken &&
-      !tokenMatches(
-        req.headers.get(LLM_ACCESS_TOKEN_HEADER),
-        config.accessToken
-      )
-    ) {
-      return fail("unauthorized");
-    }
-
-    const limiter =
-      deps.rateLimiter ?? defaultLimiter(kind, config.rateLimitPerMinute[kind]);
-    const limit = limiter.take(clientKey(req.headers, config.trustProxy));
-    if (!limit.allowed) {
-      return fail("rate-limited", undefined, {
-        "Retry-After": String(limit.retryAfterSeconds),
-      });
-    }
-
-    if (!config.apiKey) {
-      deps.log({ route: kind, code: "not-configured" });
-      return fail("not-configured");
-    }
-
-    const read = await readBody(req);
-    if (!read.ok) return read.response;
+    const guarded = await guard(kind, req, deps);
+    if (!guarded.ok) return guarded.response;
+    const { config } = guarded;
 
     let model: string;
     let systemInstruction: string;
     let userContent: string;
     let schema: unknown;
     if (kind === "reason") {
-      const v = validateReasoningRequest(read.body);
+      const v = validateReasoningRequest(guarded.body);
       if (!v.ok) return fail("invalid-request", v.errors.join(" / "));
       model = config.reasoningModel;
       systemInstruction = REASONING_SYSTEM_PROMPT;
       userContent = buildReasoningUserContent(v.value);
       schema = reasoningResponseSchema(v.value.articles.map((a) => a.id));
     } else {
-      const v = validateClassificationRequest(read.body);
+      const v = validateClassificationRequest(guarded.body);
       if (!v.ok) return fail("invalid-request", v.errors.join(" / "));
       model = config.classifierModel;
       systemInstruction = CLASSIFIER_SYSTEM_PROMPT;
@@ -293,7 +344,7 @@ export function createLlmRouteHandler(
       return fail("quota-exceeded");
     }
 
-    const apiKey = config.apiKey;
+    const { apiKey } = config;
     let result: Awaited<ReturnType<GenerateJsonFn>>;
     try {
       const out = await withRetry((_attempt, remainingMs) => {
@@ -346,5 +397,73 @@ export function createLlmRouteHandler(
       return fail("invalid-model-output");
     }
     return json({ ok: true, result: parsed, model }, 200);
+  };
+}
+
+/**
+ * /api/llm/embed（ADR-010）。条文（document）または検索語（query）のベクトルを返す。
+ * モデル・次元は EMBEDDING_MODEL で固定し、応答の model には保存用の key を返す。
+ */
+export function createEmbedRouteHandler(
+  overrides: Partial<EmbedHandlerDeps> = {}
+): (req: Request) => Promise<Response> {
+  const deps: EmbedHandlerDeps = { ...defaultEmbedDeps, ...overrides };
+
+  return async (req) => {
+    const guarded = await guard("embed", req, deps);
+    if (!guarded.ok) return guarded.response;
+    const { config } = guarded;
+
+    const v = validateEmbedRequest(guarded.body);
+    if (!v.ok) return fail("invalid-request", v.errors.join(" / "));
+
+    if (!deps.dailyCounter.take(config.dailyEmbedRequestLimit)) {
+      deps.log({ route: "embed", code: "quota-exceeded" });
+      return fail("quota-exceeded");
+    }
+
+    let invalidOutput = false;
+    let vectors: number[][];
+    try {
+      const out = await withRetry((_attempt, remainingMs) => {
+        const timeoutMs = Math.max(1, Math.min(deps.timeoutMs, remainingMs));
+        return withTimeout(timeoutMs, async (signal) => {
+          try {
+            return await deps.embed({
+              apiKey: config.apiKey,
+              model: EMBEDDING_MODEL.id,
+              texts: v.value.texts,
+              taskType: v.value.taskType,
+              dimensions: EMBEDDING_MODEL.dimensions,
+              timeoutMs,
+              signal,
+            });
+          } catch (error) {
+            if (error instanceof InvalidEmbeddingOutput) invalidOutput = true;
+            throw error;
+          }
+        });
+      }, deps.retry);
+      vectors = out.value;
+    } catch (error) {
+      if (invalidOutput) {
+        deps.log({ route: "embed", code: "invalid-model-output" });
+        return fail("invalid-model-output");
+      }
+      const upstream =
+        error instanceof UpstreamError ? error : new UpstreamError("network");
+      const code = upstreamCode(upstream);
+      deps.log({
+        route: "embed",
+        code,
+        kind: upstream.kind,
+        status: upstream.status,
+      });
+      return fail(code);
+    }
+    return json(
+      { ok: true, result: { vectors }, model: EMBEDDING_MODEL.key },
+      200
+    );
   };
 }

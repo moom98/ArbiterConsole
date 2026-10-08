@@ -33,6 +33,28 @@ export type GenerateJsonFn = (
   req: GenerateJsonRequest
 ) => Promise<GenerateJsonResult>;
 
+export interface EmbedTextsRequest {
+  apiKey: string;
+  model: string;
+  texts: string[];
+  /** 文書（条文）か検索語か。モデルの taskType に対応する（ADR-010） */
+  taskType: "document" | "query";
+  dimensions: number;
+  timeoutMs: number;
+  signal: AbortSignal;
+}
+
+/** 埋め込み（SDK 非依存）。texts と同じ順序・件数のベクトルを返す */
+export type EmbedTextsFn = (req: EmbedTextsRequest) => Promise<number[][]>;
+
+/** 埋め込みの応答が要求と一致しない（件数・次元・値）。再試行しない */
+export class InvalidEmbeddingOutput extends Error {
+  constructor() {
+    super("invalid embedding output");
+    this.name = "InvalidEmbeddingOutput";
+  }
+}
+
 /** 上流呼び出しの失敗の分類 */
 export class UpstreamError extends Error {
   constructor(

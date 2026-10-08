@@ -232,6 +232,7 @@ describe("Sensitive Gate (external-ai-data-protection §4)", () => {
         "白がドローの提案をしてから時計を押した",
         "時計が0になっていた",
         "黒が駒を落とした",
+        "白が黒の手順を取り消した",
       ])
         expect(verdict(text), text).toBe("clear");
     });

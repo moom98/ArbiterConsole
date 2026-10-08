@@ -1,6 +1,6 @@
 # J1a-1: Pure privacy package (Sensitive Gate, PII redaction) with synthetic evaluation
 
-**Status:** Implemented on branch `feature/fact-catalog`. Four separate reviews, each FIX REQUIRED → fixed. Two user decisions on the way (D12 known vocabulary, D13 mandatory confirmation). A final targeted re-review is recorded below.
+**Status:** Done on branch `feature/fact-catalog`. Four separate reviews, each FIX REQUIRED → fixed, then targeted re-reviews ending in MERGE. Two user decisions on the way (D12 known vocabulary, D13 mandatory confirmation).
 
 **Date:** 2026-10-08
 
@@ -37,7 +37,7 @@
 ## Final targeted re-review
 
 - **FIX REQUIRED:** the usefulness additions after review 4 opened holes (つけた, あれをされた, 手をかけた, 付け回された, はか/でか). Reverted to an allow-list of particle pairs and narrow collocations, added terms; see design §10. 0 false negatives on all regression sets afterwards; 15/144 benign reports held back (10.4%).
-- **Second pass:** earlier holes confirmed closed; two more found (手元/指先 in the contact rule, の代わりに出場) and fixed with regression cases.
+- **Second pass:** earlier holes confirmed closed; two more found (手元/指先 in the contact rule, の代わりに出場) and fixed with regression cases. **Final verdict: MERGE** (2b4d967; 手順 excluded from the contact rule afterwards as suggested).
 
 ## Known issues
 

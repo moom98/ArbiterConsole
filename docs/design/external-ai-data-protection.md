@@ -281,6 +281,7 @@ FIDE and JCF texts get no redaction at all. The residual check and the gate do n
 - The routes accept only the minimized shapes in §5.3. Unknown fields get 400, and old cached clients' `{ text }` gets 400.
 - **On incident-derived text only (§2),** the server runs gate layers L2–L4 and the pattern rules (§5.2 rules 1–3 and 5–13) again. For tournament article text it runs only rules 1, 5 and 12 (§5.5). FIDE and JCF text and structured codes are not re-checked. For a correct client the pass is idempotent. **If the gate's verdict is not `clear`, or the pattern pass would change anything, the server returns 400 and sends nothing.** It never rewrites silently, so what is sent is exactly what the arbiter saw in the preview.
 - Logs contain codes only: the route, the error code, the upstream status, attempts, the model and token counts. They never contain payload text or upstream error bodies.
+- Implemented in J1a-3 (§12). A rejection by the re-check is HTTP 400 with the code `not-sendable`.
 
 ## 8. Evaluation (release gate)
 
@@ -432,7 +433,7 @@ The pure package exists and is tested; nothing calls it yet (J1a-2 wires it into
 
 ## 11. Implementation (J1a-2, 2026-10-09): the guard on every client route
 
-The pure package is now used by every client path that reaches `/api/llm/*`. The server still accepts what the client sends after only shape checks; the L5 re-check and the rejection of old shapes are J1a-3.
+The pure package is now used by every client path that reaches `/api/llm/*`. The server re-check (L5) and the rejection of old shapes followed in J1a-3 (§12).
 
 ### 11.1 Files
 
@@ -484,7 +485,62 @@ The pure package is now used by every client path that reaches `/api/llm/*`. The
 - `Decision.llm.status` has two new values: `awaiting-confirmation` and `not-sent` (with `gateReasons`, codes only).
 - `EMBEDDING_MODEL.key` is `gemini-embedding-001@768+deid1`. The server echoes it, the backfill deletes other keys, so 「意味検索用データを作成」 rebuilds every vector once (§6.3).
 - The classifier drops a response that arrives after the text was edited, so an old suggestion is never applied to new text.
-- Server shapes (minimum for J1a-2): classify accepts `{ narrative }` (≤ 500); the reasoning validator no longer reads `tournamentId`. J1a-3 adds the L5 re-check, the pattern re-check, and 400 for unknown fields and `{ text }`.
+- Server shapes (minimum for J1a-2): classify accepts `{ narrative }` (≤ 500); the reasoning validator no longer reads `tournamentId`. J1a-3 adds the L5 re-check, the pattern re-check, and 400 for unknown fields and `{ text }` (§12).
+
+## 12. Implementation (J1a-3, 2026-10-09): the server re-check (L5)
+
+### 12.1 One function on both sides
+
+- `lib/domain/privacy/server-recheck.ts` (pure):
+  - `recheckIncidentText(text, route)`:
+    - the pattern rules: `redactPii(text, NO_IDENTIFIERS, new PlaceholderMap())` must return the text unchanged. With no identifiers, rule 4 does nothing, so this is rules 1–3 and 5–13;
+    - the gate (L2–L4, including the known-vocabulary layer L3v) must be `clear`;
+    - the residual check (§5.4, no identifiers; the 8-character minimum for classify and facts).
+  - `recheckRegulationText(text)`: `redactPii(…, "regulation")` must return the text unchanged (rules 1, 5 and 12).
+  - Results carry codes only (`pattern`, gate reason codes, residual findings).
+- **The client runs the same function before sending**, so a correct client never gets a 400:
+  - Every minimized text is trimmed after it is cut. The text that is previewed, checked and sent is the same string; the embeddings client's own `trim()` is then a no-op. Before this fix, a cut that ended in a space was trimmed on the way out. A rule anchored at the end of the text (「三時」) could then fire on the server only (J1a-3 review M1).
+  - `protectIncidentText` has a step **E2** after E. It checks the text exactly as sent, with its placeholders, which is what the server sees. Step E checks `restoreUnverified` text, which the server cannot rebuild. A failure gives `stage: "recheck"` and the local fallback, reason `residual`.
+  - `toSentArticles` (`external-ai-guard.ts`) drops an article in two cases:
+    - its id is not an identifier (`ARTICLE_ID`, shared with the server through the contract);
+    - it is a tournament article whose number, title or content fails `recheckRegulationText`. Truncation at 4,000 characters can create a match; for example a 13-digit number cut to a phone-number shape.
+  - For FIDE, JCF and commentary articles, `toSentArticles` leaves out a `sourceName` or `sourceVersion` that fails the same check.
+  - The guard sends `subtype` only if `isReportableSubtype` accepts it, so old data with a free-text subtype is not rejected.
+  - On the synthetic fixture sets (benign, benign-review, pii; 4 routes), E2 stops nothing that A–E let through, so usefulness is unchanged. `__tests__/privacy/server-recheck.test.ts` locks this. It also builds real request bodies with the guard and checks that the server validators accept them.
+
+### 12.2 What the server accepts (`request-validation.ts`)
+
+- **Exact key sets.** Any other key is a 400 `invalid-request`. The 400 says how many keys were rejected, not their names or values.
+  - body `{ narrative }` for classify;
+  - `{ incident, context, articles }` for reason, with:
+    - `incident {category, subtype, playerColor, description, arbiterObserved}`;
+    - `context {competitionType, supervisionRegime, rulesVersion}`;
+    - each article `{id, article, title, content, source, sourceName, sourceVersion, page, priority}`;
+  - `{ taskType, texts }` for embed.
+  - `tournamentId` anywhere is therefore a 400.
+- The old classify `{ text }` (without `narrative`) gets 400 with 「アプリを再読み込みしてください」.
+- **Codes.**
+  - `subtype` must pass `isReportableSubtype(category, subtype)` (`follow-up.ts`). For illegal-move that means the four 7.5 kinds and `touch-move`; clock-time and draw use their subtype lists.
+  - `rulesVersion` must be in `SUPPORTED_RULES_VERSIONS`.
+- **Length limits** equal the client's minimization limits (§5.3), and a test locks this:
+  - `incident.description` ≤ 1,000 characters (`maxReasonDescriptionChars`);
+  - an embed query ≤ 200 characters (`maxEmbedQueryChars`);
+  - documents ≤ 2,000 characters.
+- Article `id`s must match `ARTICLE_ID` (`[A-Za-z0-9_.:-]`, i.e. UUIDs and slugs), so no free text rides in an id.
+- **Tournament articles:** `sourceName` must be 「大会規定」 and `sourceVersion` must be absent (§5.3).
+- **L5:**
+  - `recheckIncidentText` runs on the classify narrative, the reason description and each embed query.
+  - `recheckRegulationText` runs on the number, title and content of tournament articles.
+  - FIDE, JCF and commentary `sourceName` / `sourceVersion` get `recheckRegulationText`, because they are free text typed at import.
+  - Their content and embed documents are not text-checked (§2).
+  - Accepted limit (defence in depth): the server cannot tell a tournament article mislabelled as FIDE, or which source a document embedding comes from. The client de-identifies tournament documents (§6.3).
+- **On an L5 failure:** HTTP 400 with the new code **`not-sendable`** and a fixed message (no codes, no text). Nothing goes upstream, the daily counter is not used, and the log line is `{ route, code: "not-sendable" }`. Shape errors stay `invalid-request`.
+- **What the client does with `not-sendable`:**
+  - reasoning: `llm-assist` maps it to `not-sent` (reason `residual`), which is the local handling of §4.3. There is no retry button, because resending gives the same answer;
+  - classification: falls back to keywords with a notice;
+  - semantic search: falls back to keyword search.
+  - A correct client should not reach this (§12.1). It can happen with an old client cached by the service worker against newer server terms.
+- **`null` values:** an optional field set to `null` counts as absent. A tournament article's `sourceVersion` must be absent; `null` is rejected.
 
 ## Appendix A. Sensitive terms (for review)
 

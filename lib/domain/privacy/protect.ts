@@ -63,15 +63,22 @@ export type ProtectResult =
       recheck?: RecheckFinding[];
     };
 
+/**
+ * 切った後にも前後の空白を除く（送信の途中で trim されると、末尾を見る規則（「三時」の $ など）が
+ * サーバーでだけ当たり、プレビューと送る本文も変わるため。送るのはこの値そのもの）
+ */
 function minimize(route: ProtectedTextRoute, redacted: string): string {
   switch (route) {
     case "classify":
     case "facts":
-      return minimizeNarrative(redacted, MINIMIZATION_LIMITS.narrative);
+      return minimizeNarrative(redacted, MINIMIZATION_LIMITS.narrative).trim();
     case "reason-description":
-      return truncate(redacted.trim(), MINIMIZATION_LIMITS.reasonDescription);
+      return truncate(
+        redacted.trim(),
+        MINIMIZATION_LIMITS.reasonDescription
+      ).trim();
     case "embed-query":
-      return truncate(redacted.trim(), MINIMIZATION_LIMITS.embedQuery);
+      return truncate(redacted.trim(), MINIMIZATION_LIMITS.embedQuery).trim();
   }
 }
 

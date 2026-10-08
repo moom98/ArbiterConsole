@@ -1016,4 +1016,107 @@ describe("server re-check (L5) and minimized shapes only (J1a-3)", () => {
     expect((await errorOf(res)).code).toBe("not-sendable");
     expect(generate).not.toHaveBeenCalled();
   });
+
+  it.each([
+    [
+      "__proto__ at the top level",
+      '{"__proto__":{"x":1},"incident":{},"context":{},"articles":[]}',
+    ],
+    ["constructor in the incident", null],
+  ])("reason: rejects %s", async (_n, raw) => {
+    const { generate, handler } = setup();
+    const body = reasonBody();
+    const res = await handler(
+      raw
+        ? request(undefined, { raw })
+        : request({
+            ...body,
+            incident: { ...body.incident, constructor: "x" },
+          })
+    );
+    expect(res.status).toBe(400);
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("classify: a __proto__ key next to the old { text } is still the old shape (400)", async () => {
+    const { generate, handler } = setup("classify");
+    const res = await handler(
+      request(undefined, {
+        raw: '{"__proto__":{"narrative":"白の時計のフラッグが落ちたと黒が申し立てた"},"text":"x"}',
+      })
+    );
+    expect(res.status).toBe(400);
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("reason: null optional values are treated as absent, but a tournament sourceVersion of null is rejected", async () => {
+    const { handler } = setup();
+    const body = reasonBody();
+    const ok = await handler(
+      request({
+        ...body,
+        incident: { ...body.incident, subtype: null, playerColor: null },
+        articles: [{ ...SENT_ARTICLES[1], title: null }],
+      })
+    );
+    expect(ok.status).toBe(200);
+    const bad = await handler(
+      request(
+        reasonBody({ articles: [{ ...SENT_ARTICLES[0], sourceVersion: null }] })
+      )
+    );
+    expect(bad.status).toBe(400);
+  });
+
+  it("reason: article ids must be identifiers; FIDE source labels get the narrow re-check", async () => {
+    const { generate, handler } = setup();
+    const badId = await handler(
+      request(
+        reasonBody({
+          articles: [{ ...SENT_ARTICLES[1], id: "山本さん 090-1234-5678" }],
+        })
+      )
+    );
+    expect(badId.status).toBe(400);
+    expect((await errorOf(badId)).code).toBe("invalid-request");
+    const label = await handler(
+      request(
+        reasonBody({
+          articles: [
+            {
+              ...SENT_ARTICLES[1],
+              sourceName: "山本太郎さんの規定 090-1234-5678",
+            },
+          ],
+        })
+      )
+    );
+    expect(label.status).toBe(400);
+    expect((await errorOf(label)).code).toBe("not-sendable");
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("not-sendable does not use the daily cap", async () => {
+    const generate = vi.fn<GenerateJsonFn>(async () => ({
+      text: JSON.stringify(validDraft()),
+    }));
+    const dailyCounter = { take: vi.fn(() => true) };
+    const handler = createLlmRouteHandler(
+      "reason",
+      makeDeps(generate, { dailyCounter })
+    );
+    const res = await handler(
+      request(
+        reasonBody({
+          incident: {
+            category: "illegal-move",
+            description: "山本さんが違法手を指したので黒がクレームした",
+            arbiterObserved: true,
+          },
+        })
+      )
+    );
+    expect((await errorOf(res)).code).toBe("not-sendable");
+    expect(dailyCounter.take).not.toHaveBeenCalled();
+  });
 });

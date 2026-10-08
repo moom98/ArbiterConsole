@@ -264,5 +264,16 @@ describe("/api/llm/embed (ADR-010)", () => {
     );
     expect(doc.status).toBe(200);
     expect(embed).toHaveBeenCalledTimes(2);
+
+    // 検索語は最小化した長さ（200 文字）まで。条文は 2,000 文字まで
+    const longQuery = await handler(
+      request({
+        taskType: "query",
+        texts: ["白".repeat(LLM_LIMITS.maxEmbedQueryChars + 1)],
+      })
+    );
+    expect(longQuery.status).toBe(400);
+    expect((await errorOf(longQuery)).code).toBe("invalid-request");
+    expect(embed).toHaveBeenCalledTimes(2);
   });
 });

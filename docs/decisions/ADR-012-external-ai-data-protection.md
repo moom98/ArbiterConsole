@@ -1,6 +1,10 @@
 # ADR-012: Sensitive Gate and PII Redaction for Every External AI Send
 
-**Status:** Accepted. The user decided it on 2026-10-08, and answered Q-DP1 and Q-DP2 the same day. Partly implemented: the pure privacy package and its evaluation (J1a-1, design §10) and the guard on every client route with the mandatory confirmation (J1a-2, design §11). The server re-check (J1a-3) is not implemented yet.
+**Status:** Accepted. The user decided it on 2026-10-08, and answered Q-DP1 and Q-DP2 the same day. Implemented:
+
+- the pure privacy package and its evaluation (J1a-1, design §10);
+- the guard on every client route with the mandatory confirmation (J1a-2, design §11);
+- the server re-check (J1a-3, design §12).
 
 **Date:** 2026-10-08
 
@@ -78,6 +82,21 @@ How Amendment 2 is applied per route (design §11.2):
 - **Rule search screen:** keyword results are shown at once and nothing is sent; semantic search runs only after the arbiter confirms the de-identified query. This was the open UX point of the J1a-2 plan; it was decided this way because D13 says every send is confirmed and the keyword path stays as fast as before.
 - **Document embeddings** carry no incident data and need no confirmation; tournament regulations are de-identified.
 - **Exception to "the arbiter sees the payload":** tournament regulation articles attached to a reasoning request are chosen after the confirmation, so the preview only states that they are sent with the narrow redaction (§5.5) and does not show their text. They are rule text, not incident data. Residual risk: an unregistered name without an honorific inside a regulation is sent.
+
+## Implementation notes (J1a-3, 2026-10-09)
+
+- **One re-check function on both sides.**
+  - `lib/domain/privacy/server-recheck.ts` is run by the server (L5) and by the client on the exact text it is about to send (step E2, and the tournament-article filter in the guard).
+  - So a correct client is never rejected, and the server never needs the device's identifiers.
+  - The server only rejects; it never rewrites.
+- **New public error code `not-sendable` (HTTP 400)** for an L5 rejection. Shape errors stay `invalid-request`.
+  - Nothing goes upstream and the daily cap is not used.
+  - The log line carries the route and the code only.
+  - The reasoning port maps `not-sendable` to the local handling (`not-sent`), not to a retryable error, because resending the same payload gives the same answer.
+- **Exact key sets.** The server accepts only the minimized shapes of §5.3. Anything else is a 400, including `tournamentId` and the old classify `{ text }`.
+  - Codes (`subtype`, `rulesVersion`, article `id`) are checked against fixed sets or an identifier form.
+  - FIDE, JCF and commentary source names and versions get the narrow regulation check.
+- **Accepted limit.** The server cannot tell a tournament article mislabelled as FIDE from a real one, or tell which source a document embedding comes from. Their text is not checked (rule text, §2). This is defence in depth, not a substitute for the client guard.
 
 ## Consequences
 

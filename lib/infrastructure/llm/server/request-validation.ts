@@ -18,7 +18,12 @@ import type {
   LlmReasoningRequest,
 } from "@/lib/domain/llm/types";
 import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
-import { LLM_LIMITS, type EmbedRequest } from "../contract";
+import {
+  ARTICLE_ID,
+  LLM_LIMITS,
+  TOURNAMENT_SOURCE_NAME,
+  type EmbedRequest,
+} from "../contract";
 
 /** フェアプレーは外部に送らない（§23, ADR-007）。クライアント側の防御が破られた場合の多重防御 */
 const FAIR_PLAY_NOT_SENT = "フェアプレー関連の内容はAIへ送信できません";
@@ -210,12 +215,14 @@ export function validateEmbedRequest(body: unknown): Validated<EmbedRequest> {
     if (taskType === "query" && texts.length !== 1)
       errors.push("検索語は1件ずつ送ってください");
     texts.forEach((t, i) => {
+      const max =
+        taskType === "query"
+          ? LLM_LIMITS.maxEmbedQueryChars
+          : LLM_LIMITS.maxEmbedTextChars;
       if (typeof t !== "string" || t.trim() === "")
         errors.push(`texts[${i}] は空でない文字列である必要があります`);
-      else if (t.length > LLM_LIMITS.maxEmbedTextChars)
-        errors.push(
-          `texts[${i}] は${LLM_LIMITS.maxEmbedTextChars}文字以内にしてください`
-        );
+      else if (t.length > max)
+        errors.push(`texts[${i}] は${max}文字以内にしてください`);
       else if (taskType === "query" && mentionsFairPlay(t))
         errors.push(FAIR_PLAY_NOT_SENT);
       // 検索語は事故由来のテキスト（L5）。条文（document）は規則の本文のため確認しない（§2）
@@ -240,9 +247,6 @@ const ARTICLE_KEYS = [
   "page",
   "priority",
 ] as const;
-
-/** 送る大会規定の資料名（端末内の名前は送らない。§5.3） */
-export const TOURNAMENT_SOURCE_NAME = "大会規定";
 
 export function validateReasoningRequest(
   body: unknown
@@ -360,6 +364,9 @@ export function validateReasoningRequest(
       }
       c.only(a, p, ARTICLE_KEYS);
       const id = c.str(a, "id", `${p}.id`, LLM_LIMITS.maxIdChars);
+      // 条文の ID は端末内の識別子（UUID など）。自由記述を紛れ込ませない（§2）
+      if (typeof id === "string" && !ARTICLE_ID.test(id))
+        c.errors.push(`${p}.id の形式が不正です`);
       const article = c.str(
         a,
         "article",
@@ -415,6 +422,11 @@ export function validateReasoningRequest(
         c.regulationText(article, `${p}.article`);
         c.regulationText(title, `${p}.title`);
         c.regulationText(content, `${p}.content`);
+      } else {
+        // FIDE・JCF・解説の資料名と版は登録時の自由記述。本文と同じ狭い規則で確かめる
+        // （本文は公開された規則のため確認しない。§2）
+        c.regulationText(sourceName, `${p}.sourceName`);
+        c.regulationText(sourceVersion, `${p}.sourceVersion`);
       }
       if (id !== undefined) {
         if (ids.has(id)) c.errors.push(`${p}.id が重複しています`);

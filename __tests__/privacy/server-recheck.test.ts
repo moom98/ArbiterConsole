@@ -10,6 +10,7 @@ import {
   type CandidateArticle,
 } from "@/lib/application/external-ai-guard";
 import {
+  MINIMIZATION_LIMITS,
   NO_IDENTIFIERS,
   PlaceholderMap,
   protectIncidentText,
@@ -18,7 +19,10 @@ import {
   type KnownIdentifiers,
   type ProtectedTextRoute,
 } from "@/lib/domain/privacy";
-import type { LlmApiResponse } from "@/lib/infrastructure/llm/contract";
+import {
+  LLM_LIMITS,
+  type LlmApiResponse,
+} from "@/lib/infrastructure/llm/contract";
 import {
   validateClassificationRequest,
   validateEmbedRequest,
@@ -189,9 +193,11 @@ describe("client and server agree: whatever the guard sends passes the server (n
       identifiers: NO_IDENTIFIERS,
       map: new PlaceholderMap(),
     });
-    if (r.ok)
-      expect(recheckIncidentText(r.text, "classify")).toEqual({ ok: true });
-    else expect(["residual", "gate-redacted", "recheck"]).toContain(r.stage);
+    expect(r).toMatchObject({
+      ok: false,
+      stage: "recheck",
+      recheck: ["pattern"],
+    });
   });
 
   function capture() {
@@ -337,5 +343,171 @@ describe("client and server agree: whatever the guard sends passes the server (n
     for (const a of sent.filter((x) => x.source === "tournament"))
       for (const t of [a.article, a.title, a.content])
         expect(recheckRegulationText(t)).toEqual({ ok: true });
+  });
+
+  // 切った位置が空白でも、送る本文はプレビューと同じで、サーバーを通る（J1a-3 レビュー M1）
+  const LONG = (n: number, tail: string) =>
+    "白が違法手を指したので黒がクレームした。"
+      .repeat(Math.ceil(n / 20))
+      .slice(0, n) + tail;
+
+  it("long text cut at whitespace: the query sent equals the preview and passes the server (embed-query)", async () => {
+    const call = capture();
+    const r = await prepareEmbeddingQuery(
+      // 200 文字目が空白（9文の後に19文字、空白、続き）
+      LONG(180, "白が違法手を指したので黒がクレームした 黒がクレームした"),
+      {},
+      { identifiers: async () => NO_IDENTIFIERS, call }
+    );
+    if (r.status !== "needs-confirmation") throw new Error("expected clear");
+    expect(r.query).toHaveLength(199);
+    expect(r.query).toBe(r.query.trim());
+    await r.send();
+    const body = JSON.parse(JSON.stringify(call.mock.calls[0][1]));
+    expect(body.texts[0]).toBe(r.query);
+    expect(r.preview.fields[0].text).toBe(r.query);
+    expect(validateEmbedRequest(body)).toMatchObject({ ok: true });
+  });
+
+  it("a cut that would leave 「三時」 at the end is held back on the device, not rejected by the server", async () => {
+    const call = capture();
+    const r = await prepareEmbeddingQuery(
+      LONG(197, "三時 白がクレームした"),
+      {},
+      { identifiers: async () => NO_IDENTIFIERS, call }
+    );
+    expect(r.status).toBe("local");
+    expect(call).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["classify", 495],
+    ["reason-description", 995],
+    ["embed-query", 195],
+  ] as const)(
+    "long inputs for %s (forced truncation) stay consistent with the server",
+    async (route, n) => {
+      for (const tail of [
+        "三時 白がクレームした",
+        " 〈選手A〉が",
+        "白がクレーム  黒",
+      ]) {
+        const call = capture();
+        const text = LONG(n, tail);
+        if (route === "classify") {
+          const r = await prepareClassification(
+            text,
+            {},
+            { identifiers: async () => NO_IDENTIFIERS, call }
+          );
+          if (r.status !== "needs-confirmation") continue;
+          await r.send();
+          const body = JSON.parse(JSON.stringify(call.mock.calls[0][1]));
+          expect(body.narrative).toBe(r.preview.fields[0].text);
+          expect(validateClassificationRequest(body), tail).toMatchObject({
+            ok: true,
+          });
+        } else if (route === "embed-query") {
+          const r = await prepareEmbeddingQuery(
+            text,
+            {},
+            { identifiers: async () => NO_IDENTIFIERS, call }
+          );
+          if (r.status !== "needs-confirmation") continue;
+          await r.send();
+          const body = JSON.parse(JSON.stringify(call.mock.calls[0][1]));
+          expect(validateEmbedRequest(body), tail).toMatchObject({ ok: true });
+        } else {
+          const r = await prepareReasoning(
+            {
+              incident: {
+                category: "illegal-move",
+                description: text,
+                arbiterObserved: true,
+              },
+              context: {
+                competitionType: "standard",
+                rulesVersion: "FIDE-2023",
+              },
+            },
+            { identifiers: async () => NO_IDENTIFIERS, call }
+          );
+          if (r.status !== "needs-confirmation") continue;
+          await r.send(r.toSentArticles([FIDE_ARTICLE]));
+          const body = JSON.parse(JSON.stringify(call.mock.calls[0][1]));
+          expect(body.incident.description).toBe(r.preview.fields[0].text);
+          expect(validateReasoningRequest(body), tail).toMatchObject({
+            ok: true,
+          });
+        }
+      }
+    }
+  );
+
+  it("a tournament article whose truncation creates a new match is not sent (toSentArticles drops it)", async () => {
+    const r = await prepareReasoning(
+      {
+        incident: {
+          category: "illegal-move",
+          description: "白が違法手を指したので黒がクレームした",
+          arbiterObserved: true,
+        },
+        context: { competitionType: "standard", rulesVersion: "FIDE-2023" },
+      },
+      { identifiers: async () => NO_IDENTIFIERS, call: capture() }
+    );
+    if (r.status !== "needs-confirmation") throw new Error("expected clear");
+    // 13桁の数字は連絡先の規則に当たらないが、4,000 文字で切ると「0312345678」（電話番号の形）になる
+    const content =
+      "あ".repeat(LLM_LIMITS.maxArticleContentChars - 10) + "0312345678901";
+    expect(
+      recheckRegulationText(content.slice(0, LLM_LIMITS.maxArticleContentChars))
+        .ok
+    ).toBe(false);
+    const sent = r.toSentArticles([
+      { ...TOURNAMENT_ARTICLE, content },
+      FIDE_ARTICLE,
+    ]);
+    expect(sent.map((a) => a.id)).toEqual(["r-f"]);
+  });
+
+  it("FIDE/JCF source labels that fail the narrow check are left out; ids that are not identifiers drop the article", async () => {
+    const call = capture();
+    const r = await prepareReasoning(
+      {
+        incident: {
+          category: "illegal-move",
+          description: "白が違法手を指したので黒がクレームした",
+          arbiterObserved: true,
+        },
+        context: { competitionType: "standard", rulesVersion: "FIDE-2023" },
+      },
+      { identifiers: async () => NO_IDENTIFIERS, call }
+    );
+    if (r.status !== "needs-confirmation") throw new Error("expected clear");
+    const sent = r.toSentArticles([
+      {
+        ...FIDE_ARTICLE,
+        sourceName: "山本さん提供の規則集",
+        sourceVersion: "090-1234-5678",
+      },
+      { ...FIDE_ARTICLE, id: "山本さん" },
+    ]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).not.toHaveProperty("sourceVersion");
+    expect(sent[0].sourceName).toBeUndefined();
+    await r.send(sent);
+    const body = JSON.parse(JSON.stringify(call.mock.calls[0][1]));
+    expect(validateReasoningRequest(body)).toMatchObject({ ok: true });
+  });
+
+  it("the server's length limits are the client's minimization limits (§5.3)", () => {
+    expect(LLM_LIMITS.maxClassifyNarrativeChars).toBe(
+      MINIMIZATION_LIMITS.narrative
+    );
+    expect(LLM_LIMITS.maxReasonDescriptionChars).toBe(
+      MINIMIZATION_LIMITS.reasonDescription
+    );
+    expect(LLM_LIMITS.maxEmbedQueryChars).toBe(MINIMIZATION_LIMITS.embedQuery);
   });
 });

@@ -136,6 +136,10 @@ export function createLlmAssistPort(deps: LlmAssistDeps = {}): LlmAssistPort {
       const res = await prepared.send(articles);
       if (!res.ok) {
         if (res.error.code === "offline") return { status: "offline" };
+        // サーバーの再確認（L5）で止まった。同じ内容を再送しても止まるため、再取得ではなく
+        // ローカルで処理する（§4.3）。正しいクライアントでは起きない（版の違いなど）
+        if (res.error.code === "not-sendable")
+          return { status: "not-sent", reasons: ["residual"] };
         return {
           status: "error",
           code: res.error.code,

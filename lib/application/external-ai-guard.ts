@@ -38,7 +38,9 @@ import {
   type GenerateEmbeddingsOptions,
 } from "@/lib/infrastructure/embeddings/generator";
 import {
+  ARTICLE_ID,
   LLM_LIMITS,
+  TOURNAMENT_SOURCE_NAME,
   type LlmApiResponse,
 } from "@/lib/infrastructure/llm/contract";
 import {
@@ -403,10 +405,19 @@ function toSentArticle(
     LLM_LIMITS.maxArticleContentChars
   );
   if (
-    tournament &&
-    [article, title, content].some((t) => !recheckRegulationText(t).ok)
+    !ARTICLE_ID.test(a.id) ||
+    (tournament &&
+      [article, title, content].some((t) => !recheckRegulationText(t).ok))
   )
     return null;
+  // FIDE・JCF・解説の資料名と版は、サーバーと同じ狭い規則の確認を通るものだけ送る
+  const label = (v: string | undefined, max: number) => {
+    const cut = v?.slice(0, max);
+    return cut !== undefined && recheckRegulationText(cut).ok ? cut : undefined;
+  };
+  const sourceVersion = tournament
+    ? undefined
+    : label(a.sourceVersion, LLM_LIMITS.maxShortChars);
   return {
     id: a.id,
     article,
@@ -414,11 +425,9 @@ function toSentArticle(
     content,
     source: a.source,
     sourceName: tournament
-      ? "大会規定"
-      : a.sourceName?.slice(0, LLM_LIMITS.maxSourceNameChars),
-    ...(tournament || a.sourceVersion === undefined
-      ? {}
-      : { sourceVersion: a.sourceVersion.slice(0, LLM_LIMITS.maxShortChars) }),
+      ? TOURNAMENT_SOURCE_NAME
+      : label(a.sourceName, LLM_LIMITS.maxSourceNameChars),
+    ...(sourceVersion === undefined ? {} : { sourceVersion }),
     page: a.page,
     priority: a.priority,
   };

@@ -475,3 +475,37 @@ describe("prepareIncidentClassification", () => {
     expect(call).not.toHaveBeenCalled();
   });
 });
+
+/** サーバーの再確認（L5）で止まった応答（J1a-3, external-ai-data-protection.md §12） */
+describe("not-sendable from the server (L5)", () => {
+  const notSendable = () =>
+    vi.fn(async (): Promise<LlmApiResponse> => ({
+      ok: false,
+      error: {
+        code: "not-sendable",
+        message: "送信前の確認（サーバー）で止めました",
+      },
+    }));
+
+  it("reasoning: becomes not-sent (local handling), not a retryable error", async () => {
+    const call = notSendable();
+    const res = await assistConfirmed({
+      isOnline: () => true,
+      search: async () => [
+        searchResult("r1", "対局中、電子機器を持ち込んではならない。"),
+      ],
+      storedRuleIds: async (ids) => ids,
+      call: call as never,
+    });
+    expect(res).toEqual({ status: "not-sent", reasons: ["residual"] });
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
+  it("classification: falls back to the keyword classification", async () => {
+    const r = await classifyConfirmed("黒のスマホが鳴った", {
+      call: notSendable() as never,
+      isOnline: () => true,
+    });
+    expect(r.classification?.method).toBe("keyword");
+  });
+});

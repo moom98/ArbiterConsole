@@ -7,6 +7,7 @@ import type {
   DrawSubtype,
   FlagFallFacts,
   FlagFallen,
+  HistoryConfirmation,
   Incident,
   IllegalMoveDetection,
   IllegalMoveFacts,
@@ -59,6 +60,7 @@ export type IncidentQuestionId =
   | "seventyFiveCheck"
   | "lastMoveCheckmate"
   | "positionsText"
+  | "historyConfirmed"
   | "intendedMove"
   // 手動確認（決定木の対象外）
   | "situationNote";
@@ -104,6 +106,28 @@ export interface FollowUpQuestion {
    * 条件の定義はドメインが持ち、UI は一致判定のみ行う。
    */
   showWhen?: { questionId: FollowUpQuestionId; values: string[] };
+  /**
+   * 共通の「わからない・確認できない」選択肢（UNKNOWN_OPTION）を持つ質問での扱い
+   * （fact-model §3.3）。
+   * - enumerate:     unknown のとき、他の選択肢すべてで評価して比較する（resolveUnknown）
+   * - manual-review: 列挙できない（例: 駒数の確認）。unknown なら手動確認
+   * 未設定の質問は共通の unknown を持たない（独自の unknown 値を持つ質問を含む）。
+   */
+  onUnknown?: "enumerate" | "manual-review";
+}
+
+/** 共通の「わからない・確認できない」の回答値 */
+export const UNKNOWN_VALUE = "unknown";
+
+/** 共通の「わからない・確認できない」選択肢（他の選択肢と同じ大きさで表示する） */
+export const UNKNOWN_OPTION: FollowUpOption = {
+  value: UNKNOWN_VALUE,
+  label: "わからない・確認できない",
+};
+
+/** unknown のときに列挙する値（共通の unknown 以外の選択肢） */
+export function enumerableValues(q: FollowUpQuestion): string[] {
+  return q.options.map((o) => o.value).filter((v) => v !== UNKNOWN_VALUE);
 }
 
 /** showWhen の条件を満たすか（UI 用の純粋関数） */
@@ -202,12 +226,20 @@ function materialQuestions(): Record<MaterialQuestionId, FollowUpQuestion> {
   return out;
 }
 
+/** 共通の unknown を加える（fact-model §3.3: すべての DT 質問に unknown） */
+function withUnknown(
+  q: FollowUpQuestion,
+  onUnknown: "enumerate" | "manual-review" = "enumerate"
+): FollowUpQuestion {
+  return { ...q, options: [...q.options, UNKNOWN_OPTION], onUnknown };
+}
+
 const CONDITION_AUTO: FollowUpOption = {
   value: "auto",
-  label: "下の棋譜 / FEN から判定する",
+  label: "下の棋譜から判定する",
 };
 
-export const QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
+const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
   playerColor: {
     id: "playerColor",
     scope: "incident",
@@ -454,12 +486,25 @@ export const QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
   positionsText: {
     id: "positionsText",
     scope: "incident",
-    label: "（任意）棋譜（初期局面からの指し手）または FEN（1行に1局面）",
-    help: "「判定する」を選んだ場合に使用します。例: 1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6",
+    label: "（任意）棋譜・PGN（初期配置からの指し手）",
+    help: '「判定する」を選んだ場合に使用します。標準の表記（SAN）で入力してください。例: 1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6。途中の局面から始める場合は [FEN "…"] を先頭に書きます（その場合「不成立」は自動では確定しません）。FEN の列は使えません。入力した棋譜は端末の外へ送りません。',
     input: "text",
     optional: true,
     placeholder: "1. e4 e5 2. Nf3 Nc6 ...",
     options: [],
+  },
+  historyConfirmed: {
+    id: "historyConfirmed",
+    scope: "incident",
+    label:
+      "棋譜を再生した最終局面と手数は、盤上の局面・スコアシートと一致しますか？",
+    help: "上に表示した最終局面（手番・最後の手・FEN）を盤上と照合してください。一致しない場合は自動判定を使いません。",
+    options: [
+      { value: "match", label: "局面も手数も一致した" },
+      { value: "position-only", label: "局面は一致・手数は確認できない" },
+      { value: "mismatch", label: "一致しない" },
+      { value: "unknown", label: "照合できない（盤上で再現する）" },
+    ],
   },
   intendedMove: {
     id: "intendedMove",
@@ -503,6 +548,58 @@ export const QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     ],
   },
 };
+
+/**
+ * 共通の unknown を持つ質問（fact-model §3.3）。
+ * 独自の unknown 値を持つ質問（opponentCanCheckmate・bothFlagsOrder・movesNotCompleted・
+ * positionBlocked・同一局面の確認・対局履歴の照合）は各 DT が独自の手動確認で扱うため含めない。
+ * 駒数（count）・テキストは列挙できず、テキストは任意（空欄 = 不明）のため含めない。
+ * game-context（競技区分・規則）は大会プロファイルから与えるため含めない。
+ */
+const ENUMERATED_UNKNOWN: readonly IncidentQuestionId[] = [
+  "playerColor",
+  "subtype",
+  "gameEnded",
+  "clockPressed",
+  "opponentMadeNextMove",
+  "detectedBy",
+  "clockTimeSubtype",
+  "flagFallen",
+  "quickplayGuidelinesApply",
+  "lastPeriod",
+  "gameEndedBeforeFlag",
+  "drawSubtype",
+  "claimant",
+  "claimantHasMove",
+  "claimMode",
+  "moveWritten",
+  "touchedPiece",
+  "lastMoveCheckmate",
+];
+const MANUAL_REVIEW_UNKNOWN: readonly IncidentQuestionId[] = [
+  // 「確認した」の1択。確認できなければ駒数が使えないため手動確認
+  "materialConfirmed",
+];
+
+export const QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
+  ...BASE_QUESTIONS,
+};
+for (const id of ENUMERATED_UNKNOWN)
+  QUESTIONS[id] = withUnknown(BASE_QUESTIONS[id], "enumerate");
+for (const id of MANUAL_REVIEW_UNKNOWN)
+  QUESTIONS[id] = withUnknown(BASE_QUESTIONS[id], "manual-review");
+
+/** この質問への回答 raw が共通の unknown か */
+export function isGenericUnknownAnswer(
+  id: string,
+  raw: string | undefined
+): boolean {
+  return (
+    raw === UNKNOWN_VALUE &&
+    (QUESTIONS as Record<string, FollowUpQuestion | undefined>)[id]
+      ?.onUnknown !== undefined
+  );
+}
 
 function parseBoolean(value: string): boolean | undefined {
   if (value === "true") return true;
@@ -569,12 +666,72 @@ export function applyIncidentAnswers(
   let touchedFlag = false;
   let touchedDraw = false;
   let next_description = incident.description;
+  const unknown = new Set(incident.unknownAnswers ?? []);
+
+  /** 共通の unknown が選ばれた質問の、以前の回答を取り消す */
+  const clearAnswer = (id: IncidentQuestionId): void => {
+    switch (id) {
+      case "playerColor":
+        playerColor = undefined;
+        break;
+      case "subtype":
+      case "gameEnded":
+      case "clockPressed":
+      case "opponentMadeNextMove":
+      case "detectedBy":
+        delete facts[id];
+        touchedIllegal = true;
+        break;
+      case "clockTimeSubtype":
+        if (incident.category === "clock-time") subtype = undefined;
+        break;
+      case "flagFallen":
+        delete flag.flagFallen;
+        if (incident.category === "clock-time") playerColor = undefined;
+        touchedFlag = true;
+        break;
+      case "quickplayGuidelinesApply":
+      case "lastPeriod":
+      case "gameEndedBeforeFlag":
+      case "materialConfirmed":
+        delete flag[id];
+        touchedFlag = true;
+        break;
+      case "drawSubtype":
+        if (incident.category === "draw") subtype = undefined;
+        delete draw.subtype;
+        touchedDraw = true;
+        break;
+      case "claimant":
+        delete draw.claimant;
+        if (incident.category === "draw") playerColor = undefined;
+        touchedDraw = true;
+        break;
+      case "claimantHasMove":
+      case "claimMode":
+      case "moveWritten":
+      case "touchedPiece":
+      case "lastMoveCheckmate":
+        delete draw[id];
+        touchedDraw = true;
+        break;
+    }
+  };
 
   for (const [id, raw] of Object.entries(answers) as [
     IncidentQuestionId,
     string | undefined,
   ][]) {
     if (raw === undefined) continue;
+
+    // 共通の unknown は値として保持せず unknownAnswers に記録する（fact-model §3.3 e）。
+    // 未回答（undefined）とは区別され、DT は needs-input で止まらずに resolveUnknown で扱う
+    if (isGenericUnknownAnswer(id, raw)) {
+      unknown.add(id);
+      clearAnswer(id);
+      continue;
+    }
+    unknown.delete(id);
 
     const material = MATERIAL_ID_MAP[id];
     if (material) {
@@ -746,8 +903,32 @@ export function applyIncidentAnswers(
         touchedDraw = true;
         break;
       }
+      case "historyConfirmed":
+        if (
+          isOneOf(raw, [
+            "match",
+            "position-only",
+            "mismatch",
+            "unknown",
+          ] as readonly HistoryConfirmation[])
+        ) {
+          draw.historyConfirmed = raw;
+          touchedDraw = true;
+        }
+        break;
     }
   }
+
+  // 別の対局履歴に対する照合結果は引き継がない（ADR-014 §4）。同じ送信で新しい棋譜と
+  // 照合結果が届いた場合も、照合は表示していた旧い棋譜に対するものなので消す
+  if (draw.positionsText !== incident.drawClaimFacts?.positionsText)
+    delete draw.historyConfirmed;
+  // 「判定する」を選び直した場合は、照合からやり直す（「一致しない」の誤タップを取り消せる）
+  const reselectedAuto = (
+    ["repetitionCheck", "fivefoldCheck", "seventyFiveCheck"] as const
+  ).some((id) => answers[id] === "auto");
+  if (reselectedAuto && answers.historyConfirmed === undefined)
+    delete draw.historyConfirmed;
 
   const next: Incident = {
     ...incident,
@@ -755,6 +936,8 @@ export function applyIncidentAnswers(
     subtype,
     description: next_description,
   };
+  if (unknown.size > 0) next.unknownAnswers = Array.from(unknown);
+  else delete next.unknownAnswers;
   if (
     incident.category === "illegal-move" ||
     touchedIllegal ||
@@ -762,8 +945,11 @@ export function applyIncidentAnswers(
   ) {
     next.illegalMoveFacts = facts;
     // 違法手の subtype は Incident.subtype にも反映（従来どおり）
+    // 「わからない」と回答された場合は、以前の subtype を残さない（ログ・CSV・回数の明細に出さない）
     if (incident.category === "illegal-move")
-      next.subtype = facts.subtype ?? incident.subtype;
+      next.subtype =
+        facts.subtype ??
+        (unknown.has("subtype") ? undefined : incident.subtype);
   }
   if (touchedFlag || incident.flagFallFacts) next.flagFallFacts = flag;
   if (touchedDraw || incident.drawClaimFacts) next.drawClaimFacts = draw;

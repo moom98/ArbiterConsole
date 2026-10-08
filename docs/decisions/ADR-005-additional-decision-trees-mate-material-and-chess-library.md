@@ -1,5 +1,7 @@
 # ADR-005: Additional Decision Trees, Mate-Material Check and Chess Library
 
+**Amended by:** [ADR-014](./ADR-014-draw-dt-touch-move-game-history.md) §5. Counts no longer decide "can-mate"; it needs a position and a found helpmate.
+
 **Status:** Accepted
 
 **Date:** 2026-10-07

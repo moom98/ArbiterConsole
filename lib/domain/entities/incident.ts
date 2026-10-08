@@ -156,9 +156,19 @@ export type RepetitionClaimMode = "about-to-appear" | "just-appeared";
  * - met:     条件が成立していることを確認した
  * - not-met: 条件が成立していないことを確認した
  * - unknown: 確認できない
- * - auto:    入力した手順（棋譜 / FEN）から判定する
+ * - auto:    入力した対局履歴（棋譜。game.history）から判定する
  */
 export type ConditionCheck = "met" | "not-met" | "unknown" | "auto";
+
+/**
+ * 再生した対局履歴の最終局面を、アービターが盤上と照合した結果（ADR-014 §4）。
+ * - match:         局面も手数も一致した
+ * - position-only: 局面は一致したが、手数は確認できない（途中からの履歴と同じ扱い）
+ * - mismatch:      一致しない（自動判定は使わず、盤上で手順を再現する）
+ * - unknown:       照合できない（mismatch と同じ扱い）
+ */
+export type HistoryConfirmation =
+  "match" | "position-only" | "mismatch" | "unknown";
 
 export interface DrawClaimFacts {
   subtype: DrawSubtype;
@@ -175,8 +185,17 @@ export interface DrawClaimFacts {
   conditionCheck?: ConditionCheck;
   /** 9.6.2: 最後の手がチェックメイトだったか */
   lastMoveCheckmate?: boolean;
-  /** 任意: 棋譜（SAN の指し手列）または FEN（1行に1局面） */
+  /**
+   * 任意: 対局履歴（game.history）のテキスト。PGN / 棋譜（SAN の指し手列）だけを受け付け、
+   * 途中局面からの場合は [FEN "..."] ヘッダで開始局面を書く。FEN の列は受け付けない。
+   * 端末内だけで使い、外部へは送らない（ADR-012 / ADR-014 §4）。
+   */
   positionsText?: string;
+  /**
+   * 再生した最終局面の照合結果。positionsText を変更すると消える
+   * （別の履歴に対する照合を引き継がない）。
+   */
+  historyConfirmed?: HistoryConfirmation;
   /** 任意（9.2.1）: 記入した指し手（SAN） */
   intendedMove?: string;
 }
@@ -194,6 +213,12 @@ export interface Incident {
   flagFallFacts?: Partial<FlagFallFacts>;
   /** ドロー（同一局面・75手）の構造化された回答 */
   drawClaimFacts?: Partial<DrawClaimFacts>;
+  /**
+   * 「わからない・確認できない」と回答された追加質問の ID（fact-model §3.3）。
+   * 該当する事実の値は未設定のまま。未回答（needs-input）とは区別され、
+   * DecisionEngine が resolveUnknown で全分岐を評価する。
+   */
+  unknownAnswers?: string[];
   /** 報告時点の規則セット（v5 以前の Incident には存在しない） */
   rulesetSnapshot?: RulesetSnapshot;
   /** 自由記述（メモ）。判断には使用しない */

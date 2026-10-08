@@ -27,7 +27,15 @@ function analysis(
       maxHalfmoveClock: 0,
       sideToMove: "white",
       positions: 9,
-      format: "moves",
+      complete: true,
+      history: {
+        complete: true,
+        plies: 8,
+        lastMove: "4... Ng8",
+        finalFen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 8 5",
+        sideToMove: "white",
+        fullmoveNumber: 5,
+      },
       ...over,
     },
   };
@@ -137,6 +145,7 @@ describe("DT-005 threefold repetition claim (9.2 / 9.5)", () => {
     const r = run({
       ...CLAIM,
       conditionCheck: "auto",
+      historyConfirmed: "match",
       positionsText: "1. Nf3 ...",
       analysis: analysis({ targetOccurrences: 3 }),
     });
@@ -149,6 +158,7 @@ describe("DT-005 threefold repetition claim (9.2 / 9.5)", () => {
     const r = run({
       ...CLAIM,
       conditionCheck: "auto",
+      historyConfirmed: "match",
       positionsText: "1. Nf3 ...",
       analysis: analysis({ targetOccurrences: 2 }),
     });
@@ -161,6 +171,7 @@ describe("DT-005 threefold repetition claim (9.2 / 9.5)", () => {
     const bad = run({
       ...CLAIM,
       conditionCheck: "auto",
+      historyConfirmed: "match",
       positionsText: "1. e4 e5 2. Ke3",
       analysis: { ok: false, error: "3手目を指せません" },
     });
@@ -172,6 +183,7 @@ describe("DT-005 threefold repetition claim (9.2 / 9.5)", () => {
     const r = run({
       ...CLAIM,
       conditionCheck: "auto",
+      historyConfirmed: "match",
       positionsText: "...",
       analysis: analysis({ targetOccurrences: 5, maxOccurrences: 5 }),
     });
@@ -204,6 +216,7 @@ describe("DT-005 fivefold repetition (9.6.1)", () => {
     const r = run({
       ...base,
       conditionCheck: "auto",
+      historyConfirmed: "match",
       positionsText: "...",
       analysis: analysis({ maxOccurrences: 5 }),
     });
@@ -236,6 +249,7 @@ describe("DT-005 75-move rule (9.6.2)", () => {
     const met = run({
       ...base,
       conditionCheck: "auto",
+      historyConfirmed: "match",
       positionsText: "...",
       lastMoveCheckmate: false,
       analysis: analysis({
@@ -247,21 +261,55 @@ describe("DT-005 75-move rule (9.6.2)", () => {
     const notMet = run({
       ...base,
       conditionCheck: "auto",
+      historyConfirmed: "match",
       positionsText: "...",
       lastMoveCheckmate: false,
       analysis: analysis({ maxHalfmoveClock: 149 }),
     });
     expect(notMet.decision.intervention).toBe("no-intervention");
   });
-  it("automatic from FENs is not trusted for 75 moves → consult CA", () => {
+  it("automatic from a history starting at a FEN: 150 counted plies → draw; fewer → manual reconstruction (ADR-014 §4)", () => {
+    const met = run({
+      ...base,
+      conditionCheck: "auto",
+      historyConfirmed: "match",
+      positionsText: "...",
+      lastMoveCheckmate: false,
+      analysis: analysis({
+        complete: false,
+        maxHalfmoveClock: 150,
+        seventyFiveReachedWithCheckmate: false,
+      }),
+    });
+    expect(met.decision.penalties[0].type).toBe("draw");
+    const notMet = run({
+      ...base,
+      conditionCheck: "auto",
+      historyConfirmed: "match",
+      positionsText: "...",
+      lastMoveCheckmate: false,
+      analysis: analysis({ complete: false, maxHalfmoveClock: 149 }),
+    });
+    expect(notMet.status).toBe("needs-input");
+    expect(ids(notMet)).toContain("seventyFiveCheck");
+    expect(notMet.decision.conclusion).toContain("途中の局面");
+  });
+  it("incomplete history: checkmate at the counted 150th ply without a reset is not given precedence", () => {
     const r = run({
       ...base,
       conditionCheck: "auto",
+      historyConfirmed: "match",
       positionsText: "...",
-      lastMoveCheckmate: false,
-      analysis: analysis({ maxHalfmoveClock: 160, format: "fens" }),
+      analysis: analysis({
+        complete: false,
+        maxHalfmoveClock: 150,
+        seventyFiveReachedWithCheckmate: true,
+        seventyFiveCheckmateUncertain: true,
+      }),
     });
-    expect(r.decision.kind).toBe("manual-review");
+    expect(r.status).toBe("needs-input");
+    expect(r.decision.penalties).toHaveLength(0);
+    expect(r.decision.conclusion).toContain("確定できません");
   });
 });
 
@@ -272,6 +320,7 @@ describe("DT-005 review regressions", () => {
       claimMode: "about-to-appear",
       moveWritten: true,
       conditionCheck: "auto",
+      historyConfirmed: "match",
       positionsText: "1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6 4. Ng1",
       analysis: analysis({ targetOccurrences: 2 }),
     });
@@ -286,6 +335,7 @@ describe("DT-005 review regressions", () => {
       ...CLAIM,
       claimant: "black",
       conditionCheck: "auto",
+      historyConfirmed: "match",
       positionsText: "...",
       analysis: analysis({ sideToMove: "white" }),
     });
@@ -298,6 +348,7 @@ describe("DT-005 review regressions", () => {
       subtype: "75-move-rule",
       competitionType: "standard",
       conditionCheck: "auto",
+      historyConfirmed: "match",
       positionsText: "...",
       analysis: analysis({
         halfmoveClock: 0,
@@ -313,6 +364,7 @@ describe("DT-005 review regressions", () => {
       subtype: "75-move-rule",
       competitionType: "standard",
       conditionCheck: "auto",
+      historyConfirmed: "match",
       positionsText: "...",
       analysis: analysis({
         maxHalfmoveClock: 150,

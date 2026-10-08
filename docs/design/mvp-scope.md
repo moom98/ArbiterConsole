@@ -61,8 +61,8 @@ Per ADR-002, implement Decision Trees for high-frequency incidents:
 | DT-003 | Illegal Move Rapid A5 | Rapid (A5) | P1 | 4 days |
 | DT-004 | Flag Fall | All | P0 | 2 days |
 | DT-005 | Threefold Repetition | All | P1 | 5 days* |
-| DT-006 | 50-move Rule | All | P2 | 3 days |
-| DT-007 | Fivefold Repetition | All | P2 | 4 days* |
+| DT-006 | Automatic Draw: fivefold and 75 moves (renumbered by ADR-014; the 50-move claim is in DT-005) | All | P2 | — |
+| DT-007 | Touch Move, Article 4 (renumbered by ADR-014) | All | P1 | — |
 | DT-008 | 75-move Rule | All | P2 | 2 days |
 | DT-009 | Stalemate | All | P2 | 3 days |
 | DT-010 | Dead Position | All | P2 | 2 days |
@@ -432,7 +432,7 @@ Based on incident-classification.md, MVP covers:
 
 ### 10.1 Phase 2: Enhanced Decision Support
 
-- **P2 Decision Trees**: DT-006 through DT-010 (50-move, fivefold, stalemate, dead position)
+- **P2 Decision Trees**: DT-006 through DT-010 (numbering changed by ADR-014: DT-006 Automatic Draw, DT-007 Touch Move, the 50-move claim in DT-005; stalemate and dead position later)
 - **Clock Operation Guide**: Detailed guides for common clock models
 - **Multi-clock Support**: Clock model selection and specific guides
 

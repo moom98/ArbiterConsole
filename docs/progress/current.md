@@ -2,6 +2,7 @@
 
 **Last updated:** 2026-10-08
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
+
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
 
 This file is the handoff for a fresh Claude session. Do not rely on conversation history.
@@ -117,6 +118,22 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 
 ## Tests and verification performed
 
+**J1b-3 `game.history` (2026-10-08, `feature/fact-catalog`):**
+
+- tsc is clean.
+- eslint reports 0 problems.
+- 56 files / 937 tests pass, including the new `__tests__/game-history.test.ts` and `game-history.component.test.tsx`.
+- `npm run build` succeeds.
+- Review: FIX REQUIRED (2 must-fix, 3 should-fix) → fixed → re-review APPROVE. See `milestones/j1b-3-game-history.md`.
+
+**J1b-2 `unknown` answers (2026-10-08, `feature/fact-catalog`):**
+
+- tsc is clean.
+- eslint reports 0 errors.
+- 54 files / 889 tests pass, including 67 new tests in `__tests__/unknown-answers*.ts(x)`.
+- `npm run build` succeeds.
+- Review: FIX REQUIRED → fixed → APPROVE. Then the should-fix was done (a shared unanswered question across all branches is asked).
+
 **Gemini embeddings (ADR-010, 2026-10-08):**
 
 - tsc is clean.
@@ -147,7 +164,16 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 ## Known issues
 
-- **Illegal-move count:** it follows the *suggested* decision. There is no "applied / not applied" confirmation yet (ADR-004). AI decisions stay `pending` until edited.
+- **J1b-3:**
+  - `Game.pgn` is not wired in: no UI sets it, so the history comes only from the pasted text.
+  - There is no board diagram; the arbiter compares the FEN and the last move with the board (J2).
+  - The side to move still comes from the `claimantHasMove` question, and the history only validates it (J1b-5).
+- **J1b-2:**
+  - With an unknown answer, a branch that needs another unanswered question counts as disagreeing, unless every branch asks the same question. Example: `claimMode` unknown and `moveWritten` unanswered give manual-review.
+  - `materialConfirmed` = unknown gives manual-review until ADR-014 §5 removes the count inputs.
+  - The fact layer's `FactAnswer.unknown` is not yet linked to `Incident.unknownAnswers`. That happens when facts replace the follow-up questions.
+
+- **Illegal-move count:** it follows the _suggested_ decision. There is no "applied / not applied" confirmation yet (ADR-004). AI decisions stay `pending` until edited.
 - **Ad-hoc game ids** contain the local date, so their history splits at midnight.
 - **Blitz B.2 time penalty:** the literal reading is 2 minutes, and the app shows it as "要確認" (needs confirmation). Federation practice is unconfirmed.
 - **Search:**
@@ -167,6 +193,33 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 - `npm install` can drop platform-specific bindings (rolldown, lightningcss) from `package-lock.json`. Use `npm ci`.
 
 ## Unresolved questions
+
+- **Jev (TypeSafe AI) for classification, and external-AI data protection (2026-10-08, design only).**
+  - **Design and ADRs:**
+    - `docs/design/jev-classifier-design.md` (ADR-011)
+    - `docs/design/external-ai-data-protection.md` (ADR-012): Sensitive Gate and PII redaction for **all** external AI, Gemini included
+    - `docs/design/fact-model.md` (ADR-013): the Decision Tree decides the required facts, Jev only checks "explicitly stated?", unknown answers, calibrated thresholds
+    - ADR-014: DT-005 Draw Claim, DT-006 Automatic Draw, DT-007 Touch Move, local `game.history`, position-based mate possibility, `TimeControl` periods
+    - catalogue: `docs/design/jev-missing-info-catalog.md`
+  - **User decisions:**
+    - Q1: classification only;
+    - Q2: an API key exists;
+    - Q3: de-identified minimal state, no sensitive data, no ZDR;
+    - Q5: de-identify Gemini too;
+    - the catalogue review: 12 points, all reflected.
+  - **Still open:**
+    - (done 2026-10-08) the catalogue re-review: 15 points reflected, ADR-014 added. **The user approved implementing the fact catalogue.**
+    - Q-F1: value suggestion (not planned).
+  - **Answered 2026-10-08:**
+    - Q-DP1: sensitive incidents are not sent to external AI; they are handled by local trees and forms; on-device AI is not forbidden;
+    - Q-DP2: a context-dependent expression registry with evaluation cases, where undecidable means local fallback;
+    - Q-F2: present precision ≥ 0.99, and ≥ 0.995 for blocking facts.
+  - The TypeSafe key is at `~/.config/arbiter-console/typesafe.key`. It is never in the repo or in `.env*`.
+  - Code so far:
+    - J1b-1: `lib/domain/facts/`, pure;
+    - J1b-2: `unknown` answers and `resolveUnknown` in the engine. No Decision Tree body changed.
+    - J1b-3: `lib/domain/services/game-history.ts`, strict replay in the port, and `historyConfirmed` in DT-005.
+  - The key must never go into `.env*` (`cf:deploy` refuses to run). Keep it in `~/.config/arbiter-console/typesafe.key` for J0 and J3.
 
 - Whether the user's federation applies 1 or 2 minutes for Blitz B.2 (adequate supervision).
 - **Custom domain:** whether to use one, or the default `*.workers.dev` URL.
@@ -188,7 +241,29 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 2. **Follow-ups found during deployment prep:**
    - Semantic search: done with ADR-010. Next, tune `vectorMinSimilarity` on real PDFs.
    - Upgrade to Next.js 15.5+/16 and the current OpenNext adapter. Next 14 is EOL.
-3. Later, if the user wants:
+3. **Jev classifier and data protection (ADR-011/012/013):** after the catalogue re-review, implement the steps in jev-classifier-design §10 in order (J0, J1a data protection, J1b fact model, J1c Jev, J2, J3):
+   - J0: check the official API with a real key;
+   - J0: **done 2026-10-08**. The real API was checked with synthetic text (`scripts/jev-probe.mjs`, jev-classifier-design §2.1). `noul` returns its probability in the field `noul`; pinned `jev-1.13.0` works; 422 errors echo the input.
+   - J1a: data protection for all routes;
+   - J1b: the fact model and ADR-014, in slices:
+     - J1b-1: the catalogue data, types and `requiredFacts` (pure, no tree changes). **Done 2026-10-08**, on branch `feature/fact-catalog` (stacked on `design/jev-classifier`). See `milestones/j1b-1-fact-catalogue.md`;
+     - J1b-2: `unknown` and `resolveUnknown`. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-2-unknown-answers.md`.
+       - Every incident-scope choice question offers "わからない・確認できない".
+       - Unknown answers are kept in `Incident.unknownAnswers`.
+       - `DecisionEngine.routeResolvingUnknown` enumerates them with the pure `resolveUnknown` (`tree-support.ts`) for every tree. The trees did not change (ADR-013 amendment).
+       - The decision lists `unconfirmedFacts`.
+     - J1b-3: `game.history`. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-3-game-history.md`.
+       - PGN or scoresheet text is parsed in the domain (start position only via `[FEN]`, FEN lists rejected), then replayed with chess.js `strict: true`.
+       - In an incomplete history, "not met" is inconclusive and the start FEN's clock is not trusted.
+       - DT-005 asks `historyConfirmed`: the arbiter compares the final position and the move count with the board.
+     - J1b-4: mate possibility;
+     - J1b-5: DT-005/006 restructure;
+     - J1b-6: DT-007 touch move and counting;
+     - J1b-7: `TimeControl` periods;
+   - J1c: the Jev port, adapter, calibrated parser and `/api/llm/facts`, with the default provider kept on `gemini`;
+   - J2: UI;
+   - J3: Japanese evaluation, then the production switch by env.
+4. Later, if the user wants:
    - **Milestone 8 without voice input:** clock guide, player Q&A mode, UX polish.
    - **Milestone 9:** Playwright E2E, performance.
    - **Milestone 10.2/10.3:** user and developer docs.

@@ -4,6 +4,7 @@ import type {
   NormalizedPosition,
   PortResult,
 } from "@/lib/domain/services/position-analysis";
+import type { GameHistory } from "@/lib/domain/services/game-history";
 
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -49,45 +50,26 @@ function legalEnPassantSquare(chess: Chess): string {
   return ep ? ep.to : "-";
 }
 
-const RESULT_TOKENS = new Set(["1-0", "0-1", "1/2-1/2", "½-½", "*"]);
-
-/** 全角英数字・記号を半角に変換する（例: "１．Ｎｆ３" → "1.Nf3"） */
-function toHalfWidth(text: string): string {
-  return text
-    .replace(/[\uFF01-\uFF5E]/g, (c) =>
-      String.fromCharCode(c.charCodeAt(0) - 0xfee0)
-    )
-    .replace(/\u3000/g, " ");
-}
-
-/** 入れ子の変化（括弧）を取り除く */
-function stripVariations(text: string): string {
-  let out = "";
-  let depth = 0;
-  for (const ch of text) {
-    if (ch === "(") depth++;
-    else if (ch === ")") depth = Math.max(0, depth - 1);
-    else if (depth === 0) out += ch;
+/**
+ * 1手を厳密に（strict: true）指す。過剰な曖昧さ回避（Ngf3）、座標表記（e2e4）、
+ * 0-0 などの非標準表記と、曖昧な表記（Nd2 で2つのナイトが行ける）は不合格。
+ */
+function moveStrict(chess: Chess, san: string): string | undefined {
+  try {
+    return chess.move(san, { strict: true }).san;
+  } catch {
+    return undefined;
   }
-  return out;
 }
 
-function tokenizeMoves(text: string): string[] {
-  const body = stripVariations(
-    toHalfWidth(text)
-      .replace(/\[[^\]]*\]/g, " ") // PGN ヘッダタグ
-      .replace(/\{[^}]*\}/g, " ") // コメント
-      .replace(/;[^\n]*/g, " ")
-  ).replace(/\$\d+/g, " "); // NAG
-  return body
-    .split(/\s+/)
-    .map((t) =>
-      t
-        .replace(/^\d+\.(\.\.)?/, "")
-        .replace(/[!?]+$/, "")
-        .trim()
-    )
-    .filter((t) => t !== "" && !RESULT_TOKENS.has(t) && !/^\d+\.*$/.test(t));
+function notationHint(san: string): string {
+  if (/^e\.?p\.?$/i.test(san))
+    return "アンパッサンの「e.p.」は書かずに、exd6 のように取る手だけを書いてください。";
+  if (/^0-0(-0)?/.test(san))
+    return "キャスリングは英字の O を使って O-O / O-O-O と書いてください。";
+  if (/^[a-h][1-8]-?[a-h][1-8]/.test(san))
+    return "座標表記（e2e4 など）ではなく、標準の代数式表記（SAN、例: e4, Nf3）で書いてください。";
+  return "合法手でないか、表記が曖昧・標準でない可能性があります（例: 2つのナイトが行ける場合は Nbd2 のように書く）。";
 }
 
 export const chessJsPositionPort: ChessPositionPort = {
@@ -106,45 +88,53 @@ export const chessJsPositionPort: ChessPositionPort = {
       ok: true,
       key,
       halfmoveClock: Number(fields[4]) || 0,
+      fullmoveNumber: Number(fields[5]) || 1,
       isCheckmate: chess.isCheckmate(),
       sideToMove: chess.turn() === "w" ? "white" : "black",
     };
   },
 
-  replay(moves: string, startFen?: string): PortResult<{ fens: string[] }> {
+  replay(history: GameHistory): PortResult<{ fens: string[]; sans: string[] }> {
     let chess: Chess;
-    if (startFen) {
-      const loaded = load(startFen);
-      if (!loaded.ok) return loaded;
+    if (history.startFen !== undefined) {
+      const loaded = load(history.startFen);
+      if (!loaded.ok)
+        return {
+          ok: false,
+          error: `開始局面の FEN が不正です: ${loaded.error}`,
+        };
       chess = loaded.chess;
     } else {
       chess = new Chess();
     }
     const fens = [chess.fen()];
-    const tokens = tokenizeMoves(moves);
-    for (let i = 0; i < tokens.length; i++) {
-      const token = tokens[i];
-      try {
-        chess.move(token);
-      } catch {
+    const sans: string[] = [];
+    for (let i = 0; i < history.moves.length; i++) {
+      const token = history.moves[i];
+      const moveNumber = chess.moveNumber();
+      const black = chess.turn() === "b";
+      const san = moveStrict(chess, token);
+      if (san === undefined) {
         return {
           ok: false,
-          error: `${Math.floor(i / 2) + 1}${i % 2 === 0 ? "." : "..."} ${token} は直前の局面で合法手ではありません（${i + 1}半手目）`,
+          error: `${moveNumber}${black ? "..." : "."} ${token} を指せません（${i + 1}半手目）。${notationHint(token)}`,
         };
       }
+      sans.push(san);
       fens.push(chess.fen());
     }
-    return { ok: true, fens };
+    return { ok: true, fens, sans };
   },
 
   play(fen: string, san: string): PortResult<{ fen: string }> {
     const loaded = load(fen);
     if (!loaded.ok) return loaded;
-    try {
-      loaded.chess.move(san.trim());
-      return { ok: true, fen: loaded.chess.fen() };
-    } catch {
-      return { ok: false, error: `「${san}」は合法手ではありません` };
-    }
+    const token = san.trim();
+    if (moveStrict(loaded.chess, token) === undefined)
+      return {
+        ok: false,
+        error: `「${token}」を指せません。${notationHint(token)}`,
+      };
+    return { ok: true, fen: loaded.chess.fen() };
   },
 };

@@ -181,8 +181,27 @@ export function DecisionDisplay({
       {/* Conclusion */}
       <div className="mb-4">
         <h3 className="font-semibold mb-2 text-gray-700">推奨される結論</h3>
-        <p className="text-lg">{decision.conclusion}</p>
+        <p className="text-lg whitespace-pre-line break-words">
+          {decision.conclusion}
+        </p>
       </div>
+
+      {/* Facts answered "unknown" (fact-model §3.3) */}
+      {decision.unconfirmedFacts && decision.unconfirmedFacts.length > 0 && (
+        <div
+          className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3"
+          aria-label="確認できなかった事実"
+        >
+          <h3 className="font-semibold mb-1 text-amber-900">
+            確認できなかった事実
+          </h3>
+          <ul className="list-disc ml-5 space-y-1 text-amber-900">
+            {decision.unconfirmedFacts.map((f, i) => (
+              <li key={i}>{f}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Article IDs up front */}
       {decision.sources.length > 0 && (

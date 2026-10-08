@@ -1,9 +1,23 @@
 import { describe, it, expect } from "vitest";
+import { analyzeRepetition as analyzeValidated } from "@/lib/domain/services/position-analysis";
 import {
-  analyzeRepetition,
-  detectPositionsFormat,
-} from "@/lib/domain/services/position-analysis";
+  parseGameHistoryText,
+  validateGameHistory,
+} from "@/lib/domain/services/game-history";
 import { chessJsPositionPort as port } from "@/lib/infrastructure/chess/chess-js-position-port";
+
+/** テキスト → game.history → 検証 → 解析（DecisionEngine と同じ流れ） */
+function analyzeRepetition(
+  _port: typeof port,
+  text: string,
+  intendedMove?: string
+) {
+  const parsed = parseGameHistoryText(text);
+  if (!parsed.ok) return parsed;
+  const validated = validateGameHistory(port, parsed.history);
+  if (!validated.ok) return validated;
+  return analyzeValidated(port, validated, intendedMove);
+}
 
 function key(fen: string): string {
   const n = port.normalize(fen);
@@ -60,13 +74,13 @@ describe("chess.js position port — 9.2.3 position identity", () => {
 describe("analyzeRepetition", () => {
   const knightDance = "1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6 4. Ng1 Ng8";
 
-  it("detects the input format", () => {
-    expect(detectPositionsFormat(knightDance)).toBe("moves");
-    expect(
-      detectPositionsFormat(
-        "4k3/8/8/8/8/8/8/4K3 w - - 0 1\n4k3/8/8/8/8/8/8/4K3 b - - 0 1"
-      )
-    ).toBe("fens");
+  it("rejects a list of FENs (ADR-014 §4: no FEN-list mode)", () => {
+    const r = analyzeRepetition(
+      port,
+      "4k3/8/8/8/8/8/8/4K3 w - - 0 1\n4k3/8/8/8/8/8/8/4K3 b - - 0 1"
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("FEN");
   });
 
   it("initial position appears 3 times after the knight dance", () => {

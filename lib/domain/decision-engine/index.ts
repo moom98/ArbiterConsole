@@ -24,12 +24,27 @@ import {
   type RepetitionInput,
 } from "@/lib/domain/decision-trees/dt-005-repetition";
 import type { DecisionTreeResult } from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
-import { QUESTIONS, type FollowUpQuestion } from "@/lib/domain/follow-up";
+import {
+  QUESTIONS,
+  applyIncidentAnswers,
+  type FollowUpQuestion,
+  type IncidentQuestionId,
+} from "@/lib/domain/follow-up";
+import {
+  DEFAULT_NEEDS_INPUT_CONCLUSION,
+  resolveUnknown,
+  unknownResolutionFields,
+  type BranchResult,
+} from "@/lib/domain/decision-trees/tree-support";
 import { defaultProviders, type DomainProviders } from "@/lib/domain/providers";
 import {
   analyzeRepetition,
   type ChessPositionPort,
 } from "@/lib/domain/services/position-analysis";
+import {
+  parseGameHistoryText,
+  validateGameHistory,
+} from "@/lib/domain/services/game-history";
 import type { LlmAssistOutcome, LlmAssistPort } from "@/lib/domain/llm/ports";
 import { buildLlmDecision } from "@/lib/domain/llm/llm-decision";
 import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
@@ -116,7 +131,7 @@ export class DecisionEngine {
   ) {}
 
   processIncident(context: DecisionEngineContext): DecisionEngineResult {
-    const routed = this.route(context);
+    const routed = this.routeResolvingUnknown(context);
     if (!isUncovered(routed)) return routed;
     return this.manualReview(context.incident, routed.rulesVersion);
   }
@@ -128,7 +143,7 @@ export class DecisionEngine {
   async evaluate(
     context: DecisionEngineContext
   ): Promise<DecisionEngineResult> {
-    const routed = this.route(context);
+    const routed = this.routeResolvingUnknown(context);
     if (!isUncovered(routed)) return routed;
     const { incident } = context;
     if (!this.deps.llm) {
@@ -248,6 +263,82 @@ export class DecisionEngine {
     );
   }
 
+  /**
+   * 「わからない」と回答された事実（incident.unknownAnswers）を resolveUnknown で扱う
+   * （fact-model §3.3）。各分岐は、その事実に値を仮定した Incident で通常どおりルーティングする。
+   * DT 本体は unknown を知らない（未設定の事実として扱う）。
+   */
+  private routeResolvingUnknown(
+    context: DecisionEngineContext
+  ): DecisionEngineResult | UncoveredIncident {
+    const { incident } = context;
+    const unknownIds = incident.unknownAnswers ?? [];
+    const base = this.route(context);
+    if (unknownIds.length === 0) return base;
+
+    const toBranch = (
+      r: DecisionEngineResult | UncoveredIncident
+    ): BranchResult =>
+      isUncovered(r)
+        ? { status: "other" }
+        : r.requiresFollowUp
+          ? {
+              status: "needs-input",
+              decision: r.decision,
+              questions: r.followUpQuestions,
+            }
+          : { status: "decided", decision: r.decision };
+
+    const resolution = resolveUnknown({
+      unknownIds,
+      base: toBranch(base),
+      evaluate: (assignment) =>
+        toBranch(
+          this.route({
+            ...context,
+            incident: applyIncidentAnswers(
+              incident,
+              assignment as Partial<Record<IncidentQuestionId, string>>
+            ),
+          })
+        ),
+    });
+
+    switch (resolution.kind) {
+      case "not-needed":
+        return base;
+      case "ask-others": {
+        if (isUncovered(base)) return base;
+        const labels = resolution.questions
+          .filter((q) => !q.optional)
+          .map((q) => q.label);
+        // 元の評価にない質問（全分岐で共通に必要な質問）の場合、元の結論文は合わない。
+        // 全分岐の結論文が同じなら、それを使う（例: 照合する最終局面の表示）
+        const baseIds = new Set(base.followUpQuestions.map((q) => q.id));
+        const sameRound = resolution.questions.every((q) => baseIds.has(q.id));
+        return {
+          decision: {
+            ...base.decision,
+            conclusion: sameRound
+              ? base.decision.conclusion
+              : (resolution.conclusion ?? DEFAULT_NEEDS_INPUT_CONCLUSION),
+            actions: labels,
+            missingFields: labels,
+          },
+          requiresFollowUp: true,
+          followUpQuestions: resolution.questions,
+        };
+      }
+      default: {
+        const decision = this.build(incident, {
+          ...unknownResolutionFields(resolution),
+          rulesVersion: context.ruleset?.rulesVersion,
+        });
+        return { decision, requiresFollowUp: false, followUpQuestions: [] };
+      }
+    }
+  }
+
   private route(
     context: DecisionEngineContext
   ): DecisionEngineResult | UncoveredIncident {
@@ -336,14 +427,22 @@ export class DecisionEngine {
         };
         if (facts.conditionCheck === "auto" && facts.positionsText) {
           if (this.deps.positions) {
-            const analysed = analyzeRepetition(
-              this.deps.positions,
-              facts.positionsText,
-              incident.subtype === "threefold-repetition-claim" &&
-                facts.claimMode === "about-to-appear"
-                ? facts.intendedMove
-                : undefined
-            );
+            // 対局履歴（game.history）は端末内で解析・検証したものだけを使う（ADR-014 §4）
+            const port = this.deps.positions;
+            const parsed = parseGameHistoryText(facts.positionsText);
+            const validated = parsed.ok
+              ? validateGameHistory(port, parsed.history)
+              : parsed;
+            const analysed = validated.ok
+              ? analyzeRepetition(
+                  port,
+                  validated,
+                  incident.subtype === "threefold-repetition-claim" &&
+                    facts.claimMode === "about-to-appear"
+                    ? facts.intendedMove
+                    : undefined
+                )
+              : validated;
             input.analysis = analysed.ok
               ? { ok: true, result: analysed }
               : { ok: false, error: analysed.error };

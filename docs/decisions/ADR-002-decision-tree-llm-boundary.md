@@ -580,8 +580,8 @@ async function llmReasoning(
 | DT-003 | Illegal Move Rapid A5 | Rapid (A5) | Clock pressed? Opponent moved? Offense count? | High |
 | DT-004 | Flag Fall | All | Opponent material? (K, KN, KB, etc.) | Low |
 | DT-005 | Threefold Repetition | All | Player claimed? On turn? Position history? | High |
-| DT-006 | 50-move Rule | All | Player claimed? On turn? Move count? | Medium |
-| DT-007 | Fivefold Repetition | All | Position history? | High |
+| DT-006 | ~~50-move Rule~~ → now Automatic Draw (fivefold, 75 moves). See ADR-014. | All | Position history | High |
+| DT-007 | ~~Fivefold Repetition~~ → now Touch Move (Article 4). See ADR-014. The 50-move claim is part of DT-005 Draw Claim. | All | Touched pieces, position | High |
 | DT-008 | 75-move Rule | All | Move count? | Low |
 | DT-009 | Stalemate | All | No legal moves? Not in check? | Low |
 | DT-010 | Dead Position | All | Material check? | Low |

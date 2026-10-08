@@ -6,6 +6,8 @@
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
 
 This file is the handoff for a fresh Claude session. Do not rely on conversation history.
+
+**Current state in one paragraph (2026-10-08):** all work since PR #3 is on `feature/fact-catalog` (pushed, not merged, **not deployable yet**). It holds the fact catalogue and ADR-014 (J1b-1…J1b-8, all done) and the pure privacy package (J1a-1, done, review MERGE). **Next task: J1a-2**, connecting the privacy package to every external-AI call plus the arbiter's mandatory confirmation; the step-by-step plan with the code survey is in [`next-j1a-2-plan.md`](./next-j1a-2-plan.md). Until J1a-2 and J1a-3 are done, the app still sends the raw description to Gemini, so `feature/fact-catalog` must not be deployed or merged into `main`.
 `docs/IMPLEMENTATION_STATUS.md` is a stale 2024 snapshot. Use this file and `docs/progress/milestones/` instead.
 
 ## Completed work
@@ -23,6 +25,9 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
 - **Milestone 6:** tournament profile, rounds/games/players, ruleset snapshot, regulations, home screen (ADR-006). See `milestones/milestone-6.md`.
 - **Milestone 7:** round checklist (§26), Dexie v7, guarded start/end round (ADR-008). See `milestones/milestone-7.md`.
   - Reviewed, fixed and re-reviewed; verdict MERGE.
+- **On `feature/fact-catalog` (not merged):**
+  - **J1b-1…J1b-8:** fact catalogue, `unknown` answers, `game.history`, mate possibility (ADR-015), draw trees DT-005/006, touch move DT-007, time-control periods (Dexie v8), game end. ADR-014 is fully implemented. See `milestones/j1b-*.md`.
+  - **J1a-1:** `lib/domain/privacy/` (Sensitive Gate with the known-vocabulary layer, PII redaction, residual check, minimization, re-identification, `protectIncidentText`) and the synthetic evaluation fixtures. See `milestones/j1a-1-privacy-package.md`.
 
 ## User decisions (2026-10-07)
 
@@ -119,10 +124,14 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `lib/domain/rules/citations.ts`
 - **Application:** `lib/application/` (rule-ingestion, rule-library, csv-export, llm-classification, round-checklist, tournament-management)
 - **Infrastructure:**
-  - `lib/infrastructure/db/schema.ts` (Dexie v1–v3, v5, v7)
+  - `lib/infrastructure/db/schema.ts` (Dexie v1–v3, v5, v7, v8 on `feature/fact-catalog`)
   - `lib/infrastructure/llm/` (client, assist port, `server/` config, handler, rate limiter, Gemini client)
   - `lib/infrastructure/ai/`
   - `lib/infrastructure/chess/` (chess.js port; `helpmate/` search, worker and port)
+- **Privacy (J1a-1):**
+  - `lib/domain/privacy/` (`normalize`, `sensitive-terms` (L2 + L3 registry), `known-vocabulary` (L3v), `sensitive-gate`, `placeholders`, `pii-redaction`, `residual-check`, `minimization`, `reidentify`, `protect`)
+  - `lib/infrastructure/privacy/known-identifiers.ts` (untested; J1a-2)
+  - fixtures `__tests__/fixtures/privacy/*.json`, tests `__tests__/privacy/*.test.ts`
 - **API:** `app/api/llm/{reason,classify,embed}/route.ts`
 - **Semantic search (ADR-010):**
   - `lib/infrastructure/embeddings/generator.ts` (Gemini client)
@@ -378,10 +387,12 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 ## Information a fresh Claude session needs to continue
 
 1. Read `CLAUDE.md`, this file, `docs/progress/milestones/*`, then the design docs and ADRs for the next task.
-2. The current work branch is `feature/fact-catalog` (pushed to `origin`, latest J1b-8; `main` has the deployed app). Check `git log --oneline -15` on it, and `git worktree list`.
-   - **Next task:** J1a-2 (see "Next steps" → J1a), then J1a-3, then J1c (Jev port, adapter, `/api/llm/facts`; also wire `deriveTimeControlFacts` and `assessRecordingObligation`, and treat `game.record-state` as a non-blocking record fact).
+2. The current work branch is `feature/fact-catalog` (pushed to `origin`, latest J1a-1 at `52d7ebb` or later; `main` has the deployed app). Check `git log --oneline -15` on it, and `git worktree list`.
+   - **Next task:** J1a-2 — follow [`next-j1a-2-plan.md`](./next-j1a-2-plan.md) (code survey, work items, open decision about confirming search queries). Then J1a-3, then J1c (Jev port, adapter, `/api/llm/facts`; also wire `deriveTimeControlFacts` and `assessRecordingObligation`, and treat `game.record-state` as a non-blocking record fact).
    - The privacy package's reviews used independent reviewer agents that wrote their own synthetic sensitive phrases; keep doing that for any change to `lib/domain/privacy/` (the author's own fixtures say little).
-   - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/j1b-N-*.md` and update this file.
+   - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/<slice>-*.md` and update this file.
+   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (70 files / 1339 tests at J1a-1; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
+   - The project tsconfig has no `target` (tsc treats it as ES5): avoid regex-literal flags such as `/u` or `/s` and `matchAll`; use `new RegExp(source, flags)` and `exec` loops, as `lib/domain/privacy/` does.
    - In a nested worktree, run eslint as `npx eslint --no-eslintrc -c .eslintrc.json --ext .ts,.tsx app components lib __tests__`.
 3. Do not edit `docs/requirements/product-requirements.md` for implementation convenience.
 4. Keep chess rule judgment in `lib/domain/` only.

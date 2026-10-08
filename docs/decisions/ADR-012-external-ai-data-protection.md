@@ -63,6 +63,12 @@ Today the incident description, the article text and search queries go to Gemini
 - **Accepted trade-off:** free-text reports with words outside the vocabulary get no external AI help. The vocabulary grows only through review, like the term lists, and must never contain sensitive words or single kanji that combine into them.
 - Details: design §4.2 (L3v), §10.
 
+## Amendment 2 (2026-10-08, user decision after the second J1a-1 review)
+
+- **The arbiter confirms every external send** (step F becomes mandatory): the de-identified payload is shown, and nothing is sent until the arbiter confirms it contains nothing sensitive.
+- **Why:** 117 of 270 new, independently written sensitive phrases passed the known-vocabulary gate. Free text about people's actions can be written with ordinary chess words, so no lexical gate guarantees 0 false negatives.
+- **Release condition:** the gate's false-negative rate on held-out sets is measured, reported and minimized; 0 false negatives is still required on the regression sets. The human confirmation is the final defense.
+
 ## Consequences
 
 **Positive**

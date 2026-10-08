@@ -121,7 +121,7 @@ function knownSensitive(text: MatchText): SensitiveClass[] {
 /** L3: 文脈で判断する表現（出現ごとに判断し、最も重い結果） */
 function contextVerdicts(text: MatchText): {
   verdicts: { entry: string; verdict: GateVerdict }[];
-  /** 安全な文脈に覆われた範囲（既知の語彙として扱う） */
+  /** 安全な文脈で使われたトリガーの範囲（既知の語彙として扱う） */
   benignSpans: Span[];
 } {
   const out: { entry: string; verdict: GateVerdict }[] = [];
@@ -139,7 +139,9 @@ function contextVerdicts(text: MatchText): {
         : cover
           ? "clear"
           : "uncertain";
-      if (v === "clear" && cover) benignSpans.push(cover);
+      // 既知とみなすのは表現そのもの（トリガー）だけ。安全な文脈の「.{0,N}」の部分に
+      // 未知の語を隠させない（周りの語は語彙で判定する）
+      if (v === "clear") benignSpans.push(occ);
       verdict = worst(verdict, v);
     }
     if (verdict !== "clear") out.push({ entry: e.id, verdict });

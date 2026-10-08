@@ -194,6 +194,63 @@ describe("Sensitive Gate (external-ai-data-protection §4)", () => {
     });
   });
 
+  describe("review fixes (J1a-1 review 2)", () => {
+    it("a benign context marks only its trigger as known, never its wildcard text", () => {
+      for (const text of [
+        "記録用紙に酒臭い字でサインした",
+        "結果用紙を母がサインした",
+        "離席した間に酒を飲んで時計",
+        "席を外していた間に酒を飲んで時計を押した",
+      ])
+        expect(verdict(text), text).not.toBe("clear");
+    });
+
+    it("emoji and other symbols are unknown content", () => {
+      for (const text of [
+        "相手が対局中に🔪を持っていた",
+        "本人が💊を持って来た",
+      ])
+        expect(verdict(text), text).not.toBe("clear");
+    });
+
+    it("verb endings attach only to a stem, never to a particle", () => {
+      for (const text of [
+        "本人はよっていた",
+        "本人は対局中にはいた",
+        "本人がないていた",
+        "本人が席でねていた",
+        "相手の時計をとった",
+        "本人がおかしい",
+      ])
+        expect(verdict(text), text).not.toBe("clear");
+      expect(verdict("白が指していた")).toBe("clear");
+      expect(verdict("時計を押していなかった")).toBe("clear");
+    });
+
+    it("physical contact with a person, third-party advice, collusion, inspection, 119/110, disability", () => {
+      for (const text of [
+        "相手を強く押した",
+        "相手が本人の手を何度も触った",
+        "相手が本人にタッチした",
+        "観戦者が対局中に助言した",
+        "隣の選手が本人に指し手を言っていた",
+        "両者が対局前に引き分けを決めていた",
+        "白が黒に負けるように言った",
+        "本人はアービターのチェックを拒否した",
+        "白が119番した",
+        "110に連絡した",
+        "本人は音が聞こえない",
+        "本人は時計を押すことができない",
+        "相手が手の中に何かを持っていた",
+        "選手が相手の時計を持って帰った",
+        "相手に大声で何度も言われた",
+      ])
+        expect(verdict(text), text).not.toBe("clear");
+      // タッチムーブの主張は人への接触ではない
+      expect(verdict("相手にタッチムーブを主張した")).toBe("clear");
+    });
+  });
+
   describe("review fixes (J1a-1 review 1)", () => {
     it("matches a phrase split by a line break", () => {
       expect(verdict("財布が\nなくなった")).toBe("blocked");

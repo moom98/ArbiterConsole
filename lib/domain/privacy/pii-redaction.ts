@@ -51,9 +51,15 @@ const NAME_CHARS = "[\\u3400-\\u4dbf\\u4e00-\\u9fff々〆ヶァ-ヺーA-Za-z]";
  * 時計の表示として残す（§5.2.1）: 直前6文字以内に「残り」「時計」「白」「黒」「フラッグ」等、
  * または直後に「残」「でフラッグ」等（フラッグの裁定では時計の表示が重要）
  */
-const CLOCK_BEFORE =
-  /(残り|持ち時間|時計|表示|秒読み|白番|黒番|白|黒|フラッグ|フラグ)[\s\S]{0,6}$/;
-const CLOCK_AFTER = /^\s*(残|で?(フラッグ|フラグ|時間切|0になった))/;
+const CLOCK_BEFORE = /(残り|持ち時間|時計|表示|秒読み)[\s\S]{0,6}$/;
+const CLOCK_AFTER = /^\s*残/;
+/**
+ * 白・黒・フラッグの近くは時刻（「黒は13:05に到着」）もありうる。時計の表示とみなすのは
+ * 2:59 以下だけ（対局の残り時間として現実的な範囲。大会の時刻とは重ならない）
+ */
+const CLOCK_WEAK_BEFORE = /(白番|黒番|白|黒|フラッグ|フラグ)[\s\S]{0,6}$/;
+const CLOCK_WEAK_AFTER = /^\s*で?(フラッグ|フラグ|時間切|0になった)/;
+const MAX_WEAK_CLOCK_HOURS = 2;
 /** 漢字の時刻（「一時停止」「一時中断」は時刻ではない） */
 const KANJI_TIME = `${KANJI_NUM}{1,3}時(?:${KANJI_NUM}{1,3}分|半)?(?=頃|ごろ|に|から|まで|過ぎ|すぎ|前|ちょうど|の|、|。|$)`;
 
@@ -128,11 +134,16 @@ const TIME = rule(
     ].join("|")
   ),
   "日時",
-  (m, segment) =>
-    /^\d/.test(m[0]) &&
-    m[0].includes(":") &&
-    (CLOCK_BEFORE.test(segment.slice(0, m.index)) ||
-      CLOCK_AFTER.test(segment.slice(m.index + m[0].length)))
+  (m, segment) => {
+    if (!/^\d/.test(m[0]) || !m[0].includes(":")) return false;
+    const before = segment.slice(0, m.index);
+    const after = segment.slice(m.index + m[0].length);
+    if (CLOCK_BEFORE.test(before) || CLOCK_AFTER.test(after)) return true;
+    return (
+      Number(m[0].split(":")[0]) <= MAX_WEAK_CLOCK_HOURS &&
+      (CLOCK_WEAK_BEFORE.test(before) || CLOCK_WEAK_AFTER.test(after))
+    );
+  }
 );
 
 /** 5. ラベル付きの会員番号・ID */
@@ -378,12 +389,13 @@ export function nameTargets(ids: KnownIdentifiers): NameTarget[] {
       .trim()
       .split(/[\s・]+/);
     if (parts.length < 2) return;
-    for (const part of parts) {
+    parts.forEach((part, index) => {
       const n = normalizeName(part);
       if (n.length >= 2) out.push({ needle: n, kind, key, original: value });
-      else if (n.length === 1 && KANJI_CHAR.test(n))
+      // 1文字の漢字は姓（先頭の部分）だけ。名の「勝」「王」は「白の勝ち」「王を取った」を壊す
+      else if (index === 0 && n.length === 1 && KANJI_CHAR.test(n))
         out.push({ needle: n, kind, key, original: value, standalone: true });
-    }
+    });
   };
   for (const p of ids.players) {
     add(p.name, "選手", true);
@@ -415,7 +427,10 @@ function registered(targets: NameTarget[]): Replacer {
         if (
           t.standalone &&
           (KANJI_CHAR.test(segment[start - 1] ?? "") ||
-            KANJI_CHAR.test(segment[end] ?? ""))
+            KANJI_CHAR.test(segment[end] ?? "") ||
+            // 直後が送り仮名（助詞以外のひらがな）なら動詞・形容詞の語幹
+            (/[\u3041-\u3096]/.test(segment[end] ?? "") &&
+              !/[がのはをにともへやで]/.test(segment[end] ?? "")))
         )
           continue;
         if (

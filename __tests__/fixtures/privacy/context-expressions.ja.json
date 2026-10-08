@@ -1665,6 +1665,456 @@
    "entry": "not-moving",
    "expected": "uncertain",
    "text": "動けずにいた"
+  },
+  {
+   "entry": "third-party",
+   "expected": "blocked",
+   "text": "観戦者が選手に次の手を言った"
+  },
+  {
+   "entry": "third-party",
+   "expected": "blocked",
+   "text": "監督が何かを渡した"
+  },
+  {
+   "entry": "third-party",
+   "expected": "blocked",
+   "text": "仲間が指し手を伝えた"
+  },
+  {
+   "entry": "third-party",
+   "expected": "uncertain",
+   "text": "観戦者がいた"
+  },
+  {
+   "entry": "third-party",
+   "expected": "uncertain",
+   "text": "キャプテンが来た"
+  },
+  {
+   "entry": "third-party",
+   "expected": "uncertain",
+   "text": "監督が見ていた"
+  },
+  {
+   "entry": "term:何か",
+   "expected": "uncertain",
+   "text": "相手が何かを持っていた"
+  },
+  {
+   "entry": "term:何か",
+   "expected": "blocked",
+   "text": "相手が何かを持っていた。暴言もあった"
+  },
+  {
+   "entry": "term:何か",
+   "expected": "uncertain",
+   "text": "何かを見ていた"
+  },
+  {
+   "entry": "term:何か",
+   "expected": "blocked",
+   "text": "何かを見ていた。警察を呼んだ"
+  },
+  {
+   "entry": "term:何か",
+   "expected": "uncertain",
+   "text": "手の中に何かがあった"
+  },
+  {
+   "entry": "term:何か",
+   "expected": "blocked",
+   "text": "手の中に何かがあった。体調が悪いと言った"
+  },
+  {
+   "entry": "term:大声",
+   "expected": "uncertain",
+   "text": "大声で言った"
+  },
+  {
+   "entry": "term:大声",
+   "expected": "blocked",
+   "text": "大声で言った。暴言もあった"
+  },
+  {
+   "entry": "term:大声",
+   "expected": "uncertain",
+   "text": "大声を出した"
+  },
+  {
+   "entry": "term:大声",
+   "expected": "blocked",
+   "text": "大声を出した。警察を呼んだ"
+  },
+  {
+   "entry": "term:大声",
+   "expected": "uncertain",
+   "text": "選手が大声で話した"
+  },
+  {
+   "entry": "term:大声",
+   "expected": "blocked",
+   "text": "選手が大声で話した。体調が悪いと言った"
+  },
+  {
+   "entry": "term:何度も",
+   "expected": "uncertain",
+   "text": "何度も見ていた"
+  },
+  {
+   "entry": "term:何度も",
+   "expected": "blocked",
+   "text": "何度も見ていた。暴言もあった"
+  },
+  {
+   "entry": "term:何度も",
+   "expected": "uncertain",
+   "text": "何度も言われた"
+  },
+  {
+   "entry": "term:何度も",
+   "expected": "blocked",
+   "text": "何度も言われた。警察を呼んだ"
+  },
+  {
+   "entry": "term:何度も",
+   "expected": "uncertain",
+   "text": "何度も呼ばれた"
+  },
+  {
+   "entry": "term:何度も",
+   "expected": "blocked",
+   "text": "何度も呼ばれた。体調が悪いと言った"
+  },
+  {
+   "entry": "term:持って帰",
+   "expected": "uncertain",
+   "text": "時計を持って帰った"
+  },
+  {
+   "entry": "term:持って帰",
+   "expected": "blocked",
+   "text": "時計を持って帰った。暴言もあった"
+  },
+  {
+   "entry": "term:持って帰",
+   "expected": "uncertain",
+   "text": "駒を持って帰った"
+  },
+  {
+   "entry": "term:持って帰",
+   "expected": "blocked",
+   "text": "駒を持って帰った。警察を呼んだ"
+  },
+  {
+   "entry": "term:持って帰",
+   "expected": "uncertain",
+   "text": "記録用紙を持って帰った"
+  },
+  {
+   "entry": "term:持って帰",
+   "expected": "blocked",
+   "text": "記録用紙を持って帰った。体調が悪いと言った"
+  },
+  {
+   "entry": "term:取って帰",
+   "expected": "uncertain",
+   "text": "時計を取って帰った"
+  },
+  {
+   "entry": "term:取って帰",
+   "expected": "blocked",
+   "text": "時計を取って帰った。暴言もあった"
+  },
+  {
+   "entry": "term:取って帰",
+   "expected": "uncertain",
+   "text": "駒を取って帰った"
+  },
+  {
+   "entry": "term:取って帰",
+   "expected": "blocked",
+   "text": "駒を取って帰った。警察を呼んだ"
+  },
+  {
+   "entry": "term:取って帰",
+   "expected": "uncertain",
+   "text": "記録用紙を取って帰った"
+  },
+  {
+   "entry": "term:取って帰",
+   "expected": "blocked",
+   "text": "記録用紙を取って帰った。体調が悪いと言った"
+  },
+  {
+   "entry": "term:持って行",
+   "expected": "uncertain",
+   "text": "駒を持って行った"
+  },
+  {
+   "entry": "term:持って行",
+   "expected": "blocked",
+   "text": "駒を持って行った。暴言もあった"
+  },
+  {
+   "entry": "term:持って行",
+   "expected": "uncertain",
+   "text": "時計を持って行った"
+  },
+  {
+   "entry": "term:持って行",
+   "expected": "blocked",
+   "text": "時計を持って行った。警察を呼んだ"
+  },
+  {
+   "entry": "term:持って行",
+   "expected": "uncertain",
+   "text": "用紙を持って行った"
+  },
+  {
+   "entry": "term:持って行",
+   "expected": "blocked",
+   "text": "用紙を持って行った。体調が悪いと言った"
+  },
+  {
+   "entry": "term:取って行",
+   "expected": "uncertain",
+   "text": "時計を取って行った"
+  },
+  {
+   "entry": "term:取って行",
+   "expected": "blocked",
+   "text": "時計を取って行った。暴言もあった"
+  },
+  {
+   "entry": "term:取って行",
+   "expected": "uncertain",
+   "text": "駒を取って行った"
+  },
+  {
+   "entry": "term:取って行",
+   "expected": "blocked",
+   "text": "駒を取って行った。警察を呼んだ"
+  },
+  {
+   "entry": "term:取って行",
+   "expected": "uncertain",
+   "text": "用紙を取って行った"
+  },
+  {
+   "entry": "term:取って行",
+   "expected": "blocked",
+   "text": "用紙を取って行った。体調が悪いと言った"
+  },
+  {
+   "entry": "term:持ち帰",
+   "expected": "uncertain",
+   "text": "時計を持ち帰った"
+  },
+  {
+   "entry": "term:持ち帰",
+   "expected": "blocked",
+   "text": "時計を持ち帰った。暴言もあった"
+  },
+  {
+   "entry": "term:持ち帰",
+   "expected": "uncertain",
+   "text": "駒を持ち帰った"
+  },
+  {
+   "entry": "term:持ち帰",
+   "expected": "blocked",
+   "text": "駒を持ち帰った。警察を呼んだ"
+  },
+  {
+   "entry": "term:持ち帰",
+   "expected": "uncertain",
+   "text": "用紙を持ち帰った"
+  },
+  {
+   "entry": "term:持ち帰",
+   "expected": "blocked",
+   "text": "用紙を持ち帰った。体調が悪いと言った"
+  },
+  {
+   "entry": "term:返さな",
+   "expected": "uncertain",
+   "text": "時計を返さない"
+  },
+  {
+   "entry": "term:返さな",
+   "expected": "blocked",
+   "text": "時計を返さない。暴言もあった"
+  },
+  {
+   "entry": "term:返さな",
+   "expected": "uncertain",
+   "text": "駒を返さない"
+  },
+  {
+   "entry": "term:返さな",
+   "expected": "blocked",
+   "text": "駒を返さない。警察を呼んだ"
+  },
+  {
+   "entry": "term:返さな",
+   "expected": "uncertain",
+   "text": "用紙を返さない"
+  },
+  {
+   "entry": "term:返さな",
+   "expected": "blocked",
+   "text": "用紙を返さない。体調が悪いと言った"
+  },
+  {
+   "entry": "term:付いて行",
+   "expected": "uncertain",
+   "text": "対局後に付いて行った"
+  },
+  {
+   "entry": "term:付いて行",
+   "expected": "blocked",
+   "text": "対局後に付いて行った。暴言もあった"
+  },
+  {
+   "entry": "term:付いて行",
+   "expected": "uncertain",
+   "text": "会場まで付いて行った"
+  },
+  {
+   "entry": "term:付いて行",
+   "expected": "blocked",
+   "text": "会場まで付いて行った。警察を呼んだ"
+  },
+  {
+   "entry": "term:付いて行",
+   "expected": "uncertain",
+   "text": "相手に付いて行った"
+  },
+  {
+   "entry": "term:付いて行",
+   "expected": "blocked",
+   "text": "相手に付いて行った。体調が悪いと言った"
+  },
+  {
+   "entry": "term:後に付い",
+   "expected": "uncertain",
+   "text": "相手の後に付いて行った"
+  },
+  {
+   "entry": "term:後に付い",
+   "expected": "blocked",
+   "text": "相手の後に付いて行った。暴言もあった"
+  },
+  {
+   "entry": "term:後に付い",
+   "expected": "uncertain",
+   "text": "白の後に付いた"
+  },
+  {
+   "entry": "term:後に付い",
+   "expected": "blocked",
+   "text": "白の後に付いた。警察を呼んだ"
+  },
+  {
+   "entry": "term:後に付い",
+   "expected": "uncertain",
+   "text": "黒の後に付いていた"
+  },
+  {
+   "entry": "term:後に付い",
+   "expected": "blocked",
+   "text": "黒の後に付いていた。体調が悪いと言った"
+  },
+  {
+   "entry": "term:帰れな",
+   "expected": "uncertain",
+   "text": "会場から帰れない"
+  },
+  {
+   "entry": "term:帰れな",
+   "expected": "blocked",
+   "text": "会場から帰れない。暴言もあった"
+  },
+  {
+   "entry": "term:帰れな",
+   "expected": "uncertain",
+   "text": "帰れないと言った"
+  },
+  {
+   "entry": "term:帰れな",
+   "expected": "blocked",
+   "text": "帰れないと言った。警察を呼んだ"
+  },
+  {
+   "entry": "term:帰れな",
+   "expected": "uncertain",
+   "text": "まだ帰れない"
+  },
+  {
+   "entry": "term:帰れな",
+   "expected": "blocked",
+   "text": "まだ帰れない。体調が悪いと言った"
+  },
+  {
+   "entry": "term:呼び止め",
+   "expected": "uncertain",
+   "text": "相手を呼び止めた"
+  },
+  {
+   "entry": "term:呼び止め",
+   "expected": "blocked",
+   "text": "相手を呼び止めた。暴言もあった"
+  },
+  {
+   "entry": "term:呼び止め",
+   "expected": "uncertain",
+   "text": "対局後に呼び止めた"
+  },
+  {
+   "entry": "term:呼び止め",
+   "expected": "blocked",
+   "text": "対局後に呼び止めた。警察を呼んだ"
+  },
+  {
+   "entry": "term:呼び止め",
+   "expected": "uncertain",
+   "text": "白が黒を呼び止めた"
+  },
+  {
+   "entry": "term:呼び止め",
+   "expected": "blocked",
+   "text": "白が黒を呼び止めた。体調が悪いと言った"
+  },
+  {
+   "entry": "term:待っている",
+   "expected": "uncertain",
+   "text": "会場で待っている"
+  },
+  {
+   "entry": "term:待っている",
+   "expected": "blocked",
+   "text": "会場で待っている。暴言もあった"
+  },
+  {
+   "entry": "term:待っている",
+   "expected": "uncertain",
+   "text": "相手が待っている"
+  },
+  {
+   "entry": "term:待っている",
+   "expected": "blocked",
+   "text": "相手が待っている。警察を呼んだ"
+  },
+  {
+   "entry": "term:待っている",
+   "expected": "uncertain",
+   "text": "対局後に待っている"
+  },
+  {
+   "entry": "term:待っている",
+   "expected": "blocked",
+   "text": "対局後に待っている。体調が悪いと言った"
   }
  ]
 }

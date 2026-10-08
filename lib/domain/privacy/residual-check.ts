@@ -62,8 +62,13 @@ const DETECTORS: readonly { finding: ResidualFinding; re: RegExp }[] = [
 
 /** 時計の表示（残り・時計・白・黒・フラッグなどの近くの H:MM）は時刻として扱わない */
 function withoutClockReadings(text: string): string {
-  return text.replace(
-    /((?:残り|持ち時間|時計|表示|秒読み|白番|黒番|白|黒|フラッグ|フラグ)[\s\S]{0,6}?)\d{1,2}:\d{2}(?::\d{2})?|\d{1,2}:\d{2}(?::\d{2})?(?=\s*(残|で?(フラッグ|フラグ|時間切|0になった)))/g,
+  const strong = text.replace(
+    /((?:残り|持ち時間|時計|表示|秒読み)[\s\S]{0,6}?)\d{1,2}:\d{2}(?::\d{2})?|\d{1,2}:\d{2}(?::\d{2})?(?=\s*残)/g,
+    (_m, before?: string) => `${before ?? ""}#`
+  );
+  // 白・黒・フラッグの近くは 2:59 以下だけ（時刻と区別する。pii-redaction と同じ範囲）
+  return strong.replace(
+    /((?:白番|黒番|白|黒|フラッグ|フラグ)[\s\S]{0,6}?)(?<!\d)[0-2]:\d{2}(?::\d{2})?(?![\d:])|(?<![\d:])[0-2]:\d{2}(?::\d{2})?(?=\s*で?(フラッグ|フラグ|時間切|0になった))/g,
     (_m, before?: string) => `${before ?? ""}#`
   );
 }
@@ -76,7 +81,7 @@ const CLOCK_LIKE = /\d{1,2}:\d{2}/;
 function looseIdentifierHit(text: string, ids: KnownIdentifiers): boolean {
   const hay = normalizeName(text);
   const needles: string[] = [];
-  /** 1文字の漢字の姓・名（前後が漢字でない場合だけ） */
+  /** 1文字の漢字の姓（前後が漢字でない場合だけ） */
   const singles: string[] = [];
   const add = (v?: string) => {
     if (!v) return;
@@ -90,12 +95,18 @@ function looseIdentifierHit(text: string, ids: KnownIdentifiers): boolean {
       .normalize("NFKC")
       .trim()
       .split(/[\s・]+/);
-    for (const part of parts) {
+    parts.forEach((part, index) => {
       add(part);
       const n = normalizeName(part);
-      if (parts.length > 1 && n.length === 1 && /[\u4e00-\u9fff々]/.test(n))
+      // 1文字の漢字は姓（先頭の部分）だけ（pii-redaction と同じ）
+      if (
+        parts.length > 1 &&
+        index === 0 &&
+        n.length === 1 &&
+        /[\u4e00-\u9fff々]/.test(n)
+      )
         singles.push(n);
-    }
+    });
     // 空白なしで登録された漢字の名前: 先頭2文字（姓）でも照合する
     const n = normalizeName(p.name);
     if (parts.length === 1 && n.length >= 3 && /^[一-鿿々]{2}/.test(n))
@@ -111,9 +122,10 @@ function looseIdentifierHit(text: string, ids: KnownIdentifiers): boolean {
   }
   if (
     singles.some((n) =>
-      new RegExp(`(?<![\\u4e00-\\u9fff々])${n}(?![\\u4e00-\\u9fff々])`).test(
-        hay
-      )
+      new RegExp(
+        // 直後が漢字、または送り仮名（助詞以外のひらがな）なら別の語
+        `(?<![\\u4e00-\\u9fff々])${n}(?![\\u4e00-\\u9fff々]|[ぁ-ゖ](?<![がのはをにともへやで]))`
+      ).test(hay)
     )
   )
     return true;

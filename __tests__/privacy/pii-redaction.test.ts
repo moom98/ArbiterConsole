@@ -162,6 +162,37 @@ describe("PII redaction (external-ai-data-protection §5.2)", () => {
       expect(redact("LINE ID: tanaka_t")).not.toContain("tanaka_t");
     });
 
+    it("a wall-clock time next to 白 / 黒 / フラッグ is redacted (only up to 2:59 is a clock reading)", () => {
+      for (const text of [
+        "黒は13:05に到着した",
+        "白は14:30に会場に来たので遅刻ではない",
+        "白番 14:30 開始で黒が遅刻した",
+        "フラッグ 18:45 で白が時間切れ",
+      ]) {
+        const out = redact(text);
+        expect(out, text).toContain("〈日時1〉");
+        expect(residualCheck(text, IDS).ok, text).toBe(false);
+      }
+    });
+
+    it("text shaped like a placeholder but not one is processed as text", () => {
+      expect(redact("〈選手TANAKA〉が違法手")).not.toContain("〈選手TANAKA〉");
+      expect(redact("〈人物090〉が違法手")).not.toContain("〈人物090〉");
+    });
+
+    it("single-kanji given names are not matched; a surname not before a verb ending", () => {
+      const ids: KnownIdentifiers = {
+        ...NO_IDENTIFIERS,
+        players: [{ name: "田中 勝" }, { name: "王 偉" }],
+      };
+      expect(redactPii("1-0で白の勝ち", ids, new PlaceholderMap()).text).toBe(
+        "1-0で白の勝ち"
+      );
+      expect(redactPii("王が違法手", ids, new PlaceholderMap()).text).toBe(
+        "〈選手A〉が違法手"
+      );
+    });
+
     it("keeps clock readings next to 白 / 黒 / フラッグ", () => {
       expect(redact("白の時計は0:45、黒は1:20のときにフラッグ")).toBe(
         "白の時計は0:45、黒は1:20のときにフラッグ"

@@ -18,6 +18,7 @@
  * 許さない（目が見えない・動けない・手いたい）。語彙を増やす変更はレビューと評価ケースを伴うこと。
  */
 import type { Span } from "./normalize";
+import { PLACEHOLDER_PATTERN } from "./placeholders";
 
 /** 漢字の語（単漢字は、組み合わせても機微にならないものだけ） */
 const KANJI_WORDS = `
@@ -30,13 +31,13 @@ const KANJI_WORDS = `
 成立 不成立 完了 未 完 済 不足 超 以上 以下 未満 以内 前 後 中 直前 直後 途中 時 場合 状況 状態 最終 最初 最後 初 回 度 番 号 局 戦 団体戦 個人戦
 主将 監督 席 隣 遅刻 欠席 棄権 不戦 不戦勝 不戦敗 到着 退場 入場 会場 開始前 待 続 止 始 終 替 忘 時間切 切替 遅 早 長 短 多 少 強 大 小 新 古
 気付 発見 発生 入 来 行 帰 渡 返 使 通 付 押し忘 鳴 音 声 大声 騒音 静 静粛 一 二 三 四 五 六 七 八 九 十 百 千 〇 半 毎 約 各自 全員 以外
-最大 最小 同様 同時 先 今 現在 今回 前回 次回 再び 一度 二度 三度 規 定 逆 受 借 繰 集中 観戦 観戦者 順 登録 助言 提出 出場 連絡 左 右 雑音 末
-可能性 可能 一致 不一致 間 用意 準備 交代 移動 記号 表記 範囲 回目 局目 手目 番目 度目 日目 目視
+最大 最小 同様 同時 先 今 現在 今回 前回 次回 再び 一度 二度 三度 規 定 逆 受 借 繰 集中 観戦 観戦者 順 登録 提出 出場 連絡 左 右 雑音 末
+可能性 可能 一致 不一致 間 用意 準備 交代 移動 記号 表記 範囲 回目 局目 手目 番目 度目 日目 目視 電源 照明 熱心 熱戦
 `;
 
 /** カタカナの語 */
 const KATAKANA_WORDS = `
-キング クイーン ルーク ビショップ ナイト ポーン チェック チェックメイト メイト ステイルメイト ステールメイト ドロー クレーム フラッグ フラグ タッチ ムーブ タッチムーブ キャスリング キャッスリング アンパッサン アンパサン プロモーション イリーガル イリーガルムーブ スコアシート スコア シート ペアリング ラウンド ボード テーブル アービター チーフ チーフアービター ディスプレイス ペナルティ ペナルティー ルール クロック デジタル アナログ ボタン ディスプレイ リセット セット モード ゼロ アウト タイム タイムアウト ミス プレーヤー プレイヤー ゲーム マス ファイル ランク キャプテン チーム クイックプレイ フィニッシュ ガイドライン メンバー バイ スタンダード ラピッド ブリッツ ボーナス インクリメント ディレイ カウント オファー アジャスト ジャドゥーブ ピース
+キング クイーン ルーク ビショップ ナイト ポーン チェック チェックメイト メイト ステイルメイト ステールメイト ドロー クレーム フラッグ フラグ タッチ ムーブ タッチムーブ キャスリング キャッスリング アンパッサン アンパサン プロモーション イリーガル イリーガルムーブ スコアシート スコア シート ペアリング ラウンド ボード テーブル アービター チーフ チーフアービター ディスプレイス ペナルティ ペナルティー ルール クロック デジタル アナログ ボタン ディスプレイ リセット セット モード ゼロ アウト タイム タイムアウト ミス プレーヤー プレイヤー ゲーム マス ファイル ランク キャプテン チーム クイックプレイ フィニッシュ ガイドライン メンバー バイ バッグ スタンダード ラピッド ブリッツ ボーナス インクリメント ディレイ カウント オファー アジャスト ジャドゥーブ ピース
 `;
 
 /** 英字の語（小文字で照合。SAN の指し手は別に扱う） */
@@ -44,29 +45,37 @@ const LATIN_WORDS = `
 fide jcf ca da ia fa pgn fen san rapid blitz standard claim claimed draw flag flagged illegal move moves touch check mate checkmate stalemate white black clock time increment delay sec min vs no ok castling castle promotion queen rook bishop knight pawn king arbiter
 `;
 
-/** ひらがなの文法の語（助詞・活用語尾・補助動詞など）。内容語は入れない */
-const HIRAGANA_GRAMMAR = `
-が を に で と の は も へ や か ね よ
-から まで より ので のに ばかり けど けれど ため ほど だけ しか など って とか なら ても でも には では とは への での からの までの について により によって として に対して ずつ
+/**
+ * ひらがなの文法の語（内容語は入れない）。
+ * - VERBAL: 活用語尾・補助動詞。語幹（漢字・カタカナ・送り仮名）の直後か、VERBAL の後だけに置ける
+ *   （「本人はよっていた」「ないていた」「はいた」を助詞＋語尾の組み合わせで説明させない）
+ * - FUNCTION: 助詞・形式名詞・指示語など。どこにでも置ける
+ */
+const HIRAGANA_VERBAL = `
 した して する します しました しません しない しなかった しよう され された される させ させた せず せずに さず さずに ずに ず
-ない なかった なく なくて ません ませんでした ます ました です でした だった である であった
+ない なかった なく なくて ません ませんでした ます ました
 ている ていた ています ていました ていない ていなかった てしまった てしまい てから てくれ てもらった ておく ておいた てきた てほしい
 いる いた います いました いない いなかった いて
-ある あった あり あります ありました
-なる なった なり なって なりました
 れる れた れて られる られた られて
 った って っている っていた
 かった くない くなった くて
+たい たかった
+できる できない できた できず できなかった
+しかけ しかけた しかけて
+`;
+const HIRAGANA_FUNCTION = `
+が を に で と の は も へ や か ね よ
+から まで より ので のに ばかり のみ けど けれど ため ほど だけ しか など とか なら ても でも には では とは への での からの までの について により によって として に対して ずつ
+です でした だった である であった
+ある あった あり あります ありました
+なる なった なり なって なりました
 そう よう こと もの とき あと まえ まま ところ
 この その あの どの これ それ あれ どれ ここ そこ どこ
-すぐ まだ もう また さらに すでに ちょうど ほぼ
+すぐ まだ もう また さらに すでに ちょうど ほぼ ふたたび ずれ ずれた ずれて ずれていた ずれている
 いう いった いって
 よい いい よく
 かどうか どうか はい いいえ
 さん くん
-やめ やめた やめて できる できない できた できず できなかった うるさい おかしい おかしく ふたたび
-しかけ しかけた しかけて
-たい たかった
 `;
 
 /**
@@ -102,6 +111,8 @@ const MIXED_WORDS = [
   "聞こえ",
   "疑い",
   "受け",
+  "漏れ",
+  "電源を切",
   "同じ",
 ];
 const MIXED = new RegExp(MIXED_WORDS.join("|"), "g");
@@ -112,7 +123,8 @@ const AFTER_OKURIGANA = new Set(["た", "て", "だ", "で"]);
 /** 漢字・カタカナの直後にだけ置ける1文字の送り仮名 */
 const OKURIGANA_SINGLES = new Set(
   Array.from(
-    "くするれうつぬむぶぐきしちにみびぎりせてねめべげかさたなまばがらわっんろこそともよお"
+    // 助詞（が・の・と・も・よ・に・ね）は入れない（「本人がないていた」を が＋ない で説明させない）
+    "くするれうつぬむぶぐきしちみびぎりせてめべげかさたなまばらわっんろこそお"
   )
 );
 
@@ -123,12 +135,13 @@ function words(list: string): Set<string> {
 const KANJI = words(KANJI_WORDS);
 const KATAKANA = words(KATAKANA_WORDS);
 const LATIN = words(LATIN_WORDS);
-const GRAMMAR = words(HIRAGANA_GRAMMAR);
+const VERBAL = words(HIRAGANA_VERBAL);
+const FUNCTION = words(HIRAGANA_FUNCTION);
 const maxLen = (s: Set<string>) =>
   Array.from(s).reduce((m, w) => Math.max(m, w.length), 0);
 const KANJI_MAX = maxLen(KANJI);
 const KATAKANA_MAX = maxLen(KATAKANA);
-const GRAMMAR_MAX = maxLen(GRAMMAR);
+const GRAMMAR_MAX = Math.max(maxLen(VERBAL), maxLen(FUNCTION));
 
 type Script = "kanji" | "katakana" | "hiragana" | "latin" | "other";
 
@@ -141,28 +154,47 @@ function scriptOf(ch: string): Script {
 }
 
 /** 語彙で残らず分割できるか */
-function segmentable(
-  run: string,
-  vocab: Set<string>,
-  max: number,
-  allowSingleAtStart?: Set<string>
-): boolean {
+function segmentable(run: string, vocab: Set<string>, max: number): boolean {
   const ok: boolean[] = new Array(run.length + 1).fill(false);
   ok[0] = true;
   for (let i = 0; i < run.length; i++) {
     if (!ok[i]) continue;
-    if (i === 0 && allowSingleAtStart?.has(run[0])) ok[1] = true;
-    if (
-      i === 1 &&
-      allowSingleAtStart?.has(run[0]) &&
-      AFTER_OKURIGANA.has(run[1])
-    )
-      ok[2] = true;
     for (let len = 1; len <= max && i + len <= run.length; len++)
       if (vocab.has(run.slice(i, i + len))) ok[i + len] = true;
   }
   return ok[run.length];
 }
+
+/**
+ * ひらがなの連続を文法の語で残らず分割できるか。状態は「直前が語幹・活用語尾（V）か、
+ * それ以外（N）か」。VERBAL は V の後だけ、1文字の送り仮名は語幹の直後（先頭）だけ
+ */
+function segmentHiragana(run: string, afterStem: boolean): boolean {
+  const n = run.length;
+  // reach[i]: 0 = 到達しない, 1 = N, 2 = V, 3 = 両方
+  const reach: number[] = new Array(n + 1).fill(0);
+  reach[0] = afterStem ? 2 : 1;
+  const N = 1;
+  const V = 2;
+  for (let i = 0; i < n; i++) {
+    const st = reach[i];
+    if (st === 0) continue;
+    if (i === 0 && afterStem && OKURIGANA_SINGLES.has(run[0])) {
+      reach[1] |= V;
+      if (n >= 2 && AFTER_OKURIGANA.has(run[1])) reach[2] |= V;
+    }
+    for (let len = 1; len <= GRAMMAR_MAX && i + len <= n; len++) {
+      const w = run.slice(i, i + len);
+      if (FUNCTION.has(w)) reach[i + len] |= N;
+      if (st & V && VERBAL.has(w)) reach[i + len] |= V;
+    }
+  }
+  return reach[n] !== 0;
+}
+
+/** 数字・空白・一般的な記号（全角は NFKC で半角へ揃えた後） */
+const COMMON_OR_DIGIT =
+  /[0-9\s、。・「」『』()（）［］[\]!?,.:;'"“”‘’…〜~\-+*/%#&=<>@_|〈〉→←↑↓○×]/;
 
 /** SAN の指し手・キャスリング（英字の連続より先に既知にする） */
 const SAN =
@@ -187,8 +219,7 @@ export function unknownVocabulary(
   };
   for (const s of known) mark(s.start, s.end);
   // well-formed のプレースホルダー
-  const ph =
-    /〈(?:選手|人物|日時|ID|連絡先|大会|会場|団体|盤|ラウンド|数値|属性)[A-Z0-9]+〉/g;
+  const ph = new RegExp(PLACEHOLDER_PATTERN.source, "g");
   let m: RegExpExecArray | null;
   while ((m = ph.exec(text)) !== null) mark(m.index, m.index + m[0].length);
   SAN.lastIndex = 0;
@@ -209,6 +240,8 @@ export function unknownVocabulary(
       script = "katakana";
     }
     if (script === "other") {
+      // 数字・空白・一般的な記号以外（絵文字など）は内容とみなす
+      if (!COMMON_OR_DIGIT.test(text[i])) unknownRuns++;
       i++;
       continue;
     }
@@ -237,12 +270,7 @@ export function unknownVocabulary(
         ok = segmentable(run, KATAKANA, KATAKANA_MAX);
         break;
       case "hiragana":
-        ok = segmentable(
-          run,
-          GRAMMAR,
-          GRAMMAR_MAX,
-          afterStem ? OKURIGANA_SINGLES : undefined
-        );
+        ok = segmentHiragana(run, afterStem);
         break;
       case "latin":
         ok = LATIN.has(run.toLowerCase());

@@ -47,6 +47,10 @@ From 2026-10-08:
   - Trade-off accepted by the user: free-text reports that use words outside the vocabulary get no external AI help (classification falls back to keywords, reasoning to the local handling of §4.3).
   - L2 and L3 stay: they give the `blocked` reasons, and the L3 benign contexts mark safe phrases (for example スマホが鳴った) as known.
 
+- **D13 (2026-10-08, after the second J1a-1 review).** **The arbiter confirms every external send.** Even when the gate gives `clear`, the de-identified payload is shown and nothing is sent until the arbiter confirms that it contains nothing sensitive (one tap, only when AI is used). Step F (§3) is therefore a mandatory confirmation, not just a preview.
+  - Reason: the second independent review found that 117 of 270 new sensitive phrases passed the known-vocabulary gate. Sentences about what people do to each other can be written with ordinary chess words (相手を強く押した, 観戦者が助言した), so no lexical gate can guarantee 0 false negatives on free text.
+  - **The release condition changes accordingly:** the gate's false-negative rate is measured on held-out sets written by someone other than its author, reported, and kept as low as possible (every miss found is fixed and added as a regression case). It is a filter. The arbiter's confirmation is the final defense. "0 false negatives" is still required on the regression sets.
+
 ## 2. Scope: every external AI send
 
 | Route | Provider | What is sent today | After this design |
@@ -92,7 +96,7 @@ input (raw text + structured fields)
   │ C. minimization (only the fields the route needs; length caps)
   │ D. residual check (independent detectors)                  → any hit → local fallback
   │ E. Sensitive Gate again on the redacted incident-derived text → BLOCK / UNCERTAIN → local fallback
-  │ F. preview (classifier and AI-reasoning screens), before sending
+  │ F. mandatory confirmation (D13): the arbiter sees the payload and confirms before anything is sent
   ▼
 request ─▶ server re-check: the gate and the pattern rules again; reject (400) if either would act
 ```
@@ -390,6 +394,15 @@ The pure package exists and is tested; nothing calls it yet (J1a-2 wires it into
   - Sensitive Gate: 0 false negatives on the author's 192 reports and on the reviewer's 108 reports (`sensitive-review1.ja.json`, now a regression set, no longer held out). A new held-out set from a second independent review is the release check. 336 registry cases, all with the expected verdict. False positives: 1 of 76 non-sensitive reports, at most 12.5% per category; this set is short and close to the vocabulary, so real free-text reports will have more.
   - PII: 117 reports, **0 identifiers left** in a payload that would be sent, for the covered types. Known residual risks, counted separately: unregistered names without an honorific (3 cases) and **the kana reading of a name registered in kanji** (2 cases, a new class like romaji: the reading cannot be derived without a stored reading).
   - The known PII residual risks (unregistered names without an honorific, kana readings) are not sent: the known-vocabulary layer makes them `uncertain`.
+- **Second review (2026-10-08): FIX REQUIRED.** 117 of 270 new sensitive phrases passed the known-vocabulary gate. This led to D13 (mandatory confirmation). Fixes:
+  - a benign context marks only its trigger as known, never its `.{0,N}` text (it hid 酒・母 …);
+  - characters outside the scripts (emoji) are unknown content;
+  - hiragana grammar is split into verbal endings (only after a stem or another ending) and function words (anywhere), and particles are no longer one-kana endings (よっていた, ないていた, はいた);
+  - content words removed from the grammar (おかしい, うるさい, やめ…); 助言 removed from the vocabulary;
+  - L2 additions: physical contact with a person (except タッチムーブ), third-party advice, pre-arranged results, refusing an inspection, 119 and 110, disability wording, 酔;
+  - registry additions: `third-party` (観戦者, 監督, キャプテン, 隣の選手 …: never `clear`), and terms without a benign context: 何か, 大声, 何度も, taking things away (持って帰 …), following (付いて行 …), 帰れない, 呼び止め, 待っている;
+  - PII: placeholders have a fixed shape (`〈選手A〉`…`〈選手ZZZ〉`, others 1–999), so typed look-alikes are text; a wall-clock H:MM next to 白/黒/フラッグ is redacted (only up to 2:59 counts as a clock reading there); single-kanji name parts are matched only for the surname and not before a verb ending (田中 勝 must not break 白の勝ち).
+- **Results after the second review:** 0 false negatives on all three sets used so far (192 own, 108 from review 1, 117 from review 2, the last two now regression sets). False positives on the 76-report benign set: 6 (7.9%); third parties (キャプテン, 観戦者) are always held back. The second reviewer measured 11 of 80 (13.75%) on its own benign set before the fixes; the fixes added restrictions, so expect more.
 - **Tests:** `__tests__/privacy/{sensitive-gate,gate-evaluation,pii-redaction,protect}.test.ts`.
 
 ## Appendix A. Sensitive terms (for review)

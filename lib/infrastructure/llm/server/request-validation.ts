@@ -1,17 +1,29 @@
-import type {
-  CompetitionType,
-  IncidentCategory,
-  RuleSourceType,
-  SupervisionRegime,
+import {
+  SUPPORTED_RULES_VERSIONS,
+  type CompetitionType,
+  type IncidentCategory,
+  type RuleSourceType,
+  type SupervisionRegime,
 } from "@/lib/domain/entities";
+import { isReportableSubtype } from "@/lib/domain/follow-up";
 import { INCIDENT_CATEGORIES } from "@/lib/domain/llm/classification";
+import {
+  recheckIncidentText,
+  recheckRegulationText,
+  type ProtectedTextRoute,
+} from "@/lib/domain/privacy";
 import type {
   LlmArticle,
   LlmClassificationRequest,
   LlmReasoningRequest,
 } from "@/lib/domain/llm/types";
 import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
-import { LLM_LIMITS, type EmbedRequest } from "../contract";
+import {
+  ARTICLE_ID,
+  LLM_LIMITS,
+  TOURNAMENT_SOURCE_NAME,
+  type EmbedRequest,
+} from "../contract";
 
 /** フェアプレーは外部に送らない（§23, ADR-007）。クライアント側の防御が破られた場合の多重防御 */
 const FAIR_PLAY_NOT_SENT = "フェアプレー関連の内容はAIへ送信できません";
@@ -19,10 +31,28 @@ const FAIR_PLAY_NOT_SENT = "フェアプレー関連の内容はAIへ送信で�
 /**
  * /api/llm/* の入力検証（手書き。外部依存なし）。
  * 不正な場合はエラーメッセージ（入力値そのものは含めない）を返す。
+ *
+ * - 受け付けるのは最小化した形（external-ai-data-protection.md §5.3）だけ。未知の項目は 400
+ *   （旧クライアントの classify の { text } を含む）
+ * - 事故由来のテキストと大会規定の本文は、送る前の再確認（L5, §7）を通す。止まった場合は
+ *   code "not-sendable"（400）で、何も上流へ送らない。本文は書き換えない
  */
 
 export type Validated<T> =
-  { ok: true; value: T } | { ok: false; errors: string[] };
+  | { ok: true; value: T }
+  | {
+      ok: false;
+      errors: string[];
+      /** L5 の再確認で止めた（形は正しい）。未指定なら invalid-request */
+      code?: "not-sendable";
+    };
+
+/** L5 で止めた場合のメッセージ（理由のコードも本文も含めない） */
+export const NOT_SENDABLE_MESSAGE =
+  "送信前の確認（サーバー）で止めました。外部AIには送っていません。端末内の判断を使ってください";
+
+const OLD_CLASSIFY_SHAPE =
+  "古い形式の送信（text）は受け付けません。アプリを再読み込みしてください";
 
 type Obj = Record<string, unknown>;
 
@@ -48,6 +78,44 @@ function isObject(v: unknown): v is Obj {
 
 class Checker {
   readonly errors: string[] = [];
+  /** L5 で止めた欄（パス）。本文は含めない */
+  readonly notSendable: string[] = [];
+
+  /** 決まった項目以外を拒否する（最小化した形だけを受け付ける。§7） */
+  only(obj: Obj, path: string, keys: readonly string[]): void {
+    const unknown = Object.keys(obj).filter((k) => !keys.includes(k));
+    if (unknown.length > 0)
+      this.errors.push(
+        `${path} に受け付けない項目があります（${unknown.length}件）`
+      );
+  }
+
+  /** 事故由来のテキストの再確認（L5） */
+  incidentText(
+    value: string | undefined,
+    route: ProtectedTextRoute,
+    path: string
+  ): void {
+    if (typeof value === "string" && !recheckIncidentText(value, route).ok)
+      this.notSendable.push(path);
+  }
+
+  /** 大会規定の本文の再確認（L5, 規則 1・5・12） */
+  regulationText(value: string | undefined, path: string): void {
+    if (typeof value === "string" && !recheckRegulationText(value).ok)
+      this.notSendable.push(path);
+  }
+
+  result<T>(value: () => T): Validated<T> {
+    if (this.errors.length > 0) return { ok: false, errors: this.errors };
+    if (this.notSendable.length > 0)
+      return {
+        ok: false,
+        errors: [NOT_SENDABLE_MESSAGE],
+        code: "not-sendable",
+      };
+    return { ok: true, value: value() };
+  }
 
   str(
     obj: Obj,
@@ -104,12 +172,21 @@ export function validateClassificationRequest(
       ok: false,
       errors: ["本文はJSONオブジェクトである必要があります"],
     };
+  // 外部AIガードで置き換え・最小化した narrative のみ（ADR-012 §5.3）
+  if ("text" in body && !("narrative" in body))
+    return { ok: false, errors: [OLD_CLASSIFY_SHAPE] };
   const c = new Checker();
-  const text = c.str(body, "text", "text", LLM_LIMITS.maxClassifyTextChars);
-  if (typeof text === "string" && mentionsFairPlay(text))
+  c.only(body, "本文", ["narrative"]);
+  const narrative = c.str(
+    body,
+    "narrative",
+    "narrative",
+    LLM_LIMITS.maxClassifyNarrativeChars
+  );
+  if (typeof narrative === "string" && mentionsFairPlay(narrative))
     c.errors.push(FAIR_PLAY_NOT_SENT);
-  if (c.errors.length > 0) return { ok: false, errors: c.errors };
-  return { ok: true, value: { text: text as string } };
+  c.incidentText(narrative, "classify", "narrative");
+  return c.result(() => ({ narrative: narrative as string }));
 }
 
 /**
@@ -123,7 +200,9 @@ export function validateEmbedRequest(body: unknown): Validated<EmbedRequest> {
       ok: false,
       errors: ["本文はJSONオブジェクトである必要があります"],
     };
-  const errors: string[] = [];
+  const c = new Checker();
+  c.only(body, "本文", ["taskType", "texts"]);
+  const errors = c.errors;
   const taskType = body.taskType;
   if (taskType !== "document" && taskType !== "query")
     errors.push("taskType は document または query です");
@@ -136,25 +215,38 @@ export function validateEmbedRequest(body: unknown): Validated<EmbedRequest> {
     if (taskType === "query" && texts.length !== 1)
       errors.push("検索語は1件ずつ送ってください");
     texts.forEach((t, i) => {
+      const max =
+        taskType === "query"
+          ? LLM_LIMITS.maxEmbedQueryChars
+          : LLM_LIMITS.maxEmbedTextChars;
       if (typeof t !== "string" || t.trim() === "")
         errors.push(`texts[${i}] は空でない文字列である必要があります`);
-      else if (t.length > LLM_LIMITS.maxEmbedTextChars)
-        errors.push(
-          `texts[${i}] は${LLM_LIMITS.maxEmbedTextChars}文字以内にしてください`
-        );
+      else if (t.length > max)
+        errors.push(`texts[${i}] は${max}文字以内にしてください`);
       else if (taskType === "query" && mentionsFairPlay(t))
         errors.push(FAIR_PLAY_NOT_SENT);
+      // 検索語は事故由来のテキスト（L5）。条文（document）は規則の本文のため確認しない（§2）
+      else if (taskType === "query")
+        c.incidentText(t, "embed-query", `texts[${i}]`);
     });
   }
-  if (errors.length > 0) return { ok: false, errors };
-  return {
-    ok: true,
-    value: {
-      taskType: taskType as EmbedRequest["taskType"],
-      texts: texts as string[],
-    },
-  };
+  return c.result(() => ({
+    taskType: taskType as EmbedRequest["taskType"],
+    texts: texts as string[],
+  }));
 }
+
+const ARTICLE_KEYS = [
+  "id",
+  "article",
+  "title",
+  "content",
+  "source",
+  "sourceName",
+  "sourceVersion",
+  "page",
+  "priority",
+] as const;
 
 export function validateReasoningRequest(
   body: unknown
@@ -165,6 +257,7 @@ export function validateReasoningRequest(
       errors: ["本文はJSONオブジェクトである必要があります"],
     };
   const c = new Checker();
+  c.only(body, "本文", ["incident", "context", "articles"]);
 
   const incidentRaw = body.incident;
   const contextRaw = body.context;
@@ -176,6 +269,13 @@ export function validateReasoningRequest(
   if (c.errors.length > 0) return { ok: false, errors: c.errors };
 
   const inc = incidentRaw as Obj;
+  c.only(inc, "incident", [
+    "category",
+    "subtype",
+    "playerColor",
+    "description",
+    "arbiterObserved",
+  ]);
   const category = c.oneOf<IncidentCategory>(
     inc,
     "category",
@@ -191,6 +291,13 @@ export function validateReasoningRequest(
     LLM_LIMITS.maxShortChars,
     true
   );
+  // 種別は構造化されたコード。カテゴリごとの既知の値だけ（自由記述を紛れ込ませない。§2）
+  if (
+    typeof subtype === "string" &&
+    category &&
+    !isReportableSubtype(category, subtype)
+  )
+    c.errors.push("incident.subtype の値が不正です");
   const playerColor = c.oneOf(
     inc,
     "playerColor",
@@ -202,15 +309,22 @@ export function validateReasoningRequest(
     inc,
     "description",
     "incident.description",
-    LLM_LIMITS.maxDescriptionChars
+    LLM_LIMITS.maxReasonDescriptionChars
   );
   if (typeof description === "string" && mentionsFairPlay(description))
     c.errors.push(FAIR_PLAY_NOT_SENT);
+  c.incidentText(description, "reason-description", "incident.description");
   if (typeof inc.arbiterObserved !== "boolean") {
     c.errors.push("incident.arbiterObserved は真偽値である必要があります");
   }
 
   const ctx = contextRaw as Obj;
+  // tournamentId は送らない（§5.3）。受け付けない項目として 400
+  c.only(ctx, "context", [
+    "competitionType",
+    "supervisionRegime",
+    "rulesVersion",
+  ]);
   const competitionType = c.oneOf(
     ctx,
     "competitionType",
@@ -224,18 +338,11 @@ export function validateReasoningRequest(
     REGIMES,
     true
   );
-  const rulesVersion = c.str(
+  const rulesVersion = c.oneOf(
     ctx,
     "rulesVersion",
     "context.rulesVersion",
-    LLM_LIMITS.maxShortChars
-  );
-  const tournamentId = c.str(
-    ctx,
-    "tournamentId",
-    "context.tournamentId",
-    LLM_LIMITS.maxIdChars,
-    true
+    SUPPORTED_RULES_VERSIONS
   );
   if (competitionType && competitionType !== "standard" && !supervisionRegime) {
     c.errors.push("Rapid / Blitz では context.supervisionRegime が必須です");
@@ -255,7 +362,11 @@ export function validateReasoningRequest(
         c.errors.push(`${p} はオブジェクトである必要があります`);
         return;
       }
+      c.only(a, p, ARTICLE_KEYS);
       const id = c.str(a, "id", `${p}.id`, LLM_LIMITS.maxIdChars);
+      // 条文の ID は端末内の識別子（UUID など）。自由記述を紛れ込ませない（§2）
+      if (typeof id === "string" && !ARTICLE_ID.test(id))
+        c.errors.push(`${p}.id の形式が不正です`);
       const article = c.str(
         a,
         "article",
@@ -290,13 +401,6 @@ export function validateReasoningRequest(
         LLM_LIMITS.maxShortChars,
         true
       );
-      const tId = c.str(
-        a,
-        "tournamentId",
-        `${p}.tournamentId`,
-        LLM_LIMITS.maxIdChars,
-        true
-      );
       const page = a.page;
       if (
         page !== undefined &&
@@ -308,6 +412,21 @@ export function validateReasoningRequest(
       const priority = a.priority;
       if (typeof priority !== "number" || !Number.isFinite(priority)) {
         c.errors.push(`${p}.priority が不正です`);
+      }
+      // 大会規定: 資料名は固定の「大会規定」で版は送らない（§5.3）。本文は狭い規則で再確認（§5.5）
+      if (source === "tournament") {
+        if (sourceName !== TOURNAMENT_SOURCE_NAME)
+          c.errors.push(`${p}.sourceName は「${TOURNAMENT_SOURCE_NAME}」です`);
+        if (a.sourceVersion !== undefined)
+          c.errors.push(`${p}.sourceVersion は大会規定では送りません`);
+        c.regulationText(article, `${p}.article`);
+        c.regulationText(title, `${p}.title`);
+        c.regulationText(content, `${p}.content`);
+      } else {
+        // FIDE・JCF・解説の資料名と版は登録時の自由記述。本文と同じ狭い規則で確かめる
+        // （本文は公開された規則のため確認しない。§2）
+        c.regulationText(sourceName, `${p}.sourceName`);
+        c.regulationText(sourceVersion, `${p}.sourceVersion`);
       }
       if (id !== undefined) {
         if (ids.has(id)) c.errors.push(`${p}.id が重複しています`);
@@ -324,30 +443,24 @@ export function validateReasoningRequest(
           sourceVersion,
           page: typeof page === "number" ? page : undefined,
           priority,
-          tournamentId: tId,
         });
       }
     });
   }
 
-  if (c.errors.length > 0) return { ok: false, errors: c.errors };
-  return {
-    ok: true,
-    value: {
-      incident: {
-        category: category as IncidentCategory,
-        subtype,
-        playerColor,
-        description: description as string,
-        arbiterObserved: inc.arbiterObserved as boolean,
-      },
-      context: {
-        competitionType: competitionType as CompetitionType,
-        supervisionRegime,
-        rulesVersion: rulesVersion as string,
-        tournamentId,
-      },
-      articles,
+  return c.result(() => ({
+    incident: {
+      category: category as IncidentCategory,
+      subtype,
+      playerColor,
+      description: description as string,
+      arbiterObserved: inc.arbiterObserved as boolean,
     },
-  };
+    context: {
+      competitionType: competitionType as CompetitionType,
+      supervisionRegime,
+      rulesVersion: rulesVersion as string,
+    },
+    articles,
+  }));
 }

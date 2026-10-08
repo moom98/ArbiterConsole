@@ -190,7 +190,7 @@ describe("fact catalogue: user review points (2026-10-08)", () => {
 
   it("re-review 3: the side to move comes from the last mover, not the clock", () => {
     expect(usage("dr.last-mover", "draw")?.dtQuestionIds).toEqual([
-      "claimantHasMove",
+      "lastMover",
     ]);
     expect(usage("dr.clock-state", "draw")?.dtQuestionIds).toBeUndefined();
     expect(usage("dr.clock-state", "draw")?.level).toBe("optional");

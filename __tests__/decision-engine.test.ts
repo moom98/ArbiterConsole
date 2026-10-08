@@ -8,6 +8,9 @@ import type { Incident } from "@/lib/domain/entities";
 import type { PriorIllegalMove } from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
 import { applyIncidentAnswers } from "@/lib/domain/follow-up";
 import { fixedProviders, FIXED_NOW } from "./helpers";
+import { chessJsPositionPort as chessPort } from "@/lib/infrastructure/chess/chess-js-position-port";
+import { runHelpmateSearch } from "@/lib/infrastructure/chess/helpmate/run";
+import { matePositionRequest } from "@/lib/domain/services/mate-possibility";
 
 function incident(overrides: Partial<Incident> = {}): Incident {
   return {
@@ -47,7 +50,7 @@ const fullFacts: Partial<Incident> = {
   playerColor: "white",
   illegalMoveFacts: {
     subtype: "illegal-move",
-    gameEnded: false,
+    endEvent: "in-progress",
     clockPressed: true,
   },
 };
@@ -179,7 +182,8 @@ describe("DecisionEngine", () => {
       expect(r.followUpQuestions.map((q) => q.id)).toEqual([
         "playerColor",
         "subtype",
-        "gameEnded",
+        "gameEndEvent",
+        "gameRecordState",
         "clockPressed",
         "opponentMadeNextMove",
         "detectedBy",
@@ -222,18 +226,39 @@ describe("DecisionEngine", () => {
       expect(second.followUpQuestions.map((q) => q.id)).toContain("flagFallen");
     });
 
-    it("draw asks for the subtype, then routes repetition to DT-005", () => {
+    it("draw asks for the subtype, then routes claims to DT-005 and automatic draws to DT-006 (ADR-014 §1)", () => {
       const first = run({
         incident: incident({ category: "draw" }),
         ruleset: STANDARD,
       });
       expect(first.followUpQuestions.map((q) => q.id)).toEqual(["drawSubtype"]);
-      const answered = applyIncidentAnswers(incident({ category: "draw" }), {
-        drawSubtype: "fivefold-repetition",
-      });
-      const second = run({ incident: answered, ruleset: STANDARD });
-      expect(second.decision.treeId).toBe("DT-005-repetition");
+      const treeFor = (drawSubtype: string) =>
+        run({
+          incident: applyIncidentAnswers(incident({ category: "draw" }), {
+            drawSubtype,
+          }),
+          ruleset: STANDARD,
+        }).decision.treeId;
+      expect(treeFor("threefold-repetition-claim")).toBe("DT-005-repetition");
+      expect(treeFor("fifty-move-claim")).toBe("DT-005-repetition");
+      expect(treeFor("fivefold-repetition")).toBe("DT-006-automatic-draw");
+      expect(treeFor("75-move-rule")).toBe("DT-006-automatic-draw");
     });
+
+    it.each(["agreement", "stalemate", "dead-position", "other"])(
+      "draw subtype %s has no Decision Tree (asks for a situation note)",
+      (drawSubtype) => {
+        const r = run({
+          incident: applyIncidentAnswers(
+            incident({ category: "draw", description: "" }),
+            { drawSubtype }
+          ),
+          ruleset: STANDARD,
+        });
+        expect(r.decision.treeId).toBeUndefined();
+        expect(r.followUpQuestions.map((q) => q.id)).toEqual(["situationNote"]);
+      }
+    );
 
     it("M2: 'other' without a note asks for a required situation note", () => {
       const r = run({
@@ -309,14 +334,17 @@ describe("DecisionEngine", () => {
       expect(r.followUpQuestions.map((q) => q.id)).toEqual([
         "playerColor",
         "subtype",
-        "gameEnded",
+        "gameEndEvent",
+        "gameRecordState",
         "clockPressed",
       ]);
       expect(r.decision.escalationRecommended).toBe(false);
     });
 
     it("re-evaluates the same incident after follow-up answers", () => {
-      const engine = new DecisionEngine(fixedProviders());
+      const engine = new DecisionEngine(fixedProviders(), {
+        positions: chessPort,
+      });
       let inc = incident();
       const first = engine.processIncident({
         incident: inc,
@@ -328,7 +356,7 @@ describe("DecisionEngine", () => {
       inc = applyIncidentAnswers(inc, {
         playerColor: "white",
         subtype: "two-hands",
-        gameEnded: "false",
+        gameEndEvent: "in-progress",
         clockPressed: "true",
       });
       const second = engine.processIncident({
@@ -337,10 +365,28 @@ describe("DecisionEngine", () => {
         illegalMoveHistory: hist(1, 0),
       });
       expect(second.followUpQuestions.map((q) => q.id)).toEqual([
-        "opponentCanCheckmate",
+        "matePosition",
+        "reinstatedFen",
       ]);
 
-      inc = applyIncidentAnswers(inc, { opponentCanCheckmate: "true" });
+      // 違法手の直前に戻した局面（白の手番）。黒は K+Q
+      inc = applyIncidentAnswers(inc, {
+        matePosition: "fen",
+        reinstatedFen: "6k1/8/8/8/8/8/5q2/6K1 w - - 0 40",
+      });
+      // 探索前: 手順がないので結論は出ない（駒数からメイト可能とはしない）
+      const unsearched = engine.processIncident({
+        incident: inc,
+        ruleset: STANDARD,
+        illegalMoveHistory: hist(1, 0),
+      });
+      expect(unsearched.decision.kind).toBe("manual-review");
+      expect(unsearched.decision.penalties).toHaveLength(0);
+
+      inc = {
+        ...inc,
+        mateSearch: runHelpmateSearch(matePositionRequest(inc)!),
+      };
       const third = engine.processIncident({
         incident: inc,
         ruleset: STANDARD,
@@ -349,6 +395,24 @@ describe("DecisionEngine", () => {
       expect(third.requiresFollowUp).toBe(false);
       expect(third.decision.incidentId).toBe("inc-1");
       expect(third.decision.penalties[0].type).toBe("game-loss");
+      expect(third.decision.conclusion).toContain("40. ");
+    });
+
+    it("a reinstated position with the wrong side to move is asked again", () => {
+      const engine = new DecisionEngine(fixedProviders(), {
+        positions: chessPort,
+      });
+      const inc = applyIncidentAnswers(incident(fullFacts), {
+        matePosition: "fen",
+        reinstatedFen: "6k1/8/8/8/8/8/5q2/6K1 b - - 0 40",
+      });
+      const r = engine.processIncident({
+        incident: inc,
+        ruleset: STANDARD,
+        illegalMoveHistory: hist(1, 0),
+      });
+      expect(r.requiresFollowUp).toBe(true);
+      expect(r.decision.conclusion).toContain("手番");
     });
 
     it("missing history escalates instead of assuming zero", () => {
@@ -371,41 +435,42 @@ describe("DecisionEngine", () => {
 describe("applyIncidentAnswers", () => {
   it("ignores invalid values and keeps existing facts", () => {
     const inc = applyIncidentAnswers(
-      incident({ illegalMoveFacts: { gameEnded: false } }),
+      incident({ illegalMoveFacts: { endEvent: "in-progress" } }),
       { playerColor: "green", clockPressed: "maybe", subtype: "bogus" }
     );
     expect(inc.playerColor).toBeUndefined();
-    expect(inc.illegalMoveFacts).toEqual({ gameEnded: false });
+    expect(inc.illegalMoveFacts).toEqual({ endEvent: "in-progress" });
   });
 
-  it("maps an unrecognised checkmate answer to unknown", () => {
-    const inc = applyIncidentAnswers(incident(), { opponentCanCheckmate: "?" });
-    expect(inc.illegalMoveFacts?.opponentCanCheckmate).toBe("unknown");
+  it("stores the reinstated position and ignores an unknown input method", () => {
+    const inc = applyIncidentAnswers(incident(), {
+      matePosition: "maybe",
+      reinstatedFen: "  8/8/8/8/8/8/8/K6k w - - 0 1 ",
+    });
+    expect(inc.illegalMoveFacts?.matePosition).toBeUndefined();
+    expect(inc.illegalMoveFacts?.positionFen).toBe(
+      "8/8/8/8/8/8/8/K6k w - - 0 1"
+    );
   });
 });
 
 describe("applyIncidentAnswers (M4 questions)", () => {
-  it("stores flag-fall material counts and ignores out-of-range values", () => {
+  it("stores the flag-fall position (no material counts any more)", () => {
     const inc = applyIncidentAnswers(
       incident({ category: "clock-time", subtype: "flag-fall" }),
       {
         flagFallen: "black",
-        gameEndedBeforeFlag: "false",
+        endedBeforeFlag: "none",
         movesNotCompleted: "true",
-        whiteRooks: "1",
-        whitePawns: "9",
-        blackQueens: "x",
-        materialConfirmed: "true",
+        matePosition: "fen",
         positionFen: "  ",
       }
     );
     expect(inc.playerColor).toBe("black");
     expect(inc.flagFallFacts?.flagFallen).toBe("black");
-    expect(inc.flagFallFacts?.material?.white.rooks).toBe(1);
-    expect(inc.flagFallFacts?.material?.white.pawns).toBeUndefined();
-    expect(inc.flagFallFacts?.material?.black.queens).toBeUndefined();
-    expect(inc.flagFallFacts?.materialConfirmed).toBe(true);
+    expect(inc.flagFallFacts?.matePosition).toBe("fen");
     expect(inc.flagFallFacts?.fen).toBeUndefined();
+    expect(inc.illegalMoveFacts).toBeUndefined();
   });
 
   it("stores draw-claim answers and the subtype", () => {
@@ -450,7 +515,7 @@ describe("DecisionEngine — DT-005 automatic repetition check via injected port
     const inc = applyIncidentAnswers(incident({ category: "draw" }), {
       drawSubtype: "threefold-repetition-claim",
       claimant: "black",
-      claimantHasMove: "true",
+      lastMover: "white",
       claimMode: "about-to-appear",
       touchedPiece: "false",
       moveWritten: "true",
@@ -487,7 +552,7 @@ describe("DecisionEngine — DT-005 automatic repetition check via injected port
     const inc = applyIncidentAnswers(incident({ category: "draw" }), {
       drawSubtype: "threefold-repetition-claim",
       claimant: "black",
-      claimantHasMove: "true",
+      lastMover: "white",
       claimMode: "about-to-appear",
       touchedPiece: "false",
       moveWritten: "true",

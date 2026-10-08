@@ -1,42 +1,41 @@
 import type {
-  BoardMaterial,
   CompetitionType,
+  EndedBeforeFlag,
   FlagFallFacts,
   PlayerColor,
-  SideMaterial,
   SupervisionRegime,
 } from "@/lib/domain/entities";
 import type { DomainProviders } from "@/lib/domain/providers";
 import { cite, type CitationKey } from "@/lib/domain/rules/citations";
-import {
-  MATERIAL_KEYS,
-  QUESTIONS,
-  materialQuestionId,
-  type FollowUpQuestion,
-} from "@/lib/domain/follow-up";
-import {
-  assessMatingPossibility,
-  materialFromFen,
-  validateSideMaterial,
-} from "@/lib/domain/services/mate-material";
+import { QUESTIONS, type FollowUpQuestion } from "@/lib/domain/follow-up";
+import type { MatePossibility } from "@/lib/domain/services/mate-possibility";
 import type { DecisionTreeResult } from "./dt-001-illegal-move-standard";
 import { COLOR_JA, TreeOutput, opponentOf } from "./tree-support";
+import { endEventCheck } from "./dt-001-illegal-move-standard";
+import {
+  ENDED_BEFORE_FLAG_LABELS,
+  endedBeforeFlagFromEvent,
+} from "@/lib/domain/services/game-end";
 
 export const DT_004_ID = "DT-004-flag-fall" as const;
 
-export interface FlagFallInput extends FlagFallFacts {
+export interface FlagFallInput extends Omit<
+  FlagFallFacts,
+  "gameEndedBeforeFlag"
+> {
   competitionType: CompetitionType;
   /** Rapid / Blitz では必須 */
   supervisionRegime?: SupervisionRegime;
+  /**
+   * フラッグ確定時の局面によるメイト可能性（DecisionEngine が assessMatePossibility で算出。
+   * ADR-014 §5）。matePosition = "fen" のときに使う
+   */
+  mate?: MatePossibility;
 }
 
-/** 駒数入力の質問一式（白 → 黒） */
-export function materialQuestions(): FollowUpQuestion[] {
-  const qs: FollowUpQuestion[] = [];
-  for (const color of ["white", "black"] as const)
-    for (const piece of MATERIAL_KEYS)
-      qs.push(QUESTIONS[materialQuestionId(color, piece)]);
-  return qs;
+/** メイト可能性の局面の質問（局面の入力方法 → FEN） */
+export function matePositionQuestions(): FollowUpQuestion[] {
+  return [QUESTIONS.matePosition, QUESTIONS.positionFen];
 }
 
 /**
@@ -46,7 +45,8 @@ export function materialQuestions(): FollowUpQuestion[] {
  * - 規定手数の完了を確認（6.4）
  * - 両フラッグ: 先に落ちた側が判別できればその側、できなければ Guidelines III.3.1（Standard/Rapid の増加時間なし・事前告知）
  * - 相手がどのような合法手の連続でもメイトできなければドロー（6.9 / A.5.3）
- *   メイト可能性は駒数で確定できる場合のみ確定し、それ以外は CA 確認
+ *   メイト可能性は局面から判定する（ADR-014 §5）: 駒の構成で不可能が証明できればドロー、
+ *   メイトまでの手順が見つかれば負け、それ以外は CA 確認
  */
 export class FlagFallTree {
   private readonly out: TreeOutput;
@@ -78,19 +78,27 @@ export class FlagFallTree {
     // 1. 基本事実
     const basic: FollowUpQuestion[] = [];
     if (input.flagFallen === undefined) basic.push(QUESTIONS.flagFallen);
-    if (input.gameEndedBeforeFlag === undefined)
-      basic.push(QUESTIONS.gameEndedBeforeFlag);
+    if (input.endedBeforeFlag === undefined)
+      basic.push(QUESTIONS.endedBeforeFlag);
     if (basic.length > 0) return this.out.needsInput(basic);
 
-    // 2. フラッグに気付く前に結果が出ていた → 結果は変わらない
-    if (input.gameEndedBeforeFlag) {
+    // 2. フラッグの確定前に対局を終わらせた出来事があった → 結果は変わらない。
+    // 終了は観察した出来事から求める（握手だけでは終了としない。ADR-014 §3）
+    if (endedBeforeFlagFromEvent(input.endedBeforeFlag)) {
+      const event = input.endedBeforeFlag as EndedBeforeFlag;
+      const end = endEventCheck(event);
       return this.out.decided({
         kind: "recommendation",
-        conclusion:
-          "フラッグに気付く（主張される）前に対局は終了していたため、その結果がそのまま有効です。",
+        conclusion: `フラッグが確定する前に対局は終了していた（${ENDED_BEFORE_FLAG_LABELS[event]}）ため、その結果がそのまま有効です。`,
         actions: [
           "時間切れとしての裁定は行わない",
           "終了時点の結果（チェックメイト・投了・ドロー等）を記録する",
+          ...(end ? [end.action] : []),
+          ...(event === "other"
+            ? [
+                "対局を終わらせた出来事（終了の根拠）を確認し、明確でなければCAへ確認する",
+              ]
+            : []),
         ],
         intervention: "no-intervention",
         penalties: [],
@@ -99,9 +107,10 @@ export class FlagFallTree {
           "MANUAL_6_8_NOTICED",
           "FIDE_6_9",
           "MANUAL_6_9_AND_9_6",
-          "JCF_NA_P39_FLAG_NOTICED"
+          "JCF_NA_P39_FLAG_NOTICED",
+          ...(end?.sources ?? [])
         ),
-        confidence: "high",
+        confidence: event === "other" || end ? "medium" : "high",
         escalationRecommended: false,
       });
     }
@@ -126,28 +135,24 @@ export class FlagFallTree {
     }
 
     // 5. 規定手数（6.4）: 時間切れのプレーヤーが確定した後に確認する
-    const material = this.resolveMaterial(input);
+    const positionError = this.positionError(input);
     if (input.movesNotCompleted === undefined) {
-      // 時間切れのプレーヤーが確定してから質問する。駒数も同じラウンドで尋ねる
+      // 時間切れのプレーヤーが確定してから質問する。局面も同じラウンドで尋ねる
+      // （局面は「規定手数を完了していない」場合のみ必要）
       return this.out.needsInput(
         [
           QUESTIONS.movesNotCompleted,
-          // 駒数は「規定手数を完了していない」場合のみ必要（完了していた／不明なら不要）
-          ...(material.ok
+          ...(input.matePosition !== undefined && !positionError
             ? []
-            : [
-                ...materialQuestions(),
-                QUESTIONS.positionFen,
-                QUESTIONS.materialConfirmed,
-              ].map((q) => ({
+            : matePositionQuestions().map((q) => ({
                 ...q,
-                showWhen: {
+                showWhen: q.showWhen ?? {
                   questionId: "movesNotCompleted" as const,
                   values: ["true"],
                 },
               }))),
         ],
-        `${COLOR_JA[flagged]}のフラッグが落ちました。${COLOR_JA[flagged]}が規定手数を完了していたかと、盤上の駒数を確認してください。${!material.ok && material.error ? `\n${material.error}` : ""}`,
+        `${COLOR_JA[flagged]}のフラッグが落ちました。${COLOR_JA[flagged]}が規定手数を完了していたかと、フラッグ確定時の局面を確認してください。${positionError ? `\n${positionError}` : ""}`,
         cite("FIDE_6_4", "FIDE_6_9", "MANUAL_6_9_CHECK_POSITION")
       );
     }
@@ -187,25 +192,26 @@ export class FlagFallTree {
       });
     }
 
-    // 6. メイト可能性（駒数または FEN）
-    if (!material.ok) {
+    // 6. メイト可能性（局面から判定。ADR-014 §5）
+    if (input.matePosition === undefined || positionError) {
       return this.out.needsInput(
-        [
-          ...materialQuestions(),
-          QUESTIONS.positionFen,
-          QUESTIONS.materialConfirmed,
-        ],
-        `${COLOR_JA[flagged]}のフラッグが落ちました。相手（${COLOR_JA[opponentOf(flagged)]}）がメイト可能かを判定するため、盤上の駒数を入力してください。${material.error ? `\n${material.error}` : ""}`,
+        matePositionQuestions(),
+        `${COLOR_JA[flagged]}のフラッグが落ちました。相手（${COLOR_JA[opponentOf(flagged)]}）がメイト可能かを判定するため、フラッグ確定時の局面を入力してください。${positionError ? `\n${positionError}` : ""}`,
         cite("FIDE_6_9", "MANUAL_6_9_CHECK_POSITION")
       );
     }
 
     const winner = opponentOf(flagged);
-    const assessment = assessMatingPossibility(
-      material.material[winner],
-      material.material[flagged]
-    );
     const sources = [...this.regimeSources(input), ...extraSources];
+    if (input.matePosition === "unknown")
+      return this.mateUnknown(flagged, "局面が入力されていません", sources);
+    const assessment = input.mate;
+    if (!assessment || assessment.verdict === "unknown")
+      return this.mateUnknown(
+        flagged,
+        assessment?.reason ?? "局面を判定できません",
+        sources
+      );
 
     if (assessment.verdict === "cannot-mate") {
       return this.out.decided({
@@ -234,34 +240,13 @@ export class FlagFallTree {
       });
     }
 
-    if (assessment.verdict === "unknown") {
-      return this.mateUnknown(flagged, assessment.reason, sources);
-    }
-
-    // can-mate: ポーンがある場合は閉塞局面でないことを確認
-    if (assessment.positionDependent) {
-      if (input.positionBlocked === undefined) {
-        return this.out.needsInput(
-          [QUESTIONS.positionBlocked],
-          `${COLOR_JA[winner]}は駒数上メイト可能です（${assessment.reason}）。盤上にポーンがあるため、閉塞局面でないかを確認してください。`,
-          cite("FIDE_6_9", "MANUAL_6_9_CHECK_POSITION")
-        );
-      }
-      if (input.positionBlocked !== false) {
-        return this.mateUnknown(
-          flagged,
-          "閉塞局面の可能性があり、メイト可能かを駒数だけでは判定できません",
-          sources
-        );
-      }
-    }
-
     return this.out.decided({
       kind: "recommendation",
-      conclusion: `${COLOR_JA[flagged]}のフラッグが落ちました。${COLOR_JA[winner]}はメイト可能な局面のため、${COLOR_JA[flagged]}の負けです。（${assessment.reason}）`,
+      conclusion: `${COLOR_JA[flagged]}のフラッグが落ちました。${COLOR_JA[winner]}はメイト可能な局面のため、${COLOR_JA[flagged]}の負けです。\nメイトまでの手順の例（入力した局面から）: ${assessment.line}`,
       actions: [
         "時計を止める",
         this.procedureAction(input),
+        "入力した局面（手番を含む）が盤上と一致することを確認する",
         "強制手順で時間切れ側がメイト／ステイルメイトする局面でないか確認する（該当すればドロー: 解説）",
         `${COLOR_JA[flagged]}の負けを宣言する（6.9）`,
         "結果を記録する",
@@ -285,30 +270,14 @@ export class FlagFallTree {
     });
   }
 
-  private resolveMaterial(
-    input: Partial<FlagFallInput>
-  ): { ok: true; material: BoardMaterial } | { ok: false; error?: string } {
-    if (input.fen) {
-      const parsed = materialFromFen(input.fen);
-      if (parsed.ok) return parsed;
-      return {
-        ok: false,
-        error: `FEN を解釈できません（${parsed.error}）。FEN を修正するか、空欄にして駒数を入力してください。`,
-      };
-    }
-    if (!input.materialConfirmed || !input.material) return { ok: false };
-    const errors = [
-      ...validateSideMaterial(input.material.white, "白"),
-      ...validateSideMaterial(input.material.black, "黒"),
-    ];
-    if (errors.length > 0) return { ok: false, error: errors.join(" / ") };
-    return {
-      ok: true,
-      material: {
-        white: input.material.white as SideMaterial,
-        black: input.material.black as SideMaterial,
-      },
-    };
+  /** 入力された局面を判定に使えない場合（FEN の誤りなど）、再入力を求める理由 */
+  private positionError(input: Partial<FlagFallInput>): string | undefined {
+    if (input.matePosition !== "fen") return undefined;
+    const cause = input.mate?.cause;
+    if (cause === "no-position") return "局面（FEN）を入力してください。";
+    if (cause === "invalid-position")
+      return `${input.mate?.reason}。FEN を修正するか、「局面を入力できない」を選んでください。`;
+    return undefined;
   }
 
   private mateUnknown(
@@ -319,7 +288,7 @@ export class FlagFallTree {
     const winner = opponentOf(flagged);
     return this.out.decided({
       kind: "manual-review",
-      conclusion: `${COLOR_JA[flagged]}のフラッグが落ちましたが、${COLOR_JA[winner]}がメイト可能かを確定できません（${reason}）。CAへ確認してください。`,
+      conclusion: `${COLOR_JA[flagged]}のフラッグが落ちましたが、${COLOR_JA[winner]}がメイト可能かを確定できません（${reason}）。局面を確認し、CAへ確認してください。`,
       actions: [
         "時計を止める",
         `${COLOR_JA[winner]}があらゆる合法手の連続（相手の協力を含む）で${COLOR_JA[flagged]}のキングをメイトできる局面かをCAと確認する`,

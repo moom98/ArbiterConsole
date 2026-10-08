@@ -7,6 +7,7 @@ import type {
   RulesetSnapshot,
 } from "@/lib/domain/entities";
 import { SUPPORTED_RULES_VERSIONS } from "@/lib/domain/entities";
+import { normalizeTimeControl } from "./time-control";
 
 /**
  * 報告時に明示的に指定する最小限の対局コンテキスト（暫定大会用。ADR-004）。
@@ -111,7 +112,11 @@ export type TournamentRulesetResult =
 export function deriveRulesetFromTournament(
   tournament: Pick<
     Tournament,
-    "competitionType" | "supervisionRegime" | "rulesVersion" | "overrides"
+    | "competitionType"
+    | "supervisionRegime"
+    | "rulesVersion"
+    | "overrides"
+    | "timeControl"
   >
 ): TournamentRulesetResult {
   const errors: string[] = [];
@@ -141,6 +146,8 @@ export function deriveRulesetFromTournament(
       tournamentOverrides: tournament.overrides
         ? structuredCloneOverrides(tournament.overrides)
         : undefined,
+      // 報告時の持ち時間（ADR-014 §7）。旧形式は変換し、複製する
+      timeControl: normalizeTimeControl(tournament.timeControl),
     },
   };
 }

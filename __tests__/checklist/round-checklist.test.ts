@@ -78,7 +78,7 @@ describe("default template (§26)", () => {
 
   it("adds the tournament time control to the clock-setting item", () => {
     const items = resolveChecklistItems(null, {
-      timeControl: { initialMinutes: 90, incrementSeconds: 30 },
+      timeControl: { periods: [{ minutes: 90, incrementSeconds: 30 }] },
     });
     expect(items.find((i) => i.id === "pre-clock-setting")!.detail).toBe(
       "大会設定: 90分+30秒"

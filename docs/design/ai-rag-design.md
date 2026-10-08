@@ -573,7 +573,7 @@ class RulePriorityResolver {
 >
 > **As implemented (Milestone 5):**
 > - Models: `GEMINI_MODEL_REASONING` (default `gemini-flash-latest`) and `GEMINI_MODEL_CLASSIFIER` (default `gemini-flash-lite-latest`), with structured output via `responseJsonSchema`. Citation `articleId` is restricted to the IDs of the articles that were sent.
-> - Retrieval (§5) runs on the client (`lib/infrastructure/llm/llm-assist-port.ts`). Up to 8 articles, each truncated to 4,000 characters, are sent to `/api/llm/reason`.
+> - Retrieval (§5) runs on the client (`lib/application/llm-assist.ts` since J1a-2; it was `lib/infrastructure/llm/llm-assist-port.ts`). Up to 8 articles, each truncated to 4,000 characters, are sent to `/api/llm/reason`, through the external-AI guard and only after the arbiter confirms the de-identified payload ([external-ai-data-protection.md](./external-ai-data-protection.md) §11).
 > - Output validation (§7.3) is `lib/domain/llm/output-validator.ts` (pure). Citations use the Rule.id instead of sourceName and articleNumber. Quotes must match the article text that was sent. Confidence `high` is capped to `medium`.
 > - Prompt caching (§7.4) is not used.
 

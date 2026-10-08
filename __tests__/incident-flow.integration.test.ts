@@ -6,6 +6,7 @@ import { createIncidentStore } from "@/lib/stores/incident-store";
 import type { ReportContext } from "@/lib/domain/services/game-context";
 import type { IncidentQuestionId } from "@/lib/domain/follow-up";
 import { fixedProviders } from "./helpers";
+import { createHelpmateSearchPort } from "@/lib/infrastructure/chess/helpmate/port";
 
 const STANDARD_CTX: ReportContext = {
   competitionType: "standard",
@@ -17,7 +18,7 @@ const STANDARD_CTX: ReportContext = {
 const WHITE_COMPLETED: Partial<Record<IncidentQuestionId, string>> = {
   playerColor: "white",
   subtype: "illegal-move",
-  gameEnded: "false",
+  gameEndEvent: "in-progress",
   clockPressed: "true",
 };
 
@@ -32,6 +33,8 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
     store = createIncidentStore({
       db,
       providers: fixedProviders(`run${dbCounter}`),
+      // jsdom には Worker がないため、その場で探索する経路を通る
+      mateSearch: createHelpmateSearchPort(),
     });
   });
 
@@ -83,7 +86,8 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
     const second = await report(WHITE_COMPLETED);
     expect(second.requiresFollowUp).toBe(true);
     expect(second.followUpQuestions.map((q) => q.id)).toEqual([
-      "opponentCanCheckmate",
+      "matePosition",
+      "reinstatedFen",
     ]);
     // 追加質問待ちの間は保留（エスカレーション扱いにしない）
     const pending = await db.incidents.get(
@@ -92,12 +96,21 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
     expect(pending?.status).toBe("pending");
     expect(pending?.escalatedToCA).toBe(false);
 
-    const final = await store
-      .getState()
-      .answerFollowUp({ opponentCanCheckmate: "true" });
+    // 違法手の直前に戻した局面（白の手番）を入力 → 端末内で探索 → 検証した手順で負け
+    const final = await store.getState().answerFollowUp({
+      matePosition: "fen",
+      reinstatedFen: "6k1/8/8/8/8/8/5q2/6K1 w - - 0 40",
+    });
     if (!final.ok) throw new Error(final.error);
     expect(final.result.decision.penalties[0].type).toBe("game-loss");
     expect(final.result.decision.penalties[0].playerColor).toBe("white");
+    expect(final.result.decision.conclusion).toContain("メイトまでの手順");
+    // 探索結果は Incident に保存される（局面は端末内のみ）
+    const searched = await db.incidents.get(
+      store.getState().currentIncident!.id
+    );
+    expect(searched?.mateSearch?.status).toBe("found");
+    expect(searched?.mateSearch?.fen).toBe("6k1/8/8/8/8/8/5q2/6K1 w - - 0 40");
 
     const incidents = await db.incidents.toArray();
     expect(incidents).toHaveLength(4);
@@ -107,17 +120,18 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
     expect(stored?.decisionId).toBe(final.result.decision.id);
   });
 
-  it("'unknown' mate ability ends in a persisted consult-CA decision (not left pending) and lists the counted move", async () => {
+  it("'position unavailable' ends in a persisted consult-CA decision (not left pending) and lists the counted move", async () => {
     await report(WHITE_COMPLETED);
     const second = await report(WHITE_COMPLETED);
     expect(second.followUpQuestions.map((q) => q.id)).toEqual([
-      "opponentCanCheckmate",
+      "matePosition",
+      "reinstatedFen",
     ]);
     expect(second.decision.conclusion).toContain("記録済み 1回目");
 
     const final = await store
       .getState()
-      .answerFollowUp({ opponentCanCheckmate: "unknown" });
+      .answerFollowUp({ matePosition: "unknown" });
     if (!final.ok) throw new Error(final.error);
     expect(final.result.requiresFollowUp).toBe(false);
     expect(final.result.decision.kind).toBe("manual-review");
@@ -209,6 +223,37 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
     expect(store.getState().currentDecision).toBeNull();
   });
 
+  it("a failed helpmate search gives consult-CA, stores no record and is retried next time", async () => {
+    let calls = 0;
+    store = createIncidentStore({
+      db,
+      providers: fixedProviders(`fail${dbCounter}`),
+      mateSearch: {
+        search: async () => {
+          calls++;
+          throw new Error("worker crashed");
+        },
+      },
+    });
+    await report(WHITE_COMPLETED);
+    await report(WHITE_COMPLETED);
+    const answered = await store.getState().answerFollowUp({
+      matePosition: "fen",
+      reinstatedFen: "6k1/8/8/8/8/8/5q2/6K1 w - - 0 40",
+    });
+    if (!answered.ok) throw new Error(answered.error);
+    expect(calls).toBe(1);
+    expect(answered.result.decision.kind).toBe("manual-review");
+    expect(answered.result.decision.penalties).toHaveLength(0);
+    expect(store.getState().mateSearchPending).toBe(false);
+    const stored = await db.incidents.get(store.getState().currentIncident!.id);
+    expect(stored?.mateSearch).toBeUndefined();
+
+    const retried = await store.getState().retryEvaluation();
+    if (!retried.ok) throw new Error(retried.error);
+    expect(calls).toBe(2);
+  });
+
   describe("Milestone 4 trees through the store", () => {
     const RAPID_A5: ReportContext = {
       ...STANDARD_CTX,
@@ -257,14 +302,18 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
       await submit("illegal-move", RAPID_A5);
       const second = await answer(A5_ANSWERS);
       expect(second.followUpQuestions.map((q) => q.id)).toEqual([
-        "opponentCanCheckmate",
+        "matePosition",
+        "reinstatedFen",
       ]);
-      const final = await answer({ opponentCanCheckmate: "true" });
+      const final = await answer({
+        matePosition: "fen",
+        reinstatedFen: "6k1/8/8/8/8/8/5q2/6K1 w - - 0 40",
+      });
       expect(final.decision.penalties[0].type).toBe("game-loss");
       expect(final.decision.treeId).toBe("DT-003-illegal-move-fast-basic");
     });
 
-    it("flag fall: subtype → facts → material → decision persisted", async () => {
+    it("flag fall: subtype → facts → position → decision persisted", async () => {
       const first = await submit("clock-time", STANDARD_CTX);
       expect(first.followUpQuestions.map((q) => q.id)).toEqual([
         "clockTimeSubtype",
@@ -272,26 +321,13 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
       await answer({ clockTimeSubtype: "flag-fall" });
       await answer({
         flagFallen: "white",
-        gameEndedBeforeFlag: "false",
+        endedBeforeFlag: "none",
         movesNotCompleted: "true",
       });
-      // UI は全ステッパーを既定値 "0" で送信する
-      const zeros = Object.fromEntries(
-        ["white", "black"].flatMap((c) =>
-          [
-            "Queens",
-            "Rooks",
-            "LightBishops",
-            "DarkBishops",
-            "Knights",
-            "Pawns",
-          ].map((p) => [`${c}${p}`, "0"])
-        )
-      );
+      // 黒は K+N のみ・白はキングのみ → 駒の構成上メイト不可能 → ドロー
       const final = await answer({
-        ...zeros,
-        blackKnights: "1",
-        materialConfirmed: "true",
+        matePosition: "fen",
+        positionFen: "8/8/8/4k3/8/8/4K3/7n w - - 0 60",
       });
       expect(final.requiresFollowUp).toBe(false);
       expect(final.decision.treeId).toBe("DT-004-flag-fall");
@@ -314,29 +350,18 @@ describe("Incident flow (store + engine + IndexedDB)", () => {
       if (!res.ok) throw new Error(res.error);
       expect(res.result.followUpQuestions.map((q) => q.id)).toEqual([
         "flagFallen",
-        "gameEndedBeforeFlag",
+        "endedBeforeFlag",
       ]);
-      await answer({ flagFallen: "white", gameEndedBeforeFlag: "false" });
-      const zeros = Object.fromEntries(
-        ["white", "black"].flatMap((c) =>
-          [
-            "Queens",
-            "Rooks",
-            "LightBishops",
-            "DarkBishops",
-            "Knights",
-            "Pawns",
-          ].map((p) => [`${c}${p}`, "0"])
-        )
-      );
+      await answer({ flagFallen: "white", endedBeforeFlag: "none" });
+      // 規定手数と局面を同じラウンドで回答。黒は K+R → 端末内で手順を探して検証 → 白の負け
       const final = await answer({
         movesNotCompleted: "true",
-        ...zeros,
-        blackRooks: "1",
-        materialConfirmed: "true",
+        matePosition: "fen",
+        positionFen: "8/8/3k4/8/8/4K3/8/7r w - - 0 70",
       });
       expect(final.requiresFollowUp).toBe(false);
       expect(final.decision.penalties[0].type).toBe("game-loss");
+      expect(final.decision.conclusion).toMatch(/70\. K/);
     });
 
     it("rejects an unknown quick-report subtype without creating an incident", async () => {

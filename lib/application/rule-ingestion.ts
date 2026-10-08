@@ -8,13 +8,14 @@ import type {
 import { getPriorityBySource } from "@/lib/domain/services/rule-priority";
 import { db, type ArbiterDatabase } from "@/lib/infrastructure/db";
 import { clearFulltextIndex } from "@/lib/infrastructure/ai/fulltext-search";
+import { EMBEDDING_MODEL_ID } from "@/lib/infrastructure/embeddings/generator";
 import {
-  EMBEDDING_MODEL_ID,
-  generateEmbeddings,
-  type GenerateEmbeddingsOptions,
-} from "@/lib/infrastructure/embeddings/generator";
+  embedRuleDocuments,
+  type EmbedDocumentsOptions,
+  type EmbeddingDocument,
+} from "./external-ai-guard";
 import type { PDFExtractionResult } from "@/lib/infrastructure/pdf/extractor";
-import { embeddingTextForRule } from "./embedding-backfill";
+import { embeddingDocumentForRule } from "./embedding-backfill";
 import {
   findActiveSourcesInScope,
   getImportScopeInfo,
@@ -67,9 +68,10 @@ export interface IngestionDeps {
     source: RuleSourceType,
     onPage: (page: number, total: number) => void
   ): Promise<PDFExtractionResult>;
+  /** 外部AIガード経由の条文の埋め込み（大会規定は置き換えてから送る。ADR-012） */
   embed(
-    texts: readonly string[],
-    options: GenerateEmbeddingsOptions
+    documents: readonly EmbeddingDocument[],
+    options: EmbedDocumentsOptions
   ): Promise<number[][]>;
   modelId: string;
   database: ArbiterDatabase;
@@ -81,7 +83,7 @@ const defaultDeps: IngestionDeps = {
       await import("@/lib/infrastructure/pdf/extractor");
     return extractRulesFromPDF(file, source, onPage);
   },
-  embed: generateEmbeddings,
+  embed: embedRuleDocuments,
   modelId: EMBEDDING_MODEL_ID,
   database: db,
 };
@@ -219,7 +221,7 @@ export async function ingestRulesFromPDF(
   let embeddingError: string | undefined;
   let embeddedSoFar = 0;
   try {
-    const vectors = await deps.embed(rules.map(embeddingTextForRule), {
+    const vectors = await deps.embed(rules.map(embeddingDocumentForRule), {
       onProgress: (done, total) => {
         embeddedSoFar = done;
         onProgress?.({

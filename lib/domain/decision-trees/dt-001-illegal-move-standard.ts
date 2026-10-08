@@ -1,5 +1,7 @@
 import type {
   Decision,
+  GameEndEvent,
+  GameRecordState,
   IllegalMoveFacts,
   IllegalMoveSubtype,
   PlayerColor,
@@ -17,6 +19,13 @@ import {
   type FollowUpQuestion,
 } from "@/lib/domain/follow-up";
 import { buildDecision, type DecisionFields } from "./build-decision";
+import type { MatePossibility } from "@/lib/domain/services/mate-possibility";
+import { mateStep, reinstatedPositionQuestions } from "./mate-position";
+import {
+  GAME_END_EVENT_LABELS,
+  gameEndedFromEvent,
+  recordStateAction,
+} from "@/lib/domain/services/game-end";
 
 export const DT_001_ID = "DT-001-illegal-move-standard" as const;
 export const DT_001_RULES_VERSION = "FIDE-2023";
@@ -25,7 +34,10 @@ export const DT_001_RULES_VERSION = "FIDE-2023";
  * DT-001 の入力。Standard（FIDE Laws of Chess 2023, Article 7.5）専用。
  * Rapid / Blitz の判断にはこの Tree を使用しない（要件 §17）。
  */
-export interface IllegalMoveStandardInput extends IllegalMoveFacts {
+export interface IllegalMoveStandardInput extends Omit<
+  IllegalMoveFacts,
+  "gameEnded"
+> {
   /** 違反したプレーヤー */
   playerColor: PlayerColor;
   /**
@@ -38,6 +50,65 @@ export interface IllegalMoveStandardInput extends IllegalMoveFacts {
    * IncidentCounter が算出する。
    */
   priorIllegalMoves?: PriorIllegalMove[];
+  /**
+   * 違法手の直前に戻した局面によるメイト可能性（DecisionEngine が assessMatePossibility で算出。
+   * ADR-014 §5）。matePosition = "fen" のときに使う
+   */
+  mate?: MatePossibility;
+}
+
+/**
+ * 対局終了後に判明した違法手（DT-001〜003 共通）の結論・対応・信頼度。
+ * 「その他」の出来事は終了の根拠をアービターが確かめる（ADR-014 §3）
+ */
+export function gameEndedFields(
+  what: string,
+  event: GameEndEvent,
+  recordState: GameRecordState | undefined
+): Pick<
+  DecisionFields,
+  "conclusion" | "actions" | "confidence" | "escalationRecommended"
+> & { endSources: CitationKey[] } {
+  const recordAction = recordStateAction(recordState);
+  const end = endEventCheck(event);
+  return {
+    conclusion: `対局終了後（${GAME_END_EVENT_LABELS[event]}）に判明した${what}です。訂正はできず、結果はそのまま確定します。`,
+    actions: [
+      "局面・結果の訂正は行わない",
+      "結果をそのまま記録する",
+      ...(recordAction ? [recordAction] : []),
+      ...(end ? [end.action] : []),
+      event === "other"
+        ? "対局を終わらせた出来事（終了の根拠）を確認し、明確でなければCAへ確認する"
+        : "対局終了の有無が明確でない場合はCAへ確認する",
+    ],
+    confidence: event === "other" || end ? "medium" : "high",
+    escalationRecommended: false,
+    endSources: end?.sources ?? [],
+  };
+}
+
+/**
+ * チェックメイト・ステイルメイトは、その局面を作った手が第3条・4.2〜4.7 に従っている場合
+ * だけ対局を終わらせる（5.1.1 / 5.2.1）。違法な手によるものなら対局は終わっていない。
+ * DT-001〜004 の「終了していた」判断で、その確認を求める
+ */
+export function endEventCheck(
+  event: string
+): { action: string; sources: CitationKey[] } | undefined {
+  if (event === "checkmate")
+    return {
+      action:
+        "チェックメイトの局面を作った手が合法だったか確認する（違法な手によるメイトでは対局は終了していない。5.1.1）",
+      sources: ["FIDE_5_1_1"],
+    };
+  if (event === "stalemate")
+    return {
+      action:
+        "ステイルメイトの局面を作った手が合法だったか確認する（違法な手によるステイルメイトでは対局は終了していない。5.2.1）",
+      sources: ["FIDE_5_2_1"],
+    };
+  return undefined;
 }
 
 /** これまでに違法手ペナルティが適用された Incident の要約 */
@@ -114,7 +185,8 @@ export class IllegalMoveStandardTree {
     const basic: FollowUpQuestion[] = [];
     if (input.playerColor === undefined) basic.push(QUESTIONS.playerColor);
     if (input.subtype === undefined) basic.push(QUESTIONS.subtype);
-    if (input.gameEnded === undefined) basic.push(QUESTIONS.gameEnded);
+    if (input.endEvent === undefined)
+      basic.push(QUESTIONS.gameEndEvent, QUESTIONS.gameRecordState);
     // 時計の質問も同じラウンドで行う（7.5.3 と分かっている場合は不要）
     if (
       basic.length > 0 &&
@@ -128,8 +200,17 @@ export class IllegalMoveStandardTree {
     const color = input.playerColor as PlayerColor;
     const subtype = input.subtype as IllegalMoveSubtype;
 
-    // 2. 対局終了後に判明 → 訂正不可、結果は確定
-    if (input.gameEnded) return this.decided(this.gameEnded(color, subtype));
+    // 2. 対局終了後に判明 → 訂正不可、結果は確定。終了は観察した出来事から求める
+    // （握手だけでは終了としない。ADR-014 §3）
+    if (gameEndedFromEvent(input.endEvent))
+      return this.decided(
+        this.gameEnded(
+          color,
+          subtype,
+          input.endEvent as GameEndEvent,
+          input.recordState
+        )
+      );
 
     // 3. 時計を押したか（7.5.3 は定義上押している）
     const clockPressed =
@@ -159,11 +240,11 @@ export class IllegalMoveStandardTree {
       input.priorIllegalMoves,
       priorCount
     );
-    const canMate = input.opponentCanCheckmate;
-    if (canMate === undefined) {
+    const step = mateStep(input.matePosition, input.mate);
+    if (step.kind === "ask") {
       return this.needsInput(
-        [QUESTIONS.opponentCanCheckmate],
-        `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）の可能性があります。結論には、相手がメイト可能な局面かの確認が必要です（7.5.5 ただし書き）。\n${priorLines.join("\n")}`,
+        reinstatedPositionQuestions(),
+        `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）の可能性があります。結論には、相手がメイト可能な局面かの判定が必要です（7.5.5 ただし書き）。違法手の直前に戻した局面を入力してください。${step.error ? `\n${step.error}` : ""}\n${priorLines.join("\n")}`,
         cite(
           SUBTYPE_ARTICLE[subtype],
           "FIDE_7_5_5",
@@ -171,14 +252,16 @@ export class IllegalMoveStandardTree {
         )
       );
     }
-    if (canMate === "unknown")
+    if (step.kind === "unknown")
       return this.decided(
-        this.secondOffenceMateUnknown(color, subtype, priorLines)
+        this.secondOffenceMateUnknown(color, subtype, priorLines, step.reason)
       );
-    if (canMate === false)
-      return this.decided(this.secondOffenceDraw(color, subtype, priorLines));
+    if (step.kind === "cannot-mate")
+      return this.decided(
+        this.secondOffenceDraw(color, subtype, priorLines, step.reason)
+      );
     return this.decided(
-      this.secondOffenceLoss(color, subtype, priorCount, priorLines)
+      this.secondOffenceLoss(color, subtype, priorCount, priorLines, step.line)
     );
   }
 
@@ -196,17 +279,19 @@ export class IllegalMoveStandardTree {
     conclusion = "判断に必要な情報が不足しています。以下の質問に回答してください。",
     sources: RuleCitation[] = []
   ): DecisionTreeResult {
+    // 任意の質問（結果の記入・署名の状態など）は不足項目に含めない
+    const labels = questions.filter((q) => !q.optional).map((q) => q.label);
     const decision = buildDecision(this.providers, {
       ...this.base(),
       kind: "follow-up-required",
       conclusion,
-      actions: questions.map((q) => q.label),
+      actions: labels,
       intervention: "consult-ca",
       penalties: [],
       sources,
       confidence: "low",
       escalationRecommended: false,
-      missingFields: questions.map((q) => q.label),
+      missingFields: labels,
     });
     return { status: "needs-input", decision, questions };
   }
@@ -224,27 +309,29 @@ export class IllegalMoveStandardTree {
 
   private gameEnded(
     color: PlayerColor,
-    subtype: IllegalMoveSubtype
+    subtype: IllegalMoveSubtype,
+    event: GameEndEvent,
+    recordState: GameRecordState | undefined
   ): DecisionFields {
+    const ended = gameEndedFields(
+      `${COLOR_JA[color]}の違法手（${SUBTYPE_LABELS[subtype]}）`,
+      event,
+      recordState
+    );
+    const { endSources, ...fields } = ended;
     return {
       ...this.base(),
       kind: "recommendation",
-      conclusion: `対局終了後に判明した${COLOR_JA[color]}の違法手（${SUBTYPE_LABELS[subtype]}）です。訂正はできず、結果はそのまま確定します。`,
-      actions: [
-        "局面・結果の訂正は行わない",
-        "結果をそのまま記録する",
-        "対局終了の有無が明確でない場合はCAへ確認する",
-      ],
+      ...fields,
       intervention: "no-intervention",
       penalties: [],
       sources: cite(
         "FIDE_7_5_1",
         "MANUAL_7_5_GAME_OVER",
         "FIDE_8_7",
-        "JCF_NA_P47_GAME_OVER"
+        "JCF_NA_P47_GAME_OVER",
+        ...endSources
       ),
-      confidence: "high",
-      escalationRecommended: false,
     };
   }
 
@@ -396,12 +483,13 @@ export class IllegalMoveStandardTree {
   private secondOffenceMateUnknown(
     color: PlayerColor,
     subtype: IllegalMoveSubtype,
-    priorLines: string[]
+    priorLines: string[],
+    reason: string
   ): DecisionFields {
     return {
       ...this.base(),
       kind: "manual-review",
-      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手がメイト可能な局面か判断できないため、結論（負け／ドロー）を確定できません。CAへ確認してください。`,
+      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手がメイト可能な局面か確定できないため（${reason}）、結論（負け／ドロー）を確定できません。局面を確認し、CAへ確認してください。`,
       actions: [
         "時計を止める",
         ...priorLines,
@@ -427,16 +515,18 @@ export class IllegalMoveStandardTree {
     color: PlayerColor,
     subtype: IllegalMoveSubtype,
     priorCount: number,
-    priorLines: string[]
+    priorLines: string[],
+    line: string
   ): DecisionFields {
     const inconsistent = priorCount >= 2;
     return {
       ...this.base(),
       kind: "recommendation",
-      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）です。相手はメイト可能な局面のため、${COLOR_JA[color]}の負けとなります。`,
+      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）です。相手はメイト可能な局面のため、${COLOR_JA[color]}の負けとなります。\nメイトまでの手順の例（違法手の直前の局面から）: ${line}`,
       actions: [
         "時計を止める",
         ...priorLines,
+        "入力した局面（手番を含む）が、違法手の直前の局面と一致することを確認する",
         `${COLOR_JA[color]}の負けを宣言する（7.5.5）`,
         "結果を記録する",
       ],
@@ -469,12 +559,13 @@ export class IllegalMoveStandardTree {
   private secondOffenceDraw(
     color: PlayerColor,
     subtype: IllegalMoveSubtype,
-    priorLines: string[]
+    priorLines: string[],
+    reason: string
   ): DecisionFields {
     return {
       ...this.base(),
       kind: "recommendation",
-      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手はどのような合法手の連続でもメイトできない局面のため、ドローとなります。`,
+      conclusion: `${COLOR_JA[color]}の2回目の違法手（${SUBTYPE_LABELS[subtype]}）ですが、相手はどのような合法手の連続でもメイトできない局面のため、ドローとなります。（${reason}）`,
       actions: [
         "時計を止める",
         ...priorLines,

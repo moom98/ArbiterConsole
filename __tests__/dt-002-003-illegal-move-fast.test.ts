@@ -3,12 +3,12 @@ import { IllegalMoveFastCompetitionTree } from "@/lib/domain/decision-trees/dt-0
 import { IllegalMoveFastBasicTree } from "@/lib/domain/decision-trees/dt-003-illegal-move-fast-basic";
 import { IllegalMoveStandardTree } from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
 import type { IllegalMoveFastInput } from "@/lib/domain/decision-trees/illegal-move-fast-shared";
-import { fixedProviders, FIXED_NOW } from "./helpers";
+import { fixedProviders, FIXED_NOW, mateOf } from "./helpers";
 
 const BASE: Partial<IllegalMoveFastInput> = {
   playerColor: "white",
   subtype: "illegal-move",
-  gameEnded: false,
+  endEvent: "in-progress",
   clockPressed: true,
   playerIncidentCount: 0,
 };
@@ -41,7 +41,8 @@ describe("DT-002 Illegal move — Rapid A.4 / Blitz B.2 (competition rules)", ()
     expect(r.questions.map((q) => q.id)).toEqual([
       "playerColor",
       "subtype",
-      "gameEnded",
+      "gameEndEvent",
+      "gameRecordState",
       "clockPressed",
     ]);
   });
@@ -64,7 +65,6 @@ describe("DT-002 Illegal move — Rapid A.4 / Blitz B.2 (competition rules)", ()
 
     const std = new IllegalMoveStandardTree(fixedProviders()).evaluate({
       ...BASE,
-      opponentCanCheckmate: undefined,
     } as never);
     expect(std.decision.penalties[0].timeAdjustmentSeconds).toBe(120);
   });
@@ -92,7 +92,10 @@ describe("DT-002 Illegal move — Rapid A.4 / Blitz B.2 (competition rules)", ()
     });
     expect(r.status).toBe("needs-input");
     if (r.status !== "needs-input") return;
-    expect(r.questions.map((q) => q.id)).toEqual(["opponentCanCheckmate"]);
+    expect(r.questions.map((q) => q.id)).toEqual([
+      "matePosition",
+      "reinstatedFen",
+    ]);
     expect(r.decision.conclusion).toContain("記録済み 1回目");
   });
 
@@ -105,7 +108,7 @@ describe("DT-002 Illegal move — Rapid A.4 / Blitz B.2 (competition rules)", ()
       const r = a4().evaluate({
         ...BASE,
         playerIncidentCount: 1,
-        opponentCanCheckmate: canMate,
+        ...mateOf(canMate),
       });
       expect(r.decision.penalties[0].type).toBe(type);
       expect(r.decision.penalties[0].playerColor).toBe(color);
@@ -116,7 +119,7 @@ describe("DT-002 Illegal move — Rapid A.4 / Blitz B.2 (competition rules)", ()
     const r = a4("blitz").evaluate({
       ...BASE,
       playerIncidentCount: 1,
-      opponentCanCheckmate: true,
+      ...mateOf(true),
     });
     expect(r.decision.penalties[0].type).toBe("game-loss");
   });
@@ -125,14 +128,14 @@ describe("DT-002 Illegal move — Rapid A.4 / Blitz B.2 (competition rules)", ()
     const r = a4().evaluate({
       ...BASE,
       playerIncidentCount: 1,
-      opponentCanCheckmate: "unknown",
+      ...mateOf("unknown"),
     });
     expect(r.decision.kind).toBe("manual-review");
     expect(r.decision.penalties).toHaveLength(0);
   });
 
   it("game already over → result stands", () => {
-    const r = a4().evaluate({ ...BASE, gameEnded: true });
+    const r = a4().evaluate({ ...BASE, endEvent: "resignation" });
     expect(r.decision.intervention).toBe("no-intervention");
     expect(r.decision.penalties).toHaveLength(0);
   });
@@ -174,7 +177,8 @@ describe("DT-003 Illegal move — Rapid A.5 / Blitz B.3 (basic rules)", () => {
     expect(r.questions.map((q) => q.id)).toEqual([
       "playerColor",
       "subtype",
-      "gameEnded",
+      "gameEndEvent",
+      "gameRecordState",
       "clockPressed",
       "opponentMadeNextMove",
       "detectedBy",
@@ -264,7 +268,7 @@ describe("DT-003 Illegal move — Rapid A.5 / Blitz B.3 (basic rules)", () => {
     const r = a4("blitz").evaluate({
       ...BASE,
       playerIncidentCount: 1,
-      opponentCanCheckmate: true,
+      ...mateOf(true),
     });
     expect(articles(r)).not.toContain(
       "FIDE Arbiters' Manual: Appendix A (illegal move penalty)"
@@ -287,7 +291,7 @@ describe("DT-003 Illegal move — Rapid A.5 / Blitz B.3 (basic rules)", () => {
     const r = a5().evaluate({
       ...A5_BASE,
       playerIncidentCount: 1,
-      opponentCanCheckmate: true,
+      ...mateOf(true),
     });
     expect(r.decision.penalties[0].type).toBe("game-loss");
   });
@@ -296,7 +300,7 @@ describe("DT-003 Illegal move — Rapid A.5 / Blitz B.3 (basic rules)", () => {
     const r = a5().evaluate({
       ...A5_BASE,
       playerIncidentCount: 1,
-      opponentCanCheckmate: false,
+      ...mateOf(false),
     });
     expect(r.decision.penalties[0].type).toBe("draw");
   });
@@ -305,7 +309,7 @@ describe("DT-003 Illegal move — Rapid A.5 / Blitz B.3 (basic rules)", () => {
     const r = a5().evaluate({
       playerColor: "black",
       subtype: "clock-without-move",
-      gameEnded: false,
+      endEvent: "in-progress",
     });
     if (r.status !== "needs-input") throw new Error("expected questions");
     expect(r.questions.map((q) => q.id)).not.toContain("clockPressed");
@@ -316,8 +320,8 @@ describe("DT-003 Illegal move — Rapid A.5 / Blitz B.3 (basic rules)", () => {
       A5_BASE,
       { ...A5_BASE, opponentMadeNextMove: true },
       { ...A5_BASE, detectedBy: "other" },
-      { ...A5_BASE, gameEnded: true },
-      { ...A5_BASE, playerIncidentCount: 1, opponentCanCheckmate: "unknown" },
+      { ...A5_BASE, endEvent: "resignation" },
+      { ...A5_BASE, playerIncidentCount: 1, ...mateOf("unknown") },
     ];
     for (const i of inputs) {
       const r = a5().evaluate(i);

@@ -18,7 +18,7 @@ import {
   resolveThinking,
 } from "@/lib/infrastructure/llm/server/config";
 import { LLM_LIMITS } from "@/lib/infrastructure/llm/contract";
-import { ARTICLES, validDraft } from "./fixtures";
+import { SENT_ARTICLES, validDraft } from "./fixtures";
 
 const SECRET = "AIzaSy-test-secret-key";
 
@@ -26,11 +26,12 @@ function reasonBody(overrides: Record<string, unknown> = {}) {
   return {
     incident: {
       category: "player-behavior",
-      description: "黒がスマートウォッチを着けている",
+      // 外部AIガードを通った形（サーバーの再確認 L5 も通る記述）
+      description: "白が違法手を指したので黒がクレームした",
       arbiterObserved: true,
     },
     context: { competitionType: "standard", rulesVersion: "FIDE-2023" },
-    articles: ARTICLES,
+    articles: SENT_ARTICLES,
     ...overrides,
   };
 }
@@ -119,7 +120,7 @@ describe("LLM route handler – reason", () => {
       };
     };
     expect(schema.properties.citations.items.properties.articleId.enum).toEqual(
-      ARTICLES.map((a) => a.id)
+      SENT_ARTICLES.map((a) => a.id)
     );
     expect(req.userContent).toContain("rule-tournament-5");
     expect(req.systemInstruction).toMatch(/提示された条文/);
@@ -190,7 +191,7 @@ describe("LLM route handler – reason", () => {
           articles: Array.from(
             { length: LLM_LIMITS.maxArticles + 1 },
             (_, i) => ({
-              ...ARTICLES[0],
+              ...SENT_ARTICLES[0],
               id: `r${i}`,
             })
           ),
@@ -198,14 +199,19 @@ describe("LLM route handler – reason", () => {
       ],
       [
         "duplicate article ids",
-        { articles: [ARTICLES[0], { ...ARTICLES[1], id: ARTICLES[0].id }] },
+        {
+          articles: [
+            SENT_ARTICLES[0],
+            { ...SENT_ARTICLES[1], id: SENT_ARTICLES[0].id },
+          ],
+        },
       ],
       [
         "article content too long",
         {
           articles: [
             {
-              ...ARTICLES[0],
+              ...SENT_ARTICLES[0],
               content: "x".repeat(LLM_LIMITS.maxArticleContentChars + 1),
             },
           ],
@@ -397,23 +403,31 @@ describe("LLM route handler – reason", () => {
 });
 
 describe("LLM route handler – classify", () => {
-  it("uses the classifier model and validates the text", async () => {
+  it("uses the classifier model and validates the narrative", async () => {
     const generate = vi.fn<GenerateJsonFn>(async () => ({
       text: JSON.stringify({ category: "player-behavior" }),
     }));
     const handler = createLlmRouteHandler("classify", makeDeps(generate));
     const res = await handler(
-      request({ text: "スマートウォッチを着けている" })
+      request({ narrative: "白の時計のフラッグが落ちたと黒が申し立てた" })
     );
     expect(res.status).toBe(200);
     expect(generate.mock.calls[0][0].model).toBe("gemini-flash-lite-latest");
 
-    const bad = await handler(request({ text: "" }));
+    const bad = await handler(request({ narrative: "" }));
     expect(bad.status).toBe(400);
+    // 最小化した narrative の上限（500 文字。§5.3）
     const long = await handler(
-      request({ text: "x".repeat(LLM_LIMITS.maxClassifyTextChars + 1) })
+      request({
+        narrative: "x".repeat(LLM_LIMITS.maxClassifyNarrativeChars + 1),
+      })
     );
     expect(long.status).toBe(400);
+    // 旧クライアントの { text } は narrative がないため 400
+    const old = await handler(
+      request({ text: "白の時計のフラッグが落ちたと黒が申し立てた" })
+    );
+    expect(old.status).toBe(400);
   });
 });
 
@@ -567,9 +581,27 @@ describe("access control and cost caps (S-H1)", () => {
     expect((await reason(request(reasonBody()))).status).toBe(200);
     expect((await reason(request(reasonBody()))).status).toBe(429);
     // 分類は別のバケット
-    expect((await classify(request({ text: "スマホ" }))).status).toBe(200);
-    expect((await classify(request({ text: "スマホ" }))).status).toBe(200);
-    expect((await classify(request({ text: "スマホ" }))).status).toBe(429);
+    expect(
+      (
+        await classify(
+          request({ narrative: "白の時計のフラッグが落ちたと黒が申し立てた" })
+        )
+      ).status
+    ).toBe(200);
+    expect(
+      (
+        await classify(
+          request({ narrative: "白の時計のフラッグが落ちたと黒が申し立てた" })
+        )
+      ).status
+    ).toBe(200);
+    expect(
+      (
+        await classify(
+          request({ narrative: "白の時計のフラッグが落ちたと黒が申し立てた" })
+        )
+      ).status
+    ).toBe(429);
   });
 
   it("fails closed in production when no access token is configured", async () => {
@@ -651,7 +683,8 @@ describe("access control and cost caps (S-H1)", () => {
     expect(res2.status).toBe(400);
     const classify = createLlmRouteHandler("classify", makeDeps(generate));
     expect(
-      (await classify(request({ text: "Suspected engine assistance" }))).status
+      (await classify(request({ narrative: "Suspected engine assistance" })))
+        .status
     ).toBe(400);
     expect(generate).not.toHaveBeenCalled();
   });
@@ -758,5 +791,332 @@ describe("total deadline (S-H2)", () => {
       thinking: { mode: "level", level: "low" },
       maxOutputTokens: 6_000,
     });
+  });
+});
+
+/**
+ * サーバーでの再確認（L5）と、最小化した形だけを受け付けること（ADR-012,
+ * external-ai-data-protection.md §7）。止めた場合は上流を呼ばず、ログはコードだけ
+ */
+describe("server re-check (L5) and minimized shapes only (J1a-3)", () => {
+  function setup(kind: "reason" | "classify" = "reason") {
+    const generate = vi.fn<GenerateJsonFn>(async () => ({
+      text: JSON.stringify(validDraft()),
+    }));
+    const log = vi.fn();
+    const handler = createLlmRouteHandler(kind, makeDeps(generate, { log }));
+    return { generate, log, handler };
+  }
+
+  it.each([
+    ["an unknown top-level field", { extra: 1 }],
+    [
+      "tournamentId in the context",
+      {
+        context: {
+          competitionType: "standard",
+          rulesVersion: "FIDE-2023",
+          tournamentId: "t-1",
+        },
+      },
+    ],
+    [
+      "an unknown incident field",
+      {
+        incident: {
+          category: "illegal-move",
+          description: "白が違法手を指したので黒がクレームした",
+          arbiterObserved: true,
+          facts: { x: 1 },
+        },
+      },
+    ],
+    [
+      "tournamentId on an article",
+      { articles: [{ ...SENT_ARTICLES[1], tournamentId: "t-1" }] },
+    ],
+    [
+      "a tournament article with its local source name",
+      {
+        articles: [
+          { ...SENT_ARTICLES[0], sourceName: "第1回テスト大会 大会規定" },
+        ],
+      },
+    ],
+    [
+      "a tournament article with a version",
+      { articles: [{ ...SENT_ARTICLES[0], sourceVersion: "2026" }] },
+    ],
+    [
+      "an unknown subtype (free text in a code field)",
+      {
+        incident: {
+          category: "illegal-move",
+          subtype: "田中さんの反則",
+          description: "白が違法手を指したので黒がクレームした",
+          arbiterObserved: true,
+        },
+      },
+    ],
+    [
+      "an unsupported rules version",
+      { context: { competitionType: "standard", rulesVersion: "FIDE-2018" } },
+    ],
+    [
+      "a description over the minimized limit",
+      {
+        incident: {
+          category: "illegal-move",
+          description: "白が違法手を指した。".repeat(
+            Math.ceil((LLM_LIMITS.maxReasonDescriptionChars + 1) / 10)
+          ),
+          arbiterObserved: true,
+        },
+      },
+    ],
+  ])("reason: 400 invalid-request for %s; nothing is sent", async (_n, o) => {
+    const { generate, handler } = setup();
+    const res = await handler(request(reasonBody(o)));
+    expect(res.status).toBe(400);
+    expect((await errorOf(res)).code).toBe("invalid-request");
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("reason: accepts known subtypes per category", async () => {
+    const { generate, handler } = setup();
+    for (const [category, subtype] of [
+      ["illegal-move", "two-hands"],
+      ["illegal-move", "touch-move"],
+      ["clock-time", "flag-fall"],
+      ["draw", "fifty-move-claim"],
+    ]) {
+      const res = await handler(
+        request(
+          reasonBody({
+            incident: {
+              category,
+              subtype,
+              description: "白が違法手を指したので黒がクレームした",
+              arbiterObserved: true,
+            },
+          })
+        )
+      );
+      expect(res.status, `${category}/${subtype}`).toBe(200);
+    }
+    expect(generate).toHaveBeenCalledTimes(4);
+  });
+
+  it.each([
+    [
+      "an unregistered name with an honorific",
+      "山本さんが違法手を指したので黒がクレームした",
+    ],
+    ["a date", "6月8日に白が違法手を指したので黒がクレームした"],
+    ["a board number", "第3ボードで白が違法手を指したので黒がクレームした"],
+    ["a phone number", "白が違法手を指した。連絡先は090-1234-5678"],
+    ["health information", "〈選手A〉が対局中に気分が悪くなり倒れた"],
+  ])(
+    "reason: 400 not-sendable when the description has %s; nothing is sent, the log has codes only",
+    async (_n, description) => {
+      const { generate, log, handler } = setup();
+      const res = await handler(
+        request(
+          reasonBody({
+            incident: {
+              category: "illegal-move",
+              description,
+              arbiterObserved: true,
+            },
+          })
+        )
+      );
+      expect(res.status).toBe(400);
+      const error = await errorOf(res);
+      expect(error.code).toBe("not-sendable");
+      expect(error.message).not.toContain(description);
+      expect(generate).not.toHaveBeenCalled();
+      expect(log).toHaveBeenCalledWith({
+        route: "reason",
+        code: "not-sendable",
+      });
+      expect(JSON.stringify(log.mock.calls)).not.toContain(description);
+    }
+  );
+
+  it("reason: 400 not-sendable when a tournament article still has contact details or a name with an honorific", async () => {
+    for (const content of [
+      "問い合わせは info@example.com まで。",
+      "主催者の山本さんに申し出ること。",
+      "会員番号: 123456 の選手は受付へ。",
+    ]) {
+      const { generate, handler } = setup();
+      const res = await handler(
+        request(reasonBody({ articles: [{ ...SENT_ARTICLES[0], content }] }))
+      );
+      expect(res.status, content).toBe(400);
+      expect((await errorOf(res)).code).toBe("not-sendable");
+      expect(generate).not.toHaveBeenCalled();
+    }
+  });
+
+  it("reason: tournament regulation numbers, ages and dates are not re-checked as incident text; FIDE text is not re-checked", async () => {
+    const { generate, handler } = setup();
+    const res = await handler(
+      request(
+        reasonBody({
+          articles: [
+            {
+              ...SENT_ARTICLES[0],
+              content:
+                "レーティング1600以下・12歳以下の部は2026年6月8日13時に開始する。",
+            },
+            {
+              ...SENT_ARTICLES[1],
+              content: `${SENT_ARTICLES[1].content} Dr. Smith, 2023-01-01, +81 3 1234 5678`,
+            },
+          ],
+        })
+      )
+    );
+    expect(res.status).toBe(200);
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+
+  it("classify: the old { text } shape gets 400 with a reload hint; unknown fields get 400", async () => {
+    const { generate, handler } = setup("classify");
+    const old = await handler(
+      request({ text: "白の時計のフラッグが落ちたと黒が申し立てた" })
+    );
+    expect(old.status).toBe(400);
+    expect((await errorOf(old)).message).toContain("再読み込み");
+    const both = await handler(
+      request({
+        narrative: "白の時計のフラッグが落ちたと黒が申し立てた",
+        text: "白の時計のフラッグが落ちたと黒が申し立てた",
+      })
+    );
+    expect(both.status).toBe(400);
+    expect((await errorOf(both)).code).toBe("invalid-request");
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "an unregistered name with an honorific",
+      "山本さんの時計のフラッグが落ちたと黒が申し立てた",
+    ],
+    ["a time", "白の時計のフラッグが13時に落ちたと黒が申し立てた"],
+    ["too little text outside placeholders", "〈選手A〉と〈選手B〉"],
+    ["an unknown word", "白がジョギングの後でフラッグが落ちた"],
+  ])("classify: 400 not-sendable for %s", async (_n, narrative) => {
+    const { generate, handler } = setup("classify");
+    const res = await handler(request({ narrative }));
+    expect(res.status).toBe(400);
+    expect((await errorOf(res)).code).toBe("not-sendable");
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "__proto__ at the top level",
+      '{"__proto__":{"x":1},"incident":{},"context":{},"articles":[]}',
+    ],
+    ["constructor in the incident", null],
+  ])("reason: rejects %s", async (_n, raw) => {
+    const { generate, handler } = setup();
+    const body = reasonBody();
+    const res = await handler(
+      raw
+        ? request(undefined, { raw })
+        : request({
+            ...body,
+            incident: { ...body.incident, constructor: "x" },
+          })
+    );
+    expect(res.status).toBe(400);
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("classify: a __proto__ key next to the old { text } is still the old shape (400)", async () => {
+    const { generate, handler } = setup("classify");
+    const res = await handler(
+      request(undefined, {
+        raw: '{"__proto__":{"narrative":"白の時計のフラッグが落ちたと黒が申し立てた"},"text":"x"}',
+      })
+    );
+    expect(res.status).toBe(400);
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("reason: null optional values are treated as absent, but a tournament sourceVersion of null is rejected", async () => {
+    const { handler } = setup();
+    const body = reasonBody();
+    const ok = await handler(
+      request({
+        ...body,
+        incident: { ...body.incident, subtype: null, playerColor: null },
+        articles: [{ ...SENT_ARTICLES[1], title: null }],
+      })
+    );
+    expect(ok.status).toBe(200);
+    const bad = await handler(
+      request(
+        reasonBody({ articles: [{ ...SENT_ARTICLES[0], sourceVersion: null }] })
+      )
+    );
+    expect(bad.status).toBe(400);
+  });
+
+  it("reason: article ids must be identifiers; FIDE source labels get the narrow re-check", async () => {
+    const { generate, handler } = setup();
+    const badId = await handler(
+      request(
+        reasonBody({
+          articles: [{ ...SENT_ARTICLES[1], id: "山本さん 090-1234-5678" }],
+        })
+      )
+    );
+    expect(badId.status).toBe(400);
+    expect((await errorOf(badId)).code).toBe("invalid-request");
+    const label = await handler(
+      request(
+        reasonBody({
+          articles: [
+            {
+              ...SENT_ARTICLES[1],
+              sourceName: "山本太郎さんの規定 090-1234-5678",
+            },
+          ],
+        })
+      )
+    );
+    expect(label.status).toBe(400);
+    expect((await errorOf(label)).code).toBe("not-sendable");
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("not-sendable does not use the daily cap", async () => {
+    const generate = vi.fn<GenerateJsonFn>(async () => ({
+      text: JSON.stringify(validDraft()),
+    }));
+    const dailyCounter = { take: vi.fn(() => true) };
+    const handler = createLlmRouteHandler(
+      "reason",
+      makeDeps(generate, { dailyCounter })
+    );
+    const res = await handler(
+      request(
+        reasonBody({
+          incident: {
+            category: "illegal-move",
+            description: "山本さんが違法手を指したので黒がクレームした",
+            arbiterObserved: true,
+          },
+        })
+      )
+    );
+    expect((await errorOf(res)).code).toBe("not-sendable");
+    expect(dailyCounter.take).not.toHaveBeenCalled();
   });
 });

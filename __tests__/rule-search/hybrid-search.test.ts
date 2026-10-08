@@ -122,6 +122,9 @@ describe("hybridSearch", () => {
   const t2 = makeRule({ id: "t2", source: "tournament", tournamentId: "T2" });
   const corpus = { rules: [fide, jcf, t1, t2], sources: [source, jcfSource] };
 
+  // 確認済みの検索語の埋め込み（外部AIガード経由。テストでは中身を使わない）
+  const queryEmbedding = async () => [1];
+
   function deps(overrides: Partial<HybridSearchDeps> = {}): HybridSearchDeps {
     return {
       loadCorpus: async () => corpus,
@@ -139,7 +142,7 @@ describe("hybridSearch", () => {
   it("falls back to fulltext results when vector search fails", async () => {
     const response = await hybridSearch(
       "違法手",
-      { tournamentId: undefined },
+      { tournamentId: undefined, queryEmbedding },
       deps({
         vector: vi.fn().mockRejectedValue(new Error("model not available")),
       })
@@ -158,7 +161,7 @@ describe("hybridSearch", () => {
     const response = await hybridSearch(
       "illegal",
       // フォールバックの確認のため、類似度の下限は固定する（既定値はモデルごとに調整する）
-      { tournamentId: undefined, vectorMinSimilarity: 0.5 },
+      { tournamentId: undefined, vectorMinSimilarity: 0.5, queryEmbedding },
       deps({ fulltext: vi.fn().mockRejectedValue(new Error("index broken")) })
     );
     expect(response.failures.fulltext).toBe("index broken");
@@ -169,7 +172,7 @@ describe("hybridSearch", () => {
     await expect(
       hybridSearch(
         "x",
-        { tournamentId: undefined },
+        { tournamentId: undefined, queryEmbedding },
         deps({
           vector: vi.fn().mockRejectedValue(new Error("a")),
           fulltext: vi.fn().mockRejectedValue(new Error("b")),
@@ -181,7 +184,7 @@ describe("hybridSearch", () => {
   it("excludes tournament rules when no tournament is selected", async () => {
     const response = await hybridSearch(
       "x",
-      { tournamentId: undefined },
+      { tournamentId: undefined, queryEmbedding },
       deps()
     );
     const ids = response.results.map((r) => r.rule.id);
@@ -190,7 +193,11 @@ describe("hybridSearch", () => {
   });
 
   it("includes only the selected tournament's rules, ranked first", async () => {
-    const response = await hybridSearch("x", { tournamentId: "T1" }, deps());
+    const response = await hybridSearch(
+      "x",
+      { tournamentId: "T1", queryEmbedding },
+      deps()
+    );
     const ids = response.results.map((r) => r.rule.id);
     // FIDE has the highest relevance, but precedence is Tournament > JCF > FIDE
     expect(ids).toEqual(["t1", "jcf", "fide"]);
@@ -199,18 +206,34 @@ describe("hybridSearch", () => {
   it("attaches the rule source for traceability", async () => {
     const response = await hybridSearch(
       "x",
-      { tournamentId: undefined },
+      { tournamentId: undefined, queryEmbedding },
       deps()
     );
     const fideResult = response.results.find((r) => r.rule.id === "fide");
     expect(fideResult?.source?.version).toBe("2023");
   });
 
+  it("does not run the vector search (or send anything) without a confirmed query embedding", async () => {
+    const vector = vi.fn();
+    const response = await hybridSearch(
+      "違法手",
+      { tournamentId: undefined },
+      deps({ vector })
+    );
+    expect(vector).not.toHaveBeenCalled();
+    // 失敗ではなくキーワード検索のみ
+    expect(response.failures).toEqual({});
+    expect(response.results.length).toBeGreaterThan(0);
+    expect(response.results.every((r) => r.methods.includes("fulltext"))).toBe(
+      true
+    );
+  });
+
   it("returns empty results for a blank query without searching", async () => {
     const vector = vi.fn();
     const response = await hybridSearch(
       "  ",
-      { tournamentId: undefined },
+      { tournamentId: undefined, queryEmbedding },
       deps({ vector })
     );
     expect(response.results).toEqual([]);

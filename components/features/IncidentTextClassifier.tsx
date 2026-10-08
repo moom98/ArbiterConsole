@@ -1,20 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
-  classifyIncidentText,
+  prepareIncidentClassification,
+  type ClassificationStep,
   type ClassifyTextResult,
 } from "@/lib/application/llm-classification";
+import { ExternalAiSendConfirmation } from "./ExternalAiSendConfirmation";
+import { ExternalAiOptOutSwitch } from "./ExternalAiOptOutSwitch";
 import { CATEGORY_LABELS } from "@/lib/application/incident-labels";
 import type { IncidentClassification } from "@/lib/domain/llm/types";
 import {
   CLOCK_TIME_SUBTYPE_LABELS,
   DRAW_SUBTYPE_LABELS,
+  TOUCH_MOVE_LABEL,
   usesStructuredQuestions,
 } from "@/lib/domain/follow-up";
+import { TOUCH_MOVE_SUBTYPE } from "@/lib/domain/entities";
 
 interface IncidentTextClassifierProps {
   disabled?: boolean;
+  /** 「外部AIに送らない」（報告画面で共有。external-ai-data-protection.md §4.4） */
+  doNotSend: boolean;
+  onDoNotSendChange: (value: boolean) => void;
   /** 提案を採用する（カテゴリ・subtype・説明文のプレフィル） */
   onApply: (classification: IncidentClassification, text: string) => void;
 }
@@ -27,6 +35,8 @@ function subtypeLabel(c: IncidentClassification): string | undefined {
     ];
   if (c.category === "draw")
     return DRAW_SUBTYPE_LABELS[c.subtype as keyof typeof DRAW_SUBTYPE_LABELS];
+  if (c.category === "illegal-move" && c.subtype === TOUCH_MOVE_SUBTYPE)
+    return TOUCH_MOVE_LABEL;
   return undefined;
 }
 
@@ -36,20 +46,63 @@ function subtypeLabel(c: IncidentClassification): string | undefined {
  */
 export function IncidentTextClassifier({
   disabled,
+  doNotSend,
+  onDoNotSendChange,
   onApply,
 }: IncidentTextClassifierProps) {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ClassifyTextResult | null>(null);
+  /** 外部AIへ送る内容の確認待ち（まだ送っていない。D13） */
+  const [pending, setPending] = useState<Extract<
+    ClassificationStep,
+    { status: "needs-confirmation" }
+  > | null>(null);
+
+  /** 入力の変更・新しい分類で古い応答を捨てるための番号 */
+  const requestIdRef = useRef(0);
+  const clear = () => {
+    requestIdRef.current++;
+    setLoading(false);
+    setResult(null);
+    setPending(null);
+  };
 
   const handleClassify = async () => {
+    clear();
     setLoading(true);
-    setResult(null);
+    const id = requestIdRef.current;
     try {
-      setResult(await classifyIncidentText(text));
+      const step = await prepareIncidentClassification(text, { doNotSend });
+      if (id !== requestIdRef.current) return;
+      if (step.status === "done") setResult(step.result);
+      else setPending(step);
     } finally {
-      setLoading(false);
+      // 新しい要求の処理中は loading を解除しない
+      if (id === requestIdRef.current) setLoading(false);
     }
+  };
+
+  const handleSend = async () => {
+    if (!pending) return;
+    setLoading(true);
+    const id = requestIdRef.current;
+    try {
+      const r = await pending.send();
+      // 送信中に記述が変わった場合、古い記述の分類は表示しない（新しい記述に適用されないように）
+      if (id !== requestIdRef.current) return;
+      setPending(null);
+      setResult(r);
+    } finally {
+      // 新しい要求の処理中は loading を解除しない
+      if (id === requestIdRef.current) setLoading(false);
+    }
+  };
+
+  const handleDecline = () => {
+    if (!pending) return;
+    setResult(pending.decline());
+    setPending(null);
   };
 
   const c = result?.classification ?? null;
@@ -67,10 +120,17 @@ export function IncidentTextClassifier({
         value={text}
         onChange={(e) => {
           setText(e.target.value);
-          setResult(null);
+          clear();
         }}
         placeholder="例: 黒がスマートウォッチを着けている"
         className="w-full h-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <ExternalAiOptOutSwitch
+        checked={doNotSend}
+        onChange={(v) => {
+          onDoNotSendChange(v);
+          clear();
+        }}
       />
       <button
         type="button"
@@ -80,6 +140,18 @@ export function IncidentTextClassifier({
       >
         {loading ? "分類中..." : "カテゴリを提案"}
       </button>
+
+      {pending && (
+        <div className="mt-3">
+          <ExternalAiSendConfirmation
+            preview={pending.preview}
+            onConfirm={() => void handleSend()}
+            onDecline={handleDecline}
+            disabled={disabled || loading}
+            confirmLabel="確認してAIで分類"
+          />
+        </div>
+      )}
 
       {result && !c && (
         <p role="status" className="mt-3 text-sm text-gray-700">

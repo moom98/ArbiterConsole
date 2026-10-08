@@ -2,6 +2,7 @@ import type {
   CompetitionType,
   RulesVersion,
   SupervisionRegime,
+  TimeControl,
   TournamentOverrides,
 } from "./tournament";
 
@@ -16,6 +17,11 @@ export interface RulesetSnapshot {
   rulesVersion: RulesVersion;
   /** 大会規定による上書き（出典を含めて保存） */
   tournamentOverrides?: TournamentOverrides;
+  /**
+   * 報告時の持ち時間（ADR-014 §7）。最終ピリオドかどうか等を設定から求めるために使う。
+   * J1b-7 より前のスナップショット・持ち時間のない暫定大会では省略（その場合は質問する）
+   */
+  timeControl?: TimeControl;
 }
 
 export type IncidentCategory =
@@ -55,13 +61,29 @@ export interface IllegalMoveFacts {
   subtype: IllegalMoveSubtype;
   /** 違反したプレーヤーが時計を押したか */
   clockPressed: boolean;
-  /** 対局がすでに終了しているか（署名済み・結果確定など） */
-  gameEnded: boolean;
   /**
-   * 相手（違反していない側）が、あらゆる合法手の連続によって
-   * 違反者のキングをチェックメイトできる局面か（7.5.5 ただし書き）
+   * 違法手に気づいた時点で、対局を終わらせた出来事として観察されたもの（game.end-event。
+   * ADR-014 §3）。DT-001〜003 の「対局はすでに終了しているか」はここから求める
+   * （gameEndedFromEvent）。握手は選択肢にない（握手だけでは終了としない）
    */
-  opponentCanCheckmate: boolean | "unknown";
+  endEvent?: GameEndEvent;
+  /** 結果の記入・署名の状態（game.record-state。記録用で、判断には影響しない） */
+  recordState?: GameRecordState;
+  /**
+   * @deprecated J1b-8 より前の「対局はすでに終了していますか（はい/いいえ）」の回答。
+   * 握手だけで「はい」と答えられたため判断には使わず、endEvent を質問し直す（ADR-014 §3）
+   */
+  gameEnded?: boolean;
+  /**
+   * 7.5.5 ただし書き（相手がメイト不可能ならドロー）の判定に使う局面の入力方法。
+   * メイト可能性は局面からコードが判定する（ADR-014 §5）。直接は質問しない。
+   */
+  matePosition?: MatePositionInput;
+  /**
+   * 違法手の直前に戻した局面（7.5.1〜7.5.4 で再開する局面。手番は違反者）の FEN。
+   * 端末内だけで使い、外部へは送らない（ADR-012）。
+   */
+  positionFen?: string;
   /**
    * Rapid / Blitz（A.5 / B.3）のみ: 違反者の相手がすでに次の手を指したか（A.5.2）
    */
@@ -71,12 +93,67 @@ export interface IllegalMoveFacts {
 }
 
 /**
+ * 対局を終わらせた出来事として観察されたもの（game.end-event。ADR-014 §3、FIDE 5 / 6.8）。
+ * 握手は含まない: 握手だけでは対局の終了としない。
+ * - in-progress:    まだ対局中
+ * - time-out:       時間切れの確定（アービターが確認、または有効な主張。6.8）
+ */
+export type GameEndEvent =
+  | "in-progress"
+  | "checkmate"
+  | "resignation"
+  | "stalemate"
+  | "draw-agreement"
+  | "time-out"
+  | "other";
+
+/**
+ * フラッグが確定する前に（アービターが気付く、または有効な主張がされる前に）対局を
+ * 終わらせた出来事（ct.ended-before-flag。ADR-014 §3、FIDE 6.8 / 5.1.1）。none は「なし」
+ */
+export type EndedBeforeFlag =
+  | "none"
+  | "checkmate"
+  | "resignation"
+  | "draw-agreement"
+  | "stalemate"
+  | "other";
+
+/** 結果の記入・署名の状態（game.record-state。要件 §20） */
+export type GameRecordState = "none" | "written" | "one-signed" | "both-signed";
+
+/**
  * A.5.2 における違法手の発見経路
  * - arbiter:        アービターが観察した
  * - opponent-claim: 相手がクレームした
  * - other:          それ以外（観戦者からの報告など）
  */
 export type IllegalMoveDetection = "arbiter" | "opponent-claim" | "other";
+
+/**
+ * メイト可能性（6.9 / 7.5.5 / A.5.3）の判定に使う局面の入力方法（ADR-014 §5）。
+ * - fen:         局面の FEN を入力して判定する
+ * - unknown: 局面を入力できない（CAへ確認。ツリー独自の unknown で、resolveUnknown では列挙しない）
+ */
+export type MatePositionInput = "fen" | "unknown";
+
+/**
+ * 端末内のヘルプメイト探索の結果（ADR-015）。判定のたびに ChessPositionPort で
+ * 手順を再検証してから使う（記録自体は証拠の候補にすぎない）。
+ */
+export interface MateSearchRecord {
+  /** 探索した局面 */
+  fen: string;
+  /** メイトする側 */
+  attacker: PlayerColor;
+  status: "found" | "not-found";
+  /** found: 局面からメイトまでの手順（SAN） */
+  moves?: string[];
+  /** not-found の理由（limit / deadline / error など） */
+  reason?: string;
+  /** 探索エンジンの版（not-found を新しい版で探し直すため） */
+  engine: string;
+}
 
 // ---------------------------------------------------------------------------
 // 時計・時間（clock-time）
@@ -121,44 +198,74 @@ export interface FlagFallFacts {
   /** 両フラッグの順序が不明な場合: 全手数を指し切る最終ピリオドか */
   lastPeriod?: boolean;
   /**
-   * フラッグに気付く（主張される）前に、チェックメイト・ステイルメイト・投了・合意・
-   * デッドポジション等で対局が終了していたか
+   * フラッグが確定する前に対局を終わらせた出来事（ct.ended-before-flag。ADR-014 §3）。
+   * DT-004 の「フラッグの前に対局は終了していたか」はここから求める
    */
-  gameEndedBeforeFlag: boolean;
+  endedBeforeFlag?: EndedBeforeFlag;
+  /**
+   * @deprecated J1b-8 より前の「フラッグの前に対局は終了していましたか（はい/いいえ）」の
+   * 回答。判断には使わず、endedBeforeFlag を質問し直す（ADR-014 §3）
+   */
+  gameEndedBeforeFlag?: boolean;
   /** 時間切れのプレーヤーは、そのピリオドの規定手数を完了していなかったか（6.4 / 6.9） */
   movesNotCompleted: boolean | "unknown";
-  /** 盤上の駒数（キングを除く） */
-  material?: { white: Partial<SideMaterial>; black: Partial<SideMaterial> };
-  /** 駒数を確認したか（既定値 0 のまま送信されることを防ぐ） */
-  materialConfirmed?: boolean;
-  /** 任意: 局面の FEN。指定されて有効な場合は駒数をこちらから求める */
+  /**
+   * 6.9 / A.5.3 ただし書き（相手がメイト不可能ならドロー）の判定に使う局面の入力方法。
+   * 駒数による判定・閉塞局面の質問は廃止（ADR-014 §5）。
+   */
+  matePosition?: MatePositionInput;
+  /** フラッグ確定時の局面（正しい手番を含む）の FEN。端末内だけで使う */
   fen?: string;
-  /** 駒が固定され到達できない閉塞局面か（ポーンがある場合の確認） */
-  positionBlocked?: boolean | "unknown";
 }
 
 // ---------------------------------------------------------------------------
 // ドロー（draw）
 // ---------------------------------------------------------------------------
 
-/** draw カテゴリのうち Decision Tree で扱う subtype（incident-classification.md §8） */
+/**
+ * draw カテゴリの subtype（ADR-014 §1）。
+ * - DT-005 Draw Claim: threefold-repetition-claim（9.2）/ fifty-move-claim（9.3）
+ * - DT-006 Automatic Draw: fivefold-repetition（9.6.1）/ 75-move-rule（9.6.2）
+ * - Decision Tree なし（fact plan）: agreement / stalemate / dead-position / other
+ */
 export type DrawSubtype =
   | "threefold-repetition-claim"
+  | "fifty-move-claim"
   | "fivefold-repetition"
   | "75-move-rule"
+  | "agreement"
+  | "stalemate"
+  | "dead-position"
   | "other";
 
-/** 9.2.1（これから出現する: 指し手を記入して宣言）/ 9.2.2（出現したばかり） */
+/** DT-005 Draw Claim のクレームの根拠（FIDE 9.2 / 9.3） */
+export type DrawClaimBasis = "threefold" | "fifty-move";
+
+/** クレームの subtype の根拠。クレームでない subtype は undefined */
+export function drawClaimBasisOf(
+  subtype: string | undefined
+): DrawClaimBasis | undefined {
+  if (subtype === "threefold-repetition-claim") return "threefold";
+  if (subtype === "fifty-move-claim") return "fifty-move";
+  return undefined;
+}
+
+/**
+ * 9.2.1 / 9.3.1（記入した次の手で成立する: 指し手を記入して宣言）/
+ * 9.2.2 / 9.3.2（相手の直前の手で成立した）
+ */
 export type RepetitionClaimMode = "about-to-appear" | "just-appeared";
 
 /**
  * アービターによる確認結果。
  * - met:     条件が成立していることを確認した
  * - not-met: 条件が成立していないことを確認した
+ * - met-checkmate: 75手に達した手がチェックメイトだった（9.6.2: メイトが優先。75手の確認のみ）
  * - unknown: 確認できない
  * - auto:    入力した対局履歴（棋譜。game.history）から判定する
  */
-export type ConditionCheck = "met" | "not-met" | "unknown" | "auto";
+export type ConditionCheck =
+  "met" | "met-checkmate" | "not-met" | "unknown" | "auto";
 
 /**
  * 再生した対局履歴の最終局面を、アービターが盤上と照合した結果（ADR-014 §4）。
@@ -172,18 +279,35 @@ export type HistoryConfirmation =
 
 export interface DrawClaimFacts {
   subtype: DrawSubtype;
-  /** 9.2: クレームしたプレーヤー */
+  /** 9.2 / 9.3: クレームしたプレーヤー */
   claimant?: PlayerColor;
-  /** 9.2: クレームしたプレーヤーの手番（自分の時計が動いている）か */
+  /**
+   * クレームの直前に、盤上で最後に手を指したプレーヤー（dr.last-mover。ADR-014 §2）。
+   * 手番はこれ、または照合済みの対局履歴から求める。時計の状態からは求めない。
+   */
+  lastMover?: PlayerColor;
+  /**
+   * 旧（J1b-5 より前）: 「手番（自分の時計が動いている）か」。時計に依存するため
+   * 判定には使わない（保存済みの Incident との互換のためだけに残す）。
+   * @deprecated lastMover を使う
+   */
   claimantHasMove?: boolean;
   claimMode?: RepetitionClaimMode;
-  /** 9.2.1: 指す手を棋譜に記入し、アービターに宣言したか */
+  /** 9.2.1 / 9.3.1: 指す手を棋譜に記入し、アービターに宣言したか */
   moveWritten?: boolean;
-  /** 9.4: クレーム前に、動かす（取る）意図で駒に触れたか */
+  /** 9.4: クレーム前に、その手番で動かす（取る）意思で駒に触れたか */
   touchedPiece?: boolean;
-  /** 同一局面の回数（9.2: 3回 / 9.6.1: 5回）または 75手（9.6.2）の確認結果 */
+  /**
+   * 盤上で手順を再現した確認結果（dr.manual-reconstruction）、または auto。
+   * 同一局面の回数（9.2: 3回 / 9.6.1: 5回）、50手（9.3）、75手（9.6.2）。
+   */
   conditionCheck?: ConditionCheck;
-  /** 9.6.2: 最後の手がチェックメイトだったか */
+  /**
+   * 9.6.2: 75手に達した手がチェックメイトだったか（手動確認のみ）。独立した質問は廃止し、
+   * 75手の確認結果から記録する: "met"（チェックメイトではない）→ false、"met-checkmate" →
+   * conditionCheck に記録。conditionCheck = met でこれが未設定なのは J1b-5 より前の回答で、
+   * DT-006 は確認をやり直す（チェックメイトでないことが確認されていないため）。
+   */
   lastMoveCheckmate?: boolean;
   /**
    * 任意: 対局履歴（game.history）のテキスト。PGN / 棋譜（SAN の指し手列）だけを受け付け、
@@ -196,8 +320,63 @@ export interface DrawClaimFacts {
    * （別の履歴に対する照合を引き継がない）。
    */
   historyConfirmed?: HistoryConfirmation;
-  /** 任意（9.2.1）: 記入した指し手（SAN） */
+  /** 任意（9.2.1 / 9.3.1）: 記入した指し手（SAN） */
   intendedMove?: string;
+}
+
+// ---------------------------------------------------------------------------
+// 触れた駒の規則（Article 4。違法手カテゴリのサブタイプ touch-move。ADR-014 §6）
+// ---------------------------------------------------------------------------
+
+/**
+ * 違法手カテゴリのサブタイプ。7.5 の違法手（IllegalMoveSubtype）ではなく DT-007 で扱い、
+ * 違法手の回数には数えない。
+ */
+export const TOUCH_MOVE_SUBTYPE = "touch-move";
+
+/** tch.how: どのように触れたか（brushed = 袖や手が当たった。4.2.2 の明らかな偶然の接触） */
+export type TouchHow = "grasped" | "lifted" | "pushed" | "brushed";
+
+/** tch.what-next: 触れた後に何をしたか */
+export type TouchWhatNext = "moved-touched" | "moved-other" | "not-moved";
+
+/**
+ * tch.special のうち DT-007 が質問する昇格の値（4.4.4）。キャスリング（4.4.1〜4.4.3）は
+ * 触れた順（tch.touched）から求めるため質問しない。
+ */
+export type TouchPromotion =
+  "promotion-placed" | "promotion-not-placed" | "none";
+
+/** DT-007 の構造化された事実（IllegalMoveFacts とは別。ADR-014 §6） */
+export interface TouchMoveFacts {
+  /** tch.how */
+  how: TouchHow;
+  /** tch.adjust-declared: 触れる前に「整えます（j'adoube）」等と言ったか（4.2.1） */
+  adjustDeclared: boolean;
+  /** tch.on-move: 触れたのは、そのプレーヤーの手番のときか（4.3） */
+  onMove: boolean;
+  /** tch.claimed-by-opponent: 相手からの申し立てで始まったか */
+  claimedByOpponent: boolean;
+  /** tch.claim-timing: 申し立ては、相手が動かす・取る意思で駒に触れる前だったか（4.8） */
+  claimBeforeOwnTouch?: boolean;
+  /** tch.what-next */
+  whatNext: TouchWhatNext;
+  /** tch.released: 動かした駒を、マスの上で手から離したか（4.7） */
+  released?: boolean;
+  /**
+   * tch.changed-after: 手を離した後（昇格では、選んだ駒が昇格のマスに触れた後）に、
+   * 別のマスへ動かし直した・別の駒に替えたか（4.7 / 4.4.4 の違反）
+   */
+  changedAfter?: boolean;
+  /**
+   * 🔒 tch.touched: 触れた駒とマス（触れた順）のテキスト。例: "Pe2 Qd1"（白は大文字・黒は小文字）、
+   * 局面（fen）がある場合はマスだけでよい（"e2 d1"）。端末内だけで使う（ADR-012）。
+   */
+  touchedText?: string;
+  /** 🔒 game.position: 触れた時点の局面（手番は触れたプレーヤー）。端末内だけで使う */
+  fen?: string;
+  /** tch.special（昇格のみ。4.4.4） */
+  promotion?: TouchPromotion;
 }
 
 export interface Incident {
@@ -211,18 +390,27 @@ export interface Incident {
   illegalMoveFacts?: Partial<IllegalMoveFacts>;
   /** フラッグフォールの構造化された回答 */
   flagFallFacts?: Partial<FlagFallFacts>;
-  /** ドロー（同一局面・75手）の構造化された回答 */
+  /** ドロー（クレーム・自動ドロー）の構造化された回答 */
   drawClaimFacts?: Partial<DrawClaimFacts>;
+  /** 触れた駒の規則（subtype touch-move。DT-007）の構造化された回答 */
+  touchMoveFacts?: Partial<TouchMoveFacts>;
   /**
    * 「わからない・確認できない」と回答された追加質問の ID（fact-model §3.3）。
    * 該当する事実の値は未設定のまま。未回答（needs-input）とは区別され、
    * DecisionEngine が resolveUnknown で全分岐を評価する。
    */
   unknownAnswers?: string[];
+  /** メイト可能性の局面に対するヘルプメイト探索の結果（ADR-015） */
+  mateSearch?: MateSearchRecord;
   /** 報告時点の規則セット（v5 以前の Incident には存在しない） */
   rulesetSnapshot?: RulesetSnapshot;
   /** 自由記述（メモ）。判断には使用しない */
   description: string;
+  /**
+   * 「外部AIに送らない」（external-ai-data-protection.md §4.4）。オンなら、この事象の内容は
+   * 分類・AI参考情報・検索語のどれでも外部へ送らない（Sensitive Gate の L1）。索引なし
+   */
+  externalAiOptOut?: boolean;
   arbiterObserved: boolean;
   reportedBy: "arbiter" | "player-white" | "player-black";
   reportedAt: Date;

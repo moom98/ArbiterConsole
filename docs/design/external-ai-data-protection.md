@@ -1,6 +1,6 @@
 # Design: Data Protection for External AI (Gemini and TypeSafe)
 
-**Status:** Proposed design, based on the user's decisions of 2026-10-08. Not implemented. Decision record: [ADR-012](../decisions/ADR-012-external-ai-data-protection.md).
+**Status:** Accepted design, based on the user's decisions of 2026-10-08. Partly implemented: the pure package `lib/domain/privacy/` and the evaluation fixtures in J1a-1 (§10); the guard on every client route with the mandatory confirmation in J1a-2 (§11). The server re-check (J1a-3) is not implemented yet. Decision record: [ADR-012](../decisions/ADR-012-external-ai-data-protection.md).
 
 **Date:** 2026-10-08
 
@@ -42,6 +42,15 @@ From 2026-10-08:
   - Expressions such as スマホ, 疑い, 倒れた, 薬, サイン, 外部 and 離席 are managed as **context-dependent expressions**, each with patterns that include the surrounding words, and with evaluation cases.
   - When the gate cannot tell whether a report is sensitive, it is **not** treated as safe: it goes to the local fallback.
 
+- **D12 (2026-10-08, after the J1a-1 review).** The gate uses a **known-vocabulary (allow-list) layer**: incident-derived text is `clear` only when every content word is explained by known chess and incident vocabulary. Anything else is handled locally.
+  - Reason: an independent review found that the term lists (L2, L3) let about 115 of 151 independently written sensitive reports through as `clear`. Adding words cannot reach 0 false negatives, because every new paraphrase is another miss.
+  - Trade-off accepted by the user: free-text reports that use words outside the vocabulary get no external AI help (classification falls back to keywords, reasoning to the local handling of §4.3).
+  - L2 and L3 stay: they give the `blocked` reasons, and the L3 benign contexts mark safe phrases (for example スマホが鳴った) as known.
+
+- **D13 (2026-10-08, after the second J1a-1 review).** **The arbiter confirms every external send.** Even when the gate gives `clear`, the de-identified payload is shown and nothing is sent until the arbiter confirms that it contains nothing sensitive (one tap, only when AI is used). Step F (§3) is therefore a mandatory confirmation, not just a preview.
+  - Reason: the second independent review found that 117 of 270 new sensitive phrases passed the known-vocabulary gate. Sentences about what people do to each other can be written with ordinary chess words (相手を強く押した, 観戦者が助言した), so no lexical gate can guarantee 0 false negatives on free text.
+  - **The release condition changes accordingly:** the gate's false-negative rate is measured on held-out sets written by someone other than its author, reported, and kept as low as possible (every miss found is fixed and added as a regression case). It is a filter. The arbiter's confirmation is the final defense. "0 false negatives" is still required on the regression sets.
+
 ## 2. Scope: every external AI send
 
 | Route | Provider | What is sent today | After this design |
@@ -49,11 +58,11 @@ From 2026-10-08:
 | `/api/llm/classify` | Gemini or Jev (ADR-011) | the report text | gate, then a de-identified narrative (§5) |
 | `/api/llm/facts` (new, [fact-model.md](./fact-model.md)) | Jev | (new) | gate, then the de-identified narrative and the IDs of the required facts |
 | `/api/llm/reason` | Gemini | description (with `situationNote` appended by `applyIncidentAnswers`), category and subtype, context with `tournamentId`, up to 6 articles (with `tournamentId`) | gate, then the de-identified description and the coded observations; no `tournamentId` anywhere; tournament article text de-identified with a narrower rule set (§5.5, §6) |
-| `/api/llm/embed` (query) | Gemini | (a) the search text the arbiter typed on the rule search screen; (b) **the incident description**, because `llm-assist-port` calls `hybridSearch(incident.description)`, which calls `generateQueryEmbedding` | gate, then the de-identified query, for both (a) and (b) (§6) |
+| `/api/llm/embed` (query) | Gemini | (a) the search text the arbiter typed on the rule search screen; (b) **the incident description**, because the reasoning port searched with `hybridSearch(incident.description)`, which called `generateQueryEmbedding` (before J1a-2) | gate, then the de-identified query, for both (a) and (b) (§6) |
 | `/api/llm/embed` (document) | Gemini | rule text, including tournament regulations | FIDE and JCF text unchanged (public, no PII); tournament regulations de-identified with the narrower rule set (§5.5) |
 | (J4, optional) Jev reasoning check | Jev | (not built) | gate and de-identification required before it can be built |
 
-**Rule:** every call through `callLlmApi` goes through `ExternalAiGuard` (§3). It is the only way to reach `/api/llm/*`. A unit test enforces this: no module except the guard imports `callLlmApi`. `lib/infrastructure/embeddings/generator.ts` and `llm-assist-port.ts` call the guard, not `callLlmApi`.
+**Rule:** every call through `callLlmApi` goes through `ExternalAiGuard` (§3). It is the only way to reach `/api/llm/*`. A unit test enforces this: no module except the guard imports `callLlmApi`. `lib/infrastructure/embeddings/generator.ts` receives its `call` from the guard, and the reasoning port (`lib/application/llm-assist.ts`) uses the guard, not `callLlmApi` (§11).
 
 **Which fields the gate and checks apply to.**
 
@@ -87,7 +96,7 @@ input (raw text + structured fields)
   │ C. minimization (only the fields the route needs; length caps)
   │ D. residual check (independent detectors)                  → any hit → local fallback
   │ E. Sensitive Gate again on the redacted incident-derived text → BLOCK / UNCERTAIN → local fallback
-  │ F. preview (classifier and AI-reasoning screens), before sending
+  │ F. mandatory confirmation (D13): the arbiter sees the payload and confirms before anything is sent
   ▼
 request ─▶ server re-check: the gate and the pattern rules again; reject (400) if either would act
 ```
@@ -113,6 +122,7 @@ Regexes are only one layer, so no single layer is trusted alone (D7).
 | L1 Explicit flags | The incident or the arbiter's answers carry a sensitive marker: the "外部AIに送らない" switch (§4.4), or a fair-play flag set earlier in the flow. | `blocked` |
 | L2 Known sensitive expressions | High-precision, contextual regexes per class (Appendix A.1): the existing `mentionsFairPlay`, health or medical, harassment or violence or sexual misconduct or discrimination, crime or police, religion or belief, family or minors. The keyword classifier's `fair-play` result also counts. | `blocked` |
 | L3 Context-dependent expressions | A registry of ambiguous expressions (Appendix A.2, D11). Each occurrence is judged in its surrounding context: a sensitive context gives `blocked`; a benign context that covers the occurrence and its surroundings gives `clear`; **anything else gives `uncertain`** (local fallback). It is not a word list. | `blocked` / `clear` / `uncertain` per occurrence; the report takes the most severe |
+| L3v Known vocabulary (D12) | After redaction (step E) and on the server (L5): every content word must be known. The text is split into runs of kanji, katakana, hiragana and Latin letters; each run must be split completely into vocabulary words (kanji and katakana chess and incident words, SAN moves, a few English rule terms, hiragana grammar: particles, inflections and auxiliaries). A one-kana ending is allowed only right after a stem. Placeholders, digits, punctuation and L3 benign spans are known. It is skipped on the raw text (step A), where names would always be unknown. | `uncertain` when any run is unknown |
 | L4 Unanalyzable input | Any of these: more than 10% of characters outside Japanese, Latin, digits and common punctuation; **text that is mostly Latin letters (more than 50% of its letters)**, because the English term lists are small; text over the route's input limit before truncation; a failed residual check (§5.4). | `uncertain` |
 | L5 Server re-check | The server runs L2–L4 again on the redacted payload. For `/reason` it also runs L0 on the category it receives. | 400, nothing sent |
 
@@ -179,7 +189,7 @@ Placeholders use `〈…〉` and are **indexed per request**: `〈選手A〉`, `
 
 **5.2.1 Kept**, because they carry meaning and identify nobody:
 
-- **Clock readings.** `H:MM` or `H:MM:SS` within 6 characters after 残り, 持ち時間, 時計, 表示 or 秒読み, or before 残.
+- **Clock readings.** `H:MM` or `H:MM:SS` within 6 characters after 残り, 持ち時間, 時計, 表示 or 秒読み, or before 残 — **except** an hour of 3 or more followed by に, から, まで, 頃 or 過ぎ, which is a time of day (時計を14:20に止めた). Near 白, 黒 or フラッグ only readings up to 2:59 count as clock readings (J1a-1 reviews 2 and 3).
 - Durations: `30秒`, `5分`, `90分+30秒`.
 - Counts: `50手`, `2回目`.
 - The colours 白 and 黒, chess terms, and "相手選手".
@@ -271,6 +281,7 @@ FIDE and JCF texts get no redaction at all. The residual check and the gate do n
 - The routes accept only the minimized shapes in §5.3. Unknown fields get 400, and old cached clients' `{ text }` gets 400.
 - **On incident-derived text only (§2),** the server runs gate layers L2–L4 and the pattern rules (§5.2 rules 1–3 and 5–13) again. For tournament article text it runs only rules 1, 5 and 12 (§5.5). FIDE and JCF text and structured codes are not re-checked. For a correct client the pass is idempotent. **If the gate's verdict is not `clear`, or the pattern pass would change anything, the server returns 400 and sends nothing.** It never rewrites silently, so what is sent is exactly what the arbiter saw in the preview.
 - Logs contain codes only: the route, the error code, the upstream status, attempts, the model and token counts. They never contain payload text or upstream error bodies.
+- Implemented in J1a-3 (§12). A rejection by the re-check is HTTP 400 with the code `not-sendable`.
 
 ## 8. Evaluation (release gate)
 
@@ -350,6 +361,187 @@ Only synthetic data is used. Real tournament reports are never sent to any provi
 - **Q-DP1 (answered 2026-10-08).** Sensitive incidents are not sent to external AI services. They are handled locally by Decision Trees, the rule engine and fixed forms. Future on-device AI is not forbidden. Fair play stays unconditionally blocked. See D10.
 - **Q-DP2 (answered 2026-10-08).** The list may exist, but not as a word list. It is a registry of context-dependent expressions with context patterns and evaluation cases. Undecidable means local fallback. See D11 and Appendix A.2. 抗議 and 苦情 are now an entry (`protest`) with benign contexts, such as "裁定に抗議".
 
+## 10. Implementation (J1a-1, 2026-10-08)
+
+The pure package exists and is tested; nothing calls it yet (J1a-2 wires it into every route, J1a-3 adds the server re-check).
+
+- **Files** (`lib/domain/privacy/`):
+  - `normalize.ts`: NFKC, kana folding (length-preserving, so match positions agree), `DualPattern` (the NFKC pass and the folded pass of Appendix A), name normalization with the original positions.
+  - `sensitive-terms.ts`: Appendix A.1 (`SENSITIVE_EXPRESSIONS`) and the A.2 registry (`CONTEXT_EXPRESSIONS`, including one entry per "other doubtful term").
+  - `sensitive-gate.ts`: `evaluateSensitivity` with L0–L4. L5 (server) will call the same function.
+  - `placeholders.ts`: `PlaceholderMap` (indexed placeholders; `toJSON()` is empty so the map cannot be serialized by mistake), placeholder-protected replacement.
+  - `pii-redaction.ts`: `redactPii` with the §5.2 rule order; `mode: "regulation"` applies only rules 1, 4, 5 and 12 (§5.5).
+  - `residual-check.ts`, `minimization.ts`, `reidentify.ts`.
+  - `protect.ts`: `protectIncidentText`, steps A–E for one incident-derived text and a route (`classify`, `facts`, `reason-description`, `embed-query`). It never returns the original text when it stops.
+- **Decisions made while implementing:**
+  - **Existing placeholders are reserved.** A `〈…〉` already in the input (typed, or from another map) keeps its number, and new placeholders skip it, so the mapping stays one to one.
+  - **Re-identification restores the registered form** of a name (`田中 太郎`), because a family-name-only mention shares the placeholder.
+  - **A title followed by a Latin name** (`IM Smith`) replaces both: the title as `〈属性N〉` and the name as `〈人物N〉`.
+  - **Chess notation is protected from the board and round rules:** lower-case `b4` is a square; `Bd3` / `Rd1` are moves, so `Bd` / `Rd` need a space or a dot before the number; `1/2-1/2` is not a date.
+  - **Raw input limits (L4 `too-long`):** 2,000 characters for classify, facts and the reasoning description, 1,000 for an embedding query. Longer input goes to the local fallback instead of being silently truncated.
+  - **Residual check, "family name alone":** for a name stored without a space and starting with two kanji, the first two characters are also checked.
+- **Term additions from the evaluation** (Appendix A.3 allows only strengthening):
+  - L2 fair play: `フェア\s*プレ`, `ボディ\s*チェック`, `(身体|所持品|持ち物|手荷物)(の)?(検査|チェック)` (false negatives "ボディチェックを断った", "フェアプレーに関する申し立て");
+  - L3 terms without a benign context: 家庭, 離婚, 親権 (false negative "家庭のことで集中できない");
+  - L3 `smartphone`, sensitive context: also 見た and 使った.
+- **First review (2026-10-08): FIX REQUIRED.** The list-based gate missed about 115 of 151 sensitive reports written independently by the reviewer; the 0 false negatives on the author's own fixtures said little. This led to D12 (the known-vocabulary layer, `known-vocabulary.ts`).
+- **The known-vocabulary layer** (`unknownVocabulary`):
+  - Kanji, katakana and Latin words are listed; hiragana is limited to grammar. Mixed words (負け, 時間切れ, 間違い, 表示が消え …) are listed as whole words, so that general endings such as け or い are not allowed (けが, いたい).
+  - Single kanji that combine into sensitive words are excluded (audit): 切 (手を切った), 出 (手を出した), 引 (置き引き), 外 (外来), 合 (押し合った), 揉 (揉み合った), 目 (目を回した; 回目 and similar are words), 起 (起きない), 弱 (弱っていた), 消 (白が消えた).
+  - A new registry entry `not-moving`: a person who does not move is sensitive, a clock that does not move is benign.
+  - Adding vocabulary needs review and evaluation cases, like the term lists.
+- **Other fixes from the first review:** patterns match across line breaks (`s` flag); 「ばかり」 is not abuse, 馬鹿 is; the `sign` benign context requires a document noun (M2); only well-formed placeholders are skipped, any other 〈…〉 is processed as text (M3); `(に|から)(押|触|…)(さ|ら|か)れ` is blocked; redaction of single-kanji surnames (not inside longer kanji words), ラウンド5, kanji-numeral times (not 一時停止), partial dates and eras, 小6/中2, LINE ID; clock readings next to 白, 黒 or フラッグ are kept; a leading role noun (黒番) is kept; 1局目 and English rule terms are kept.
+- **Evaluation results (synthetic data, `__tests__/fixtures/privacy/`):**
+  - Sensitive Gate: 0 false negatives on the author's 192 reports and on the reviewer's 108 reports (`sensitive-review1.ja.json`, now a regression set, no longer held out). A new held-out set from a second independent review is the release check. 336 registry cases, all with the expected verdict. False positives: 1 of 76 non-sensitive reports, at most 12.5% per category; this set is short and close to the vocabulary, so real free-text reports will have more.
+  - PII: 117 reports, **0 identifiers left** in a payload that would be sent, for the covered types. Known residual risks, counted separately: unregistered names without an honorific (3 cases) and **the kana reading of a name registered in kanji** (2 cases, a new class like romaji: the reading cannot be derived without a stored reading).
+  - The known PII residual risks (unregistered names without an honorific, kana readings) are not sent: the known-vocabulary layer makes them `uncertain`.
+- **Second review (2026-10-08): FIX REQUIRED.** 117 of 270 new sensitive phrases passed the known-vocabulary gate. This led to D13 (mandatory confirmation). Fixes:
+  - a benign context marks only its trigger as known, never its `.{0,N}` text (it hid 酒・母 …);
+  - characters outside the scripts (emoji) are unknown content;
+  - hiragana grammar is split into verbal endings (only after a stem or another ending) and function words (anywhere), and particles are no longer one-kana endings (よっていた, ないていた, はいた);
+  - content words removed from the grammar (おかしい, うるさい, やめ…); 助言 removed from the vocabulary;
+  - L2 additions: physical contact with a person (except タッチムーブ), third-party advice, pre-arranged results, refusing an inspection, 119 and 110, disability wording, 酔;
+  - registry additions: `third-party` (観戦者, 監督, キャプテン, 隣の選手 …: never `clear`), and terms without a benign context: 何か, 大声, 何度も, taking things away (持って帰 …), following (付いて行 …), 帰れない, 呼び止め, 待っている;
+  - PII: placeholders have a fixed shape (`〈選手A〉`…`〈選手ZZZ〉`, others 1–999), so typed look-alikes are text; a wall-clock H:MM next to 白/黒/フラッグ is redacted (only up to 2:59 counts as a clock reading there); single-kanji name parts are matched only for the surname and not before a verb ending (田中 勝 must not break 白の勝ち).
+- **Results after the second review:** 0 false negatives on all three sets used so far (192 own, 108 from review 1, 117 from review 2, the last two now regression sets). False positives on the 76-report benign set: 6 (7.9%); third parties (キャプテン, 観戦者) are always held back. The second reviewer measured 11 of 80 (13.75%) on its own benign set before the fixes; the fixes added restrictions, so expect more.
+- **Third review (2026-10-08): FIX REQUIRED.** Held-out measurement on 208 new phrases: the gate alone let 21 through (10.1%), the whole pipeline sent 35 (16.8%). Fixes:
+  - **M1: placeholders from pattern rules hid content words** (妊婦さん → 〈人物1〉さん, リハビリクラブ → 〈団体1〉). `PlaceholderMap` now marks placeholders from rules 6, 7, 12 and 13 (and a name after a title) as *unverified*; step E runs the gate on the text with those restored (`restoreUnverified`, on the device only). Unregistered names therefore always go to the local fallback; registered names stay usable.
+  - **M2: wall-clock times after 時計** (§5.2.1 above).
+  - kanji numerals inside a word are not round or board numbers (同一局面 was damaged);
+  - registry: `third-party` also covers 主将, メンバー, チーム, 他の/別の選手 and 対局者; new `bag` entry (only putting a phone away is benign); new `cannot` entry (押せない, 持てない …); terms 待って, 強く言, 受け取, 次はない; 変 and 指示 removed from the vocabulary;
+  - grammar: two one-kana particles in a row cannot build a word (はは, かね); ない and だ are also function words (加算がなかった, 違法だが), while ない still cannot carry a verb ending (ないていた);
+  - vocabulary: 間違え, 盤の外, 抜け, 手を離, 指し方, 放置, 撤回, 質問, 段目; `protest` benign context widened (ペアリングの結果に…苦情);
+  - a registered one-character name (林) is redacted and checked.
+- **Results after the third review:** 0 false negatives, through the gate and through the whole pipeline, on all four sets (192 own, 108 + 269 + 208 from the three reviews; all are now regression sets, so they no longer measure held-out performance). Usefulness: 5 of the reviewers' 80 realistic non-sensitive reports are held back (6.25%).
+- **Fourth review (2026-10-08): FIX REQUIRED (no code defect, cheap systematic holes).** Held-out, natural phrasing: **1 of 211 (0.47%)** through the gate and through the pipeline. Phrases deliberately composed from vocabulary words: 29 of 41. Usefulness on the reviewer's 60 phone-style reports: 21 held back (35%). Fixes:
+  - contact with a body part (左手, 指 …) or a possessor with 番 / 対局者 / 対戦相手; pre-arranged results in imperative and agreement forms (負けてくれ, 開始前に…合意, 結果に同意); telling moves (指し手を言う, この手を指せ);
+  - `cannot` also covers polite forms and 触れない; 悪い only in 具合が悪い / 調子が悪い (L3 decides those); someone else's phone into a bag is not benign;
+  - terms 待っ (all forms), 何回も, 返して(い)ない, 帰れ, 途中で帰, って帰, 後で帰, 退場と言, 状態ではな;
+  - near 白/黒/フラッグ, a time followed by に/から/頃… is a time of day at any hour;
+  - usefulness: only specific particle pairs are blocked (はは, かね, もも, かか, ねね, よよ) instead of every pair; する-verbs after a noun (提案をした), なっていた, 落とした, 付けた, 続けた, かけた, かも; vocabulary 旗, 手元, 経過, 合法, 反応, 否定, 代わり.
+- **Results after the fourth review:** 0 false negatives through the gate and the pipeline on all five sensitive sets (192 own; 108, 269, 208 and 252 from the four reviews; all now regression sets). Usefulness: 12 of 140 realistic non-sensitive reports from reviewers 3 and 4 held back (8.6%), enforced at ≤ 20%.
+- **Targeted re-review of the review-4 fixes (2026-10-08): FIX REQUIRED.** The usefulness widening had opened holes: する/された/つけ/かけ as function words (白の後をつけた, 白にあれをされた, 手をかけた), 付け/続け/落とし as whole words (付け回された, 見続けた, 黒を落とした) and the particle-pair blocklist (はか, でか, はが). Fixes:
+  - the particle pairs are an **allow-list** again (のは, のが, のも, には, にも, とは, とも, では, でも, へは, へも);
+  - する-forms after a noun are allowed only as 「を＋する」 after a kanji or katakana noun of two or more characters (提案をした), never された; やった, つけ*, かけ* removed;
+  - 付け, 続け, 落とし replaced by collocations (駒を落とし, 見落とし, 書き続け, 指し続け, 時計に付け, 記録を付け, 棋譜をつけ, 取り消);
+  - terms 後を(つけ|付け), (つけ|付け)回, 手を(かけ|掛け), (こと|あれ|それ|これ)をされ, ようにされ, にされ, 見続け, とやっ; 負けろ, 投了しろ, (引き分け|ドロー)でいい; someone else's phone also with 「の、」 or 「の 」;
+  - false positives removed: 結果に同意 alone, 対局前に…話した, 指し手 in the contact rule.
+  - Results: 0 false negatives on all regression sets through gate and pipeline (the 36 re-review phrases were added to `sensitive-review4.ja.json`); usefulness 15 of 144 held back (10.4%).
+  - A second pass of the same reviewer confirmed those holes closed and found two more, fixed: a body-part compound in the contact rule (手元, 指先) and playing in another player's place (の代わりに出場); 代わり is now allowed only as 代わりの時計 / 電池 / 駒.
+- **Held-out false-negative rates so far** (each measured before the fixes that followed): list-based gate ~76% (115/151); known vocabulary ~43% (117/270); after review-2 fixes 10.1% gate / 16.8% pipeline (208); after review-3 fixes 0.47% on natural phrasing (1/211), but 29/41 on phrases deliberately composed from vocabulary words. The arbiter's confirmation (D13) remains the final defense.
+- **Tests:** `__tests__/privacy/{sensitive-gate,gate-evaluation,pii-redaction,protect}.test.ts`. `gate-evaluation` also runs every sensitive set through `protectIncidentText`.
+
+## 11. Implementation (J1a-2, 2026-10-09): the guard on every client route
+
+The pure package is now used by every client path that reaches `/api/llm/*`. The server re-check (L5) and the rejection of old shapes followed in J1a-3 (§12).
+
+### 11.1 Files
+
+- `lib/application/external-ai-guard.ts` — **the only module that uses `callLlmApi`** (`__tests__/privacy/external-ai-guard.test.ts` scans `lib`, `app` and `components`, comments excluded; a second check finds no other `/api/llm/` literal outside the server and the contract). It loads the identifiers (`loadKnownIdentifiers`, injectable), creates one `PlaceholderMap` per request, and offers:
+  - `prepareClassification(text, { category, doNotSend })` → `local` (reason codes) or `needs-confirmation` with `preview` and `send()`; the body is `{ narrative }`.
+  - `prepareEmbeddingQuery(query, …)` → `local` or `needs-confirmation` with the de-identified `query`, `preview` and `send()` (returns the vector).
+  - `prepareReasoning({ incident, context, doNotSend })` → `local` or `needs-confirmation` with `preview`, `approvalKey`, `queryEmbedding` (absent when only the query is held back), `toSentArticles()`, `send(articles)` and `reidentify()`. The description (`reason-description`) and the search query (`embed-query`) share the request's map.
+  - `embedRuleDocuments(documents)` — tournament regulations through `redactPii(…, "regulation")`, other sources unchanged; no gate and no confirmation (§2: rule text is not incident data).
+  - Identifier loading failure → `local` with reason `residual` (fail closed).
+- `lib/application/llm-assist.ts` — the `LlmAssistPort` (moved from `lib/infrastructure/llm/llm-assist-port.ts`, because it now depends on the application guard).
+- `lib/application/llm-classification.ts` — `prepareIncidentClassification` → `done` (keyword result and notice) or `needs-confirmation` with `send()` / `decline()`.
+- `lib/domain/llm/external-ai.ts` — reason-code labels and the notice 「外部AIには送信していません（理由: …）」.
+- UI: `components/features/ExternalAiSendConfirmation.tsx` (the preview and the confirm button), `ExternalAiOptOutSwitch.tsx` (§4.4), used by `IncidentTextClassifier`, the report page and the rule search page.
+
+### 11.2 How the confirmation (D13) works per route
+
+- **Classification:** 「カテゴリを提案」 prepares; a clear text shows the preview with 「確認してAIで分類」 and 「送らない」 (keyword result). Held-back text and offline show the keyword result with the notice, without a preview.
+- **Reasoning (AI 参考情報):**
+  1. `DecisionEngine.evaluate` calls the port without an approval. The port runs the guard and returns `not-sent` (gate), `offline`, or `needs-confirmation` with the preview and an `approvalKey` — **before any search or send**.
+  2. The engine turns `needs-confirmation` into a stored manual-review decision (`llm.status: "awaiting-confirmation"`, "CAへ確認") and returns `externalAiConfirmation` beside it. The arbiter therefore sees the local result at once; the decision-tree path is unchanged.
+  3. The store keeps the confirmation in memory; 「確認してAI参考情報を取得」 calls `confirmExternalAiSend()`, which re-evaluates with the key. The port prepares the payload again and sends only if the key is identical (`approvalKey` is the JSON of the de-identified incident fields, codes and query). Otherwise it asks again with the new preview (for example after a name was registered in between).
+  4. The AI decision supersedes the interim one (`supersededBy`), as with the offline retry.
+  - The confirmation lives in memory with the decision. Leaving the report screen resets both, so the interim decision is then only in the incident log, which has no retry yet (known issue; a log-side "re-evaluate / confirm AI send" is a next-milestone candidate).
+  - **Tournament regulation text is not in the preview.** The articles are chosen by the search, which runs only after the confirmation. The preview therefore says that regulations are sent with the narrow redaction of §5.5 and that their text is not shown. This is the one part of a reasoning request that the arbiter does not see. It is rule text, not incident data (§2), and the same text is already sent for document embeddings without a confirmation. Accepted residual risk (J1a-2 review): an unregistered name without an honorific inside a regulation is sent.
+  - `retryEvaluation` (after an error, or after entering the access token) reuses the approval of the same incident, so an identical payload is not confirmed twice. A changed payload, another incident, or a reset needs a new confirmation.
+- **Rule search screen (the open point of the J1a-2 plan, decided here):** the search shows the **keyword results immediately** and sends nothing. If semantic-search data exists, the de-identified query is shown with 「確認して意味検索も行う」; only then is the query embedded and the search repeated with vectors. A held-back query shows the notice and stays keyword-only. This follows D13 literally (every send is confirmed) without slowing the keyword path. `hybridSearch` runs the vector side only when the caller passes `queryEmbedding`.
+- **Reasoning search:** the keyword search uses the raw description **on the device**; the semantic side uses only the confirmed, de-identified query.
+- **Document embeddings** (PDF import, 「意味検索用データを作成」): no confirmation, because no incident data is sent; tournament regulations are de-identified (§5.5).
+
+### 11.3 What the reasoning request contains
+
+- `incident`: category, subtype, playerColor, the de-identified description (≤ 1,000), arbiterObserved. Fact answers are not sent yet (sending less than §5.3 allows).
+- `context`: competitionType, supervisionRegime, rulesVersion. **No `tournamentId`** (the engine passes it beside the request, for the local search only).
+- `articles`: as §5.3; tournament articles have their article number, title and content redacted with the request's map, `sourceName: "大会規定"` and no `sourceVersion`. Redaction runs before truncation to 4,000 characters, so the quote check works on exactly what was sent.
+- The prompt tells the model that `〈…〉` are placeholders to be kept as they are.
+- Article number, title and content are cut with `truncate` from `minimization.ts`, so a placeholder is never cut in half.
+
+### 11.4 Re-identification and display
+
+- `buildLlmDecision` validates and matches quotes on the sent articles, extracts the quote context there, and then applies `reidentify` to the conclusion, actions (including the missing-information line), penalty descriptions, the escalation reason, and each citation's article label, quote and quote context.
+- A placeholder the map does not know is shown as it is; the decision gets `llm.needsReview: true`, an escalation to the CA and a message listing the placeholders. The display shows 「要確認」.
+- Citations show the **local** source name and version (`localSourceLabels`, never sent), so a tournament regulation keeps its real name on the device.
+- The classification's follow-up questions and missing information are also re-identified, with the classification request's map.
+- There is no stored `llmRaw` field in the app; the stored decision holds the re-identified display fields only, which stay on the device.
+
+### 11.5 Other changes
+
+- `Incident.externalAiOptOut` (not indexed, no Dexie version change) stores the switch; the engine passes it as `doNotSend` (L1). The switch sits under both free-text fields of the report screen and is shared by them.
+- `Decision.llm.status` has two new values: `awaiting-confirmation` and `not-sent` (with `gateReasons`, codes only).
+- `EMBEDDING_MODEL.key` is `gemini-embedding-001@768+deid1`. The server echoes it, the backfill deletes other keys, so 「意味検索用データを作成」 rebuilds every vector once (§6.3).
+- The classifier drops a response that arrives after the text was edited, so an old suggestion is never applied to new text.
+- Server shapes (minimum for J1a-2): classify accepts `{ narrative }` (≤ 500); the reasoning validator no longer reads `tournamentId`. J1a-3 adds the L5 re-check, the pattern re-check, and 400 for unknown fields and `{ text }` (§12).
+
+## 12. Implementation (J1a-3, 2026-10-09): the server re-check (L5)
+
+### 12.1 One function on both sides
+
+- `lib/domain/privacy/server-recheck.ts` (pure):
+  - `recheckIncidentText(text, route)`:
+    - the pattern rules: `redactPii(text, NO_IDENTIFIERS, new PlaceholderMap())` must return the text unchanged. With no identifiers, rule 4 does nothing, so this is rules 1–3 and 5–13;
+    - the gate (L2–L4, including the known-vocabulary layer L3v) must be `clear`;
+    - the residual check (§5.4, no identifiers; the 8-character minimum for classify and facts).
+  - `recheckRegulationText(text)`: `redactPii(…, "regulation")` must return the text unchanged (rules 1, 5 and 12).
+  - Results carry codes only (`pattern`, gate reason codes, residual findings).
+- **The client runs the same function before sending**, so a correct client never gets a 400:
+  - Every minimized text is trimmed after it is cut. The text that is previewed, checked and sent is the same string; the embeddings client's own `trim()` is then a no-op. Before this fix, a cut that ended in a space was trimmed on the way out. A rule anchored at the end of the text (「三時」) could then fire on the server only (J1a-3 review M1).
+  - `protectIncidentText` has a step **E2** after E. It checks the text exactly as sent, with its placeholders, which is what the server sees. Step E checks `restoreUnverified` text, which the server cannot rebuild. A failure gives `stage: "recheck"` and the local fallback, reason `residual`.
+  - `toSentArticles` (`external-ai-guard.ts`) drops an article in two cases:
+    - its id is not an identifier (`ARTICLE_ID`, shared with the server through the contract);
+    - it is a tournament article whose number, title or content fails `recheckRegulationText`. Truncation at 4,000 characters can create a match; for example a 13-digit number cut to a phone-number shape.
+  - For FIDE, JCF and commentary articles, `toSentArticles` leaves out a `sourceName` or `sourceVersion` that fails the same check. Rule 5 also matches labels such as 「FIDE 2023」 or 「JCF2024」, so they are left out of the request too. Citations on the device still use the local labels.
+  - The guard sends `subtype` only if `isReportableSubtype` accepts it, so old data with a free-text subtype is not rejected.
+  - On the synthetic fixture sets (benign, benign-review, pii; 4 routes), E2 stops nothing that A–E let through, so usefulness is unchanged. `__tests__/privacy/server-recheck.test.ts` locks this. It also builds real request bodies with the guard and checks that the server validators accept them.
+
+### 12.2 What the server accepts (`request-validation.ts`)
+
+- **Exact key sets.** Any other key is a 400 `invalid-request`. The 400 says how many keys were rejected, not their names or values.
+  - body `{ narrative }` for classify;
+  - `{ incident, context, articles }` for reason, with:
+    - `incident {category, subtype, playerColor, description, arbiterObserved}`;
+    - `context {competitionType, supervisionRegime, rulesVersion}`;
+    - each article `{id, article, title, content, source, sourceName, sourceVersion, page, priority}`;
+  - `{ taskType, texts }` for embed.
+  - `tournamentId` anywhere is therefore a 400.
+- The old classify `{ text }` (without `narrative`) gets 400 with 「アプリを再読み込みしてください」.
+- **Codes.**
+  - `subtype` must pass `isReportableSubtype(category, subtype)` (`follow-up.ts`). For illegal-move that means the four 7.5 kinds and `touch-move`; clock-time and draw use their subtype lists.
+  - `rulesVersion` must be in `SUPPORTED_RULES_VERSIONS`.
+- **Length limits** equal the client's minimization limits (§5.3), and a test locks this:
+  - `incident.description` ≤ 1,000 characters (`maxReasonDescriptionChars`);
+  - an embed query ≤ 200 characters (`maxEmbedQueryChars`);
+  - documents ≤ 2,000 characters.
+- Article `id`s must match `ARTICLE_ID` (`[A-Za-z0-9_.:-]`, i.e. UUIDs and slugs), so no free text rides in an id.
+- **Tournament articles:** `sourceName` must be 「大会規定」 and `sourceVersion` must be absent (§5.3).
+- **L5:**
+  - `recheckIncidentText` runs on the classify narrative, the reason description and each embed query.
+  - `recheckRegulationText` runs on the number, title and content of tournament articles.
+  - FIDE, JCF and commentary `sourceName` / `sourceVersion` get `recheckRegulationText`, because they are free text typed at import.
+  - Their content and embed documents are not text-checked (§2).
+  - Accepted limit (defence in depth): the server cannot tell a tournament article mislabelled as FIDE, or which source a document embedding comes from. The client de-identifies tournament documents (§6.3).
+- **On an L5 failure:** HTTP 400 with the new code **`not-sendable`** and a fixed message (no codes, no text). Nothing goes upstream, the daily counter is not used, and the log line is `{ route, code: "not-sendable" }`. Shape errors stay `invalid-request`.
+- **What the client does with `not-sendable`:**
+  - reasoning: `llm-assist` maps it to `not-sent` (reason `residual`), which is the local handling of §4.3. There is no retry button, because resending gives the same answer;
+  - classification: falls back to keywords with a notice;
+  - semantic search: falls back to keyword search.
+  - A correct client should not reach this (§12.1). It can happen with an old client cached by the service worker against newer server terms.
+- **`null` values:** an optional field set to `null` counts as absent. A tournament article's `sourceVersion` must be absent; `null` is rejected.
+
 ## Appendix A. Sensitive terms (for review)
 
 How the terms are applied:
@@ -379,7 +571,7 @@ How the terms are applied:
 
 **This is not a word allow/block list.**
 
-- Each expression below is ambiguous on its own. It is managed as an entry in a registry (`lib/domain/privacy/context-expressions.ts`).
+- Each expression below is ambiguous on its own. It is managed as an entry in a registry (`CONTEXT_EXPRESSIONS` in `lib/domain/privacy/sensitive-terms.ts`).
 - Each entry has:
   - **triggers**: the expression and its spelling variants;
   - **sensitive contexts**: patterns that include the surrounding words, and make the occurrence `blocked`;

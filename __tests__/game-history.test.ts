@@ -244,7 +244,7 @@ function claim(positionsText: string, extra: Record<string, string> = {}) {
   return applyIncidentAnswers(drawIncident(), {
     drawSubtype: "threefold-repetition-claim",
     claimant: "white",
-    claimantHasMove: "true",
+    lastMover: "black",
     claimMode: "just-appeared",
     touchedPiece: "false",
     repetitionCheck: "auto",
@@ -481,6 +481,7 @@ function syntheticHistory(
     fullmoveNumber: 1,
     isCheckmate: i === length - 1,
     sideToMove: (i % 2 === 0 ? "white" : "black") as "white" | "black",
+    opponentInCheck: false,
   }));
   return {
     history: { moves: [] },
@@ -562,7 +563,10 @@ describe("J1b-3 review fixes", () => {
   });
 
   it("S4: the claimant's side-to-move mismatch is reported before the confirmation", () => {
-    const r = process(claim(THREEFOLD, { claimant: "black" }));
+    // 白が最後に指した（黒の手番）と回答されたが、棋譜の最終局面は白の手番
+    const r = process(
+      claim(THREEFOLD, { claimant: "black", lastMover: "white" })
+    );
     expect(r.requiresFollowUp).toBe(true);
     expect(qids(r)).not.toContain("historyConfirmed");
     expect(r.decision.conclusion).toContain("白の手番");

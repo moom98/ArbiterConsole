@@ -54,12 +54,112 @@ describe("TournamentProfileForm", () => {
       competitionType: "blitz",
       supervisionRegime: "competition-rules",
       rulesVersion: "FIDE-2023",
-      timeControl: { initialMinutes: 3, incrementSeconds: 2 },
+      timeControl: { periods: [{ minutes: 3, incrementSeconds: 2 }] },
       blitzCompetitionTimePenalty: {
         seconds: 60,
         source: { document: "秋季ブリッツ要項", article: "第7条" },
       },
     });
     expect(input.startDate?.getDate()).toBe(10);
+  });
+
+  function fillStandardBasics() {
+    type("大会名", "秋季クラシカル");
+    type("開始日", "2026-10-10");
+    fireEvent.click(screen.getByRole("button", { name: "Standard" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "FIDE Laws of Chess 2023" })
+    );
+  }
+
+  it("submits a two-period time control (ADR-014 §7)", async () => {
+    const onSubmit = vi.fn<(i: TournamentProfileInput) => Promise<void>>(
+      async () => {}
+    );
+    render(<TournamentProfileForm submitLabel="作成" onSubmit={onSubmit} />);
+    fillStandardBasics();
+    fireEvent.click(screen.getByRole("button", { name: /ピリオドを追加/ }));
+    type("第1ピリオド 手数", "40");
+    type("第1ピリオド 持ち時間（分）", "90");
+    type("第1ピリオド 加算（秒/手）", "30");
+    // 最後のピリオドには手数の欄がない
+    expect(screen.queryByLabelText("第2ピリオド 手数")).toBeNull();
+    type("第2ピリオド 持ち時間（分）", "30");
+    type("第2ピリオド 加算（秒/手）", "30");
+    fireEvent.click(screen.getByRole("button", { name: "作成" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][0].timeControl).toMatchObject({
+      periods: [
+        { moves: 40, minutes: 90, incrementSeconds: 30 },
+        { minutes: 30, incrementSeconds: 30 },
+      ],
+    });
+  });
+
+  it("requires the move count of a non-final period", async () => {
+    const onSubmit = vi.fn();
+    render(<TournamentProfileForm submitLabel="作成" onSubmit={onSubmit} />);
+    fillStandardBasics();
+    fireEvent.click(screen.getByRole("button", { name: /ピリオドを追加/ }));
+    type("第1ピリオド 持ち時間（分）", "90");
+    type("第1ピリオド 加算（秒/手）", "30");
+    type("第2ピリオド 持ち時間（分）", "30");
+    type("第2ピリオド 加算（秒/手）", "30");
+    fireEvent.click(screen.getByRole("button", { name: "作成" }));
+    expect(
+      await screen.findByText(
+        "第1ピリオドの手数は1以上の整数で入力してください"
+      )
+    ).toBeTruthy();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("keeps a legacy incomplete time control until the arbiter confirms it", async () => {
+    const onSubmit = vi.fn<(i: TournamentProfileInput) => Promise<void>>(
+      async () => {}
+    );
+    const initial: TournamentProfileInput = {
+      name: "旧大会",
+      startDate: new Date(2026, 9, 10),
+      competitionType: "standard",
+      rulesVersion: "FIDE-2023",
+      timeControl: {
+        periods: [{ minutes: 90, incrementSeconds: 30 }],
+        periodsIncomplete: true,
+        additionalTimeAfterMove: 30,
+      },
+    };
+    const { unmount } = render(
+      <TournamentProfileForm
+        initial={initial}
+        submitLabel="保存"
+        onSubmit={onSubmit}
+      />
+    );
+    expect(screen.getByText(/2つ目以降のピリオド/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][0].timeControl).toMatchObject({
+      periodsIncomplete: true,
+      additionalTimeAfterMove: 30,
+    });
+    unmount();
+
+    render(
+      <TournamentProfileForm
+        initial={initial}
+        submitLabel="保存"
+        onSubmit={onSubmit}
+      />
+    );
+    fireEvent.click(
+      screen.getByLabelText(/大会要項でピリオドを確認して入力した/)
+    );
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    const tc = onSubmit.mock.calls[1][0].timeControl;
+    expect(tc?.periodsIncomplete).toBeUndefined();
+    expect(tc?.additionalTimeAfterMove).toBeUndefined();
   });
 });

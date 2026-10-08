@@ -10,7 +10,7 @@ export function profileInput(
     startDate: new Date(2026, 9, 10),
     competitionType: "standard",
     rulesVersion: "FIDE-2023",
-    timeControl: { initialMinutes: 90, incrementSeconds: 30 },
+    timeControl: { periods: [{ minutes: 90, incrementSeconds: 30 }] },
     ...over,
   };
 }
@@ -26,7 +26,7 @@ export function tournament(over: Partial<Tournament> = {}): Tournament {
     name: "テスト大会",
     competitionType: "standard",
     rulesVersion: "FIDE-2023",
-    timeControl: { initialMinutes: 90, incrementSeconds: 30 },
+    timeControl: { periods: [{ minutes: 90, incrementSeconds: 30 }] },
     startDate: FIXED_NOW,
     regulations: [],
     createdAt: FIXED_NOW,

@@ -34,6 +34,15 @@ const RULES: KeywordRule[] = [
   },
   {
     category: "draw",
+    subtype: "fifty-move-claim",
+    // 「150手」「50手目（手数）」を除く
+    patterns: [
+      /(?<![0-9０-９])50\s*手(?!目)|fifty[- ]move|(?<![0-9])50[- ]move/i,
+    ],
+    weight: 3,
+  },
+  {
+    category: "draw",
     subtype: "fivefold-repetition",
     patterns: [/(五|5)回.{0,4}(同一|同じ)局面|fivefold/i],
     weight: 3,
@@ -43,6 +52,22 @@ const RULES: KeywordRule[] = [
     subtype: "75-move-rule",
     patterns: [/75\s*手|75[- ]move/i],
     weight: 3,
+  },
+  {
+    // 触れた駒の規則（Article 4）。7.5 の違法手とは別の決定木（DT-007）
+    category: "illegal-move",
+    subtype: "touch-move",
+    patterns: [
+      /タッチ\s*(アンド|&|＆)?\s*ムーブ|touch[\s-]*(and[\s-]*)?move|j.?adoube/i,
+    ],
+    weight: 3,
+  },
+  {
+    // 「触れた駒」だけでは弱い（違法手の代わりの手にも触れた駒の規則が適用される: JCF p.47）
+    category: "illegal-move",
+    subtype: "touch-move",
+    patterns: [/(触れた|触った)駒/],
+    weight: 1,
   },
   {
     category: "illegal-move",

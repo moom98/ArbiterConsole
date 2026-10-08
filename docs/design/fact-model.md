@@ -121,17 +121,17 @@ type FactAnswer = { value: string | number | string[] } | { unknown: true };
 - **Facts the tree does not use.** A DT category may also hold fact-plan facts that the tree does not need but the record does, for example `game.record-state` after the game has ended. They have no DT mapping, are required only by their `appliesWhen`, and never change the tree's decision.
 - **Derived facts.** The caller passes values derived from settings and records as `context.derivedValues`. They are never asked, and conditions use them before the answers. A fact that is only ever derived (`im.count`, `ss.current-period`, `pb.tournament-device-rule`) is `optional`, so it is never asked.
 - **Mapping:** each DT question maps to **at most one** fact. Some facts cover several questions:
-  - `game.history` covers the position inputs of the trees, with `dtValues: "computed"`: `opponentCanCheckmate` (DT-001…003, until J1b-4 removes it), `positionFen` and `materialConfirmed` (DT-004), and `positionsText` (DT-005). `game.position` has no DT mapping. The tree requests it through `requestedFactIds` only when there is no valid history;
-  - `game.end-event` covers `gameEnded` and `gameEndedBeforeFlag`;
+  - `game.history` covers `positionsText` (DT-005). Since J1b-4, `game.position` covers the mate-possibility position questions, with `dtValues: "computed"`: `matePosition` + `reinstatedFen` (DT-001…003) and `matePosition` + `positionFen` (DT-004). Deriving that position from `game.history` comes later (with the history input UI);
+  - `game.end-event` covers `gameEndEvent` (DT-001…003) and `ct.ended-before-flag` covers `endedBeforeFlag` (DT-004), one to one since J1b-8 (§3.9);
   - `ct.last-period` and `ct.quickplay-guidelines` (yes/no, derived from settings when possible) cover `lastPeriod` and `quickplayGuidelinesApply`.
-- **Values.** Fact values use the DT question values where they map, for example `opponent-claim`, `white-first` and `threefold-repetition-claim`. Where the shapes differ, `dtValues` converts them, for example `game.end-event` → `gameEnded` (true/false). The new draw kinds map to `other` until J1b-5. A test checks that every value converts to a valid DT option.
+- **Values.** Fact values use the DT question values where they map, for example `opponent-claim`, `white-first` and `threefold-repetition-claim`. Where the shapes differ, `dtValues` converts them (since J1b-8 the game-end facts map to themselves, §3.9). Since J1b-5 every `dr.kind` value is a DT subtype, so it maps to itself. A test checks that every value converts to a valid DT option.
 - **DT questions with no fact.** They are never presence-checked and never shown in the missing-facts list:
 
   | Question                               | Why it has no fact                                                                       |
   | -------------------------------------- | ---------------------------------------------------------------------------------------- |
-  | `materialConfirmed`                    | removed together with the count input (ADR-014 §5)                                       |
-  | `positionBlocked`, `lastMoveCheckmate` | removed as questions; decided by code from `game.history` / `game.position` (§3.5, §3.7) |
+    | `positionBlocked`, `lastMoveCheckmate` | removed as questions; decided by code from `game.history` / `game.position` (§3.5, §3.7) |
   | `competitionType`, `supervisionRegime` | game context from the tournament profile                                                 |
+  | `gameRecordState`                      | optional record question; `game.record-state` is required only by its `appliesWhen` (§3.9) |
 
 - **Draw (ADR-014 §1).** The threefold and 50-move claims are both in DT-005 Draw Claim, so they share the claim facts, including `dr.claim-timing` and `dr.next-move-written` (R7). Fivefold and 75 moves are DT-006. Only agreement, stalemate, dead position and "other" use a fact plan.
 - **The side to move is never derived from the clock** (ADR-014 §2). It comes from `game.history`, otherwise from `dr.last-mover`. `dr.clock-state` is recorded only.
@@ -183,7 +183,7 @@ When a DT meets `unknown` on a fact it needs, it applies `resolveUnknown` (a new
 - **(a) Branches that need more input.** If evaluating a value gives `needs-input` (for example `claimMode = about-to-appear` leads to `moveWritten`), that branch counts as **disagreeing**. The enumeration does not recurse.
 - **(b) "Same decision"** means the same `kind`, the same `intervention`, and the same penalties (type, side and time). The conclusion text, ids and timestamps are ignored. `buildDecision` creates a new id and time on each branch, which is harmless.
 - **(c) Count, duration and text facts** (material, remaining time, positions) cannot be enumerated. `unknown` on them goes straight to manual-review.
-- **(d) Limit.** At most 2 unknown facts are enumerated together, which is at most 9 branches with yes/no/choice facts. With more, the result goes straight to manual-review.
+- **(d) Limit.** At most 2 unknown facts are enumerated together. With more, the result goes straight to manual-review. Since J1b-8 the largest product is `gameEndEvent` (7 values) × `subtype` (4 enumerated values) = 28 branches. Each branch is a pure tree evaluation; the mate search is not re-run (only a stored line is re-verified), so this stays cheap.
 - **(e) Parsing.** `parseBoolean` in `follow-up.ts` turns `"unknown"` into `undefined` today, which would loop on `needs-input`. It must return an explicit `unknown` value, and `applyIncidentAnswers` must keep it.
 
 **Implementation (J1b-2, 2026-10-08).** These details were decided while implementing; they refine the rules above.
@@ -195,9 +195,9 @@ When a DT meets `unknown` on a fact it needs, it applies `resolveUnknown` (a new
   - If the tree asks for unknown facts **and** other unanswered questions, only the other questions are asked first.
   - If it asks only for unknown facts, they are enumerated. A branch that asks only for **other unknown** facts adds them to the enumeration (still at most 2). Any other `needs-input` branch, or a branch outside the trees, disagrees (rule a).
   - **Exception to rule a.** If **every** branch asks for the same unanswered questions, and none of them is unknown, those questions are asked. Example: a second offence with the subtype unknown still asks for mate possibility, because every subtype needs it. This is not a recursion: the arbiter answers, and the enumeration runs again.
-- **Facts that cannot be enumerated** (`onUnknown: "manual-review"`, today only `materialConfirmed`) go to manual-review as soon as the tree asks for them, before any other question. Otherwise the tree would keep re-asking the other questions.
+- **Facts that cannot be enumerated** (`onUnknown: "manual-review"`) go to manual-review as soon as the tree asks for them, before any other question. Otherwise the tree would keep re-asking the other questions. Since J1b-4 there are none: `materialConfirmed` was removed with the count input.
 - **Which questions offer the generic `unknown`.** Every incident-scope choice question, with `onUnknown: "enumerate"`, except:
-  - the questions that already have their own tree-specific unknown value (`opponentCanCheckmate`, `bothFlagsOrder`, `movesNotCompleted`, `positionBlocked`, the repetition, fivefold and 75-move checks). Their trees keep their own manual-review paths, with specific wording;
+  - the questions that already have their own tree-specific unknown value (`matePosition` "局面を入力できない", `bothFlagsOrder`, `movesNotCompleted`, the repetition, fivefold and 75-move checks). Their trees keep their own manual-review paths, with specific wording;
   - count and text inputs. Count inputs (material) are removed with ADR-014 §5. Text inputs are optional, and empty means unknown;
   - game-context questions (competition type, regime), which come from the tournament profile.
 - **When branches agree.** The decision keeps the shared kind, intervention and penalties. The confidence is at most `medium`. Actions that every branch shares come first. Actions that only some branches have are kept with their condition, for example "［どの違反ですか？ →「昇格の駒を置かずに時計を押した」 の場合］…". So no step is lost. If the conclusions differ, each branch's conclusion is listed.
@@ -216,13 +216,13 @@ These existing questions ask for a judgment. They are reworded, or replaced by a
 | Question                                               | Today                                               | Change                                                                                                                                                                                                                                                                              |
 | ------------------------------------------------------ | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `opponentCanCheckmate`                                 | "相手はチェックメイトできますか" (judgment)         | Removed. `assessMatePossibility(position)` decides it (§3.7). Counts alone never give "can-mate".                                                                                                                                                                                   |
-| `gameEnded`                                            | "対局はすでに終了していますか"                      | Derived from `game.end-event` (the observed event that ended the game). `game.record-state` is a separate fact. A handshake alone never ends the game.                                                                                                                              |
-| `gameEndedBeforeFlag`                                  | "フラッグの前に対局は終了していましたか"            | The new fact `ct.ended-before-flag`: "**before the flag was established** (noticed by the arbiter or validly claimed), was there an event that ended the game?". Under 6.8 / 5.1.1, a checkmate made after the display reached 0, but before the flag is established, still stands. |
+| `gameEnded`                                            | "対局はすでに終了していますか"                      | Done in J1b-8: question `gameEndEvent` = `game.end-event` (the observed event that ended the game); `gameEnded` is derived in code. `game.record-state` is a separate, optional record (§3.9). A handshake alone never ends the game.                                              |
+| `gameEndedBeforeFlag`                                  | "フラッグの前に対局は終了していましたか"            | Done in J1b-8: question `endedBeforeFlag` = `ct.ended-before-flag`: "**before the flag was established** (noticed by the arbiter or validly claimed), was there an event that ended the game?". Under 6.8 / 5.1.1, a checkmate made after the display reached 0, but before the flag is established, still stands. |
 | `repetitionCheck`, `fivefoldCheck`, `seventyFiveCheck` | "成立していますか" (met / not-met / unknown / auto) | Computed from `game.history` (§3.5). Without a valid history: `dr.manual-reconstruction`, the arbiter's result of replaying on the board. Free text is never used.                                                                                                                  |
-| `claimantHasMove`                                      | "手番ですか"                                        | Derived from `game.history` (side to move), otherwise from `dr.last-mover`. **Never from the clock.**                                                                                                                                                                               |
+| `claimantHasMove`                                      | "手番ですか"                                        | Derived from `game.history` (side to move), otherwise from `dr.last-mover`. **Never from the clock.** Done in J1b-5: question `lastMover` (§3.5).                                                                                                                                                                               |
 | `positionBlocked`                                      | "閉塞局面の可能性" (judgment)                       | Removed. It is part of `assessMatePossibility` (§3.7).                                                                                                                                                                                                                              |
 | `touchedPiece`                                         | the wording mentions intent                         | "クレームの前に、動かす・取る意思で盤上の駒に触れましたか（駒を整える目的・偶然を除く）" (`dr.piece-touched`).                                                                                                                                                                      |
-| `lastMoveCheckmate`                                    | "最後の手はチェックメイトでしたか" (judgment)       | Removed. Computed from `game.history` with chess.js (DT-006).                                                                                                                                                                                                                       |
+| `lastMoveCheckmate`                                    | "最後の手はチェックメイトでしたか" (judgment)       | Removed. Computed from `game.history` with chess.js (DT-006). Without a history: the 75-move result `met-checkmate` (J1b-5).                                                                                                                                                                                                             |
 
 ### 3.5 Local game history (`game.history`)
 
@@ -255,7 +255,7 @@ See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §4.
   - Over-disambiguation (`Ngf3`), coordinates (`e2e4`), `0-0` and ambiguous SAN are rejected, with a hint.
   - Wrong check suffixes (`Rh8#` for a check) are accepted by chess.js. They do not change which move is meant.
 - **`analyzeRepetition(port, validated, intendedMove?)`** takes only a validated history. Its result has `complete` and the `history` summary. `format` and `detectPositionsFormat` are removed.
-- **DT-005 (until the J1b-5 restructure):**
+- **DT-005 (J1b-3; restructured in J1b-5, see "Implementation (J1b-5)" below):**
   - With `conditionCheck = auto` and a valid history, the tree first asks `historyConfirmed`. The final position summary is shown in the conclusion. The options are:
     - `match`: position and move count agree;
     - `position-only`: the position agrees, but the move count cannot be checked;
@@ -273,11 +273,51 @@ See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §4.
   - When an unknown answer leads every branch to the same follow-up question with the same conclusion, `resolveUnknown`'s `ask-others` keeps that conclusion. This way the confirmation never appears without the position it refers to.
 - The source `Game.pgn` is not wired yet. No UI sets it. Today the history comes from the pasted text (`positionsText`).
 
+**Implementation (J1b-5).** ADR-014 §1 (draw trees) and §2 (side to move). See `docs/progress/milestones/j1b-5-draw-trees.md`.
+
+- **Subtypes.** `DrawSubtype` = the `dr.kind` values: `threefold-repetition-claim`, `fifty-move-claim`, `fivefold-repetition`, `75-move-rule`, `agreement`, `stalemate`, `dead-position`, `other`. `dr.kind` maps to `drawSubtype` one to one. `agreement`, `stalemate`, `dead-position` and `other` have no tree: the engine asks for a situation note and they follow the non-DT path.
+- **DT-005 Draw Claim** (`dt-005-draw-claim.ts`, `DrawClaimTree`). The persisted id stays `DT-005-repetition`. The claim basis comes from the subtype (`drawClaimBasisOf`):
+  - threefold: `repetitionCheck`; automatic: the target position occurs at least 3 times;
+  - fifty-move: `fiftyMoveCheck` (new); automatic: the target position's halfmove clock is at least 100 plies (`FIFTY_MOVES_PLIES`). The target is the final position (9.3.2), or the position after the written move (9.3.1). 51 moves and more are also a correct claim (JCF p.67);
+  - shared: claimant, side to move, claim timing, 9.2.1/9.3.1 written move ("Make your claim legal"), 9.4 touched piece, the history confirmation, correct → draw (9.5.2), incorrect → 9.5.3 (time to the opponent by competition type and tournament override), unknown → CA;
+  - when the automatic check also finds 5 occurrences or 150 plies, the decision notes a possible 9.6 draw and recommends escalation.
+- **Side to move (ADR-014 §2).** `claimantHasMove` ("手番（自分の時計が動いている）") is removed. The new question `lastMover` (`dr.last-mover`: who last moved on the board) gives the side to move.
+  - It is asked in the first round, unless an automatic check with a valid history is already pending. Then the history is confirmed first, and the 9.4 and 9.x.1 rulings wait until the side to move is known.
+  - With a history confirmed against the board (`match` or `position-only`) and no `lastMover`, the history's side to move is used (the claimant not to move → "not your move", confidence medium).
+  - If `lastMover` and the history disagree, the history is not used: the tree asks the manual check again and re-asks `lastMover`, so the arbiter can correct either.
+  - `lastMover` unknown → `resolveUnknown` enumerates white/black; the branches disagree (not your move vs. a claim to check), so the result is manual-review. The clock is never used.
+- **DT-006 Automatic Draw** (`dt-006-automatic-draw.ts`, `AutomaticDrawTree`, id `DT-006-automatic-draw`). Fivefold (9.6.1) and 75 moves (9.6.2), moved unchanged from the old DT-005, with no claimant questions.
+  - `lastMoveCheckmate` is removed as a question. With a history, checkmate precedence comes from `seventyFiveReachedWithCheckmate`. Without one, the manual result `seventyFiveCheck` has the option `met-checkmate` ("75手に達した手でチェックメイトになった"); `met` now means "75 moves, not checkmate", and the answer records it as `lastMoveCheckmate: false`.
+  - `met-checkmate` is a DT-only value (`ConditionCheck`). It is accepted only for `seventyFiveCheck`, and the other trees treat it as unanswered. The catalogue fact `dr.manual-reconstruction` has no matching value yet (open point for J1c).
+  - **Legacy incidents.** On the manual path, `met` is a draw only with `lastMoveCheckmate: false`. A stored `met` with the old `lastMoveCheckmate: true` still gives checkmate precedence. A stored `met` without it (unanswered, or the old "わからない" in `unknownAnswers`) never becomes a draw: DT-006 asks `seventyFiveCheck` again, and the new answer removes the stale `lastMoveCheckmate` unknown. A stored `claimantHasMove` is ignored, so the tree asks `lastMover`. Old decisions under `DT-005-repetition` for fivefold or 75 moves stay as they are.
+- **Changing the draw kind** (`drawSubtype`) clears `conditionCheck`, `historyConfirmed` and `lastMoveCheckmate`, because a check result means different things for each kind. The history text and the claim answers are kept. This runs before the answers are applied, so it does not depend on their order.
+- **Citations added:** FIDE 9.3 and 11.12 (Laws 2023, Arbiters' Manual 2025 pp. 33 and 37), JCF NA p.67 "前提: 自分の手番であること" and "…50手ルールは51手目以降でも主張可能".
+
 ### 3.6 Time control periods (FIDE 8.4)
 
 - `TimeControl.periods` comes from the Tournament Profile.
 - The current period is derived from the move number: from `game.history`, or the fact `ss.move-number`.
 - The current increment decides whether 8.4 applies. The remaining time is compared with the 5-minute limit in code.
+
+**Implementation (J1b-7, 2026-10-08):**
+
+- **Type:** `TimeControl = { periods: { moves?, minutes, incrementSeconds }[], delaySeconds?, periodsIncomplete?, additionalTimeAfterMove? (deprecated) }`. Only the last period has no `moves`. At most 5 periods.
+- **Service** `lib/domain/services/time-control.ts` (pure):
+  - `validateTimeControl`, `buildTimeControl`, `normalizeTimeControl` (legacy → current, used by Dexie v8 and at every read);
+  - `currentPeriod(tc, moveNumber)`: move N belongs to period k while N ≤ the sum of the earlier periods' moves (move 40 is still period 1 of "40 moves / 90 min"); a single period needs no move number;
+  - `deriveTimeControlFacts` → `ss.current-period`, `ss.increment`, `ct.last-period` for `FactContext.derivedValues`;
+  - `assessRecordingObligation` (8.4, three-valued: exempt / required / unknown, plus not-assessed outside Standard).
+- **8.4 decisions:**
+  - exactly 5:00 is not "less than five minutes";
+  - an increment of exactly 30 s means recording is required;
+  - "below five in the period" keeps the exemption after the clock goes back above 5:00;
+  - **a delay never confirms the exemption** (8.4 speaks only of added time): the result is unknown with `delayTreatment`.
+- **Legacy data (review M1):** the old form had no field for a second period, so "40/90 → 30" events were stored as "90+30". **Every legacy value is `periodsIncomplete`** until the arbiter confirms the periods in the profile form. Until then `lastPeriod` is asked.
+- **DT-004 `lastPeriod`:** an explicit answer wins. The setting is used only when the question is unanswered or answered "unknown", and only for a confirmed single period. Multi-period controls still ask, because the move number is not wired into the flag-fall flow.
+- **Snapshot:** `RulesetSnapshot.timeControl` (normalized copy). Older snapshots have none, so they ask.
+- **Not wired yet (J1c/J2):**
+  - `deriveTimeControlFacts` with a move number from `game.history` or `ss.move-number`;
+  - `assessRecordingObligation` (the scoresheet category has no tree; it will feed the fact plan / reasoning request).
 
 ### 3.7 Mate possibility (FIDE 6.9)
 
@@ -288,12 +328,64 @@ See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §5.
 - Everything else is "unknown", which means "局面を確認／CAへ確認".
 - Generic insufficient-material detection is never used in place of 6.9.
 
+**Implementation (J1b-4).** See [ADR-015](../decisions/ADR-015-local-helpmate-search.md) and `docs/progress/milestones/j1b-4-mate-possibility.md`.
+
+- **Questions.** `matePosition` ("局面（FEN）を入力して判定する" / "局面を入力できない（CAへ確認）" = tree-specific `unknown`), then the FEN, shown only after "入力して判定する":
+  - DT-001…003 (7.5.5, second offence): `reinstatedFen` → `IllegalMoveFacts.positionFen`, the position **before** the illegal move. Its side to move must be the offender.
+  - DT-004: `positionFen` → `FlagFallFacts.fen`, the position when the flag is established. Asked in the same round as `movesNotCompleted` (only when "not completed").
+  - Removed: `opponentCanCheckmate`, the 12 material counts, `materialConfirmed`, `positionBlocked`.
+- **Who mates.** `matePositionRequest(incident)`: 7.5.5 → the offender's opponent (`incident.playerColor` is the offender); flag fall → the opponent of the flagged side (with both flags, the first one).
+- **Domain** `assessMatePossibility(port, request, incident.mateSearch)` (pure):
+  - invalid FEN, the side not to move in check, or the wrong side to move → `unknown` with a cause; the tree asks the FEN again with the reason;
+  - `materialCannotMate` (the three provable cases) → `cannot-mate`;
+  - a stored line that replays legally (strict) to the defender's checkmate, without reaching 150 halfmoves before the last move → `can-mate`, with the numbered line ("52... Kh8 53. Qg7#") in the conclusion;
+  - otherwise `unknown` (`not-searched`, `not-found`, `evidence-invalid`) → "局面を確認し、CAへ確認".
+- **Search.** The store runs the Web Worker search (`mateSearchNeeded`) before evaluation and saves the record on the incident. A record for another FEN or attacker is ignored. The trees only receive the verified `MatePossibility`.
+- **UI.** `isQuestionVisible(q, answers, round)` hides a question whose condition question is itself hidden, so a stale "FEN を入力する" answer never leaves a required FEN field after "規定手数は完了していた" is chosen.
+
 ### 3.8 Touch move and counting
 
 See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §6.
 
 - DT-007 decides only which piece must be moved or captured. It applies no automatic penalty.
 - `IncidentCounter` counts only Article 7.5 illegal moves (not the subtype `touch-move`). Touch-move counts are kept separately and never added to them.
+
+**Implementation (J1b-6, 2026-10-08).** See `docs/progress/milestones/j1b-6-touch-move.md`.
+
+- **Routing.** `illegal-move` with `subtype = "touch-move"` goes to DT-007 (`DT-007-touch-move`) before DT-001/002/003, in every competition type. The ruleset must still be explicit. The subtype comes from the quick report "タッチムーブ（触れた駒）" or from the 7.5 `subtype` question, which now has the option 「触れた駒の規則（タッチムーブ）」. That option has `enumerate: false`: an unknown 7.5 type is never enumerated as touch move.
+- **Facts.** `Incident.touchMoveFacts` (`TouchMoveFacts`), separate from `IllegalMoveFacts`. The toucher is `Incident.playerColor` (question `touchPlayer`).
+- **Questions → facts.** `touchPlayer` (`tch.player`), `touchHow` (`tch.how`), `touchAdjustDeclared`, `touchOnMove`, `touchClaimedByOpponent`, `touchClaimTiming` (`tch.claim-timing`: the claim came before the claimant touched a piece), `touchWhatNext`, `touchReleased`, `touchPromotion` (`tch.special`, promotion values only), `touchedPieces` (🔒 `tch.touched`), `touchFen` (🔒 `game.position`, optional).
+- **Order of the tree.**
+  1. No obligation: `brushed` (4.2.2); not on move (4.3 applies only to the player having the move; 4.2.1 adjusting only on move); adjusting declared on move (4.2.1, confidence medium, because "displaced pieces only" is not asked).
+  2. 4.8: asked **only when the arbiter did not observe** the touch. A claim made after the claimant touched a piece is forfeited → no intervention.
+  3. Touched piece moved: not released and no promotion piece placed → not final, no violation. Otherwise the move (4.7) or the promotion piece (4.4.4) is final, and `touchChangedAfter` (`tch.changed-after`, added in J1b-6) decides: changed afterwards → restore it, recorded as a violation; not changed → no violation.
+  - When the arbiter did not observe the touch and it was not the opponent's claim (for example a spectator's report, 12.7), the tree adds "両プレーヤーから事実を確認してから対応する" and lowers the confidence to medium.
+  4. Not moved yet / moved another piece → the obligation from `touchObligation` (`lib/domain/services/touch-move.ts`).
+- **Obligation.** From the ordered touched pieces:
+  - own only → first that can move (4.3.1); opponent only → first that can be captured, en passant included (4.3.2); both → first own captures first opponent, else the first touched piece that can move or be captured (4.3.3); none → any legal move (4.5);
+  - castling applies only when the **first two** own pieces touched are the king and a rook on its castling square (a1/h1, a8/h8), and no opponent piece was touched: king first → castle on that side, else a legal king move incl. the other side, else any legal move (4.4.1 / 4.4.3); rook first → no castling on that side, 4.3.1 in touched order (4.4.2). Every other combination (another piece touched first, a rook off its castling square) is plain 4.3.1 in touched order;
+  - **with a FEN** (side to move = the toucher) the port's `legalMoves` decides and the allowed SAN moves are shown (confidence high); **without** it, the piece letters are required and the tree lists the steps to check on the board (confidence medium).
+- **Competition types.** Article 4 is applied the same way in Standard, Rapid and Blitz, including A.5 / B.3 games; the tree does not read the competition type (only the explicit ruleset is required). Whether a federation treats touch move differently in inadequately supervised games is not covered by the sources.
+- **Unknown answers.** `touchAdjustDeclared` has no display condition, so it can be answered when `touchHow` is unknown. `touchClaimedByOpponent` unknown still makes the branch needing `touchClaimTiming` disagree (manual review), as in J1b-2; likewise `touchReleased` unknown, whose "released" branch needs `touchChangedAfter`.
+- **Result.** No penalty is ever set. "Moved another piece" and "changed the final move / promotion piece" set `Decision.touchMoveViolation = true` (an agreed unknown resolution keeps it only when every branch is a violation), lists the discretionary options (12.9; JCF p.20 practice: warning, time to the opponent if the clock was pressed) and the separate count ("今回を含めて n 回", from `IncidentCounter.touchMoveViolationsByColor`), with the JCF note that some tournaments forfeit on the third violation.
+- **Catalogue changes.** `tch.touched` is conditional (asked by DT-007 for not-moved / moved-other), and `tch.claimed-by-opponent` is conditional (asked by DT-007 when the arbiter did not observe). `tch.special` maps to `touchPromotion`; its castling values are computed from `tch.touched`. `im.action` no longer marks `touch-move` as unhandled: the `subtype` question offers it.
+
+### 3.9 Game end (ADR-014 §3)
+
+**Implementation (J1b-8, 2026-10-08).**
+
+- **Questions.** The yes/no questions `gameEnded` and `gameEndedBeforeFlag` are removed.
+  - `gameEndEvent` (DT-001…003): in progress, checkmate, resignation, stalemate, draw agreement, confirmed time-out, other, plus the generic unknown (enumerated).
+  - `endedBeforeFlag` (DT-004): none, checkmate, resignation, draw agreement, stalemate, other, plus the generic unknown (enumerated).
+  - Neither offers a handshake. The help says that a handshake alone does not end the game; if the end cannot be confirmed, the arbiter answers unknown, and the branches (result stands vs. penalty / loss) differ, so the result is manual review.
+- **Derivation.** `lib/domain/services/game-end.ts`: `gameEndedFromEvent` (anything but in progress) and `endedBeforeFlagFromEvent` (anything but none). The trees read only the events (`IllegalMoveFacts.endEvent`, `FlagFallFacts.endedBeforeFlag`).
+- **Decision text.** The "result stands" decision names the event. "Other" gives confidence medium and the action "check what ended the game; if unclear, consult the CA".
+- **Record state.** `gameRecordState` (`game.record-state`) is an **optional** question in the same round, shown only when the event is not "in progress". It is stored as `IllegalMoveFacts.recordState`, adds "check the signatures" to the "result stands" decision when both signatures are not confirmed, and never changes the ruling. Its "unknown" is not stored. In the catalogue it keeps no DT mapping (required only by its `appliesWhen`, §3.1).
+- **Legacy data.** Stored booleans (`illegalMoveFacts.gameEnded`, `flagFallFacts.gameEndedBeforeFlag`) are `@deprecated`. The engine strips them, so the trees ask the event again: an old "yes" may have come from a handshake. Answering the new question deletes the legacy value and a legacy unknown entry.
+- **Illegal mating moves (FIDE 5.1.1 / 5.2.1).** Checkmate and stalemate end the game only when the move that produced the position was legal. Both help texts say so, and a "result stands" decision for checkmate or stalemate (DT-001…004) adds the check "was that move legal?", cites 5.1.1 / 5.2.1 and has confidence medium.
+- **Legacy "no" answers.** A stored `gameEnded: false` is also asked again, on purpose: it is simpler and costs one tap, and it keeps a single rule (the trees read only the events).
+- **Required facts.** `game.record-state` stays `conditional` in the catalogue (required once an end event other than "in progress" is answered), as the catalogue review decided, while the DT question is optional. J1c must treat it as a record fact: it can appear in the missing-facts list, but it never blocks a ruling.
+- **Unknown answers.** When a question's `showWhen` parent was answered unknown, `resolveUnknown` no longer returns it among the other questions (the UI would hide it anyway).
 
 ## 4. Presence check with Jev (R1, R2, R3)
 

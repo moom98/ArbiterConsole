@@ -42,7 +42,10 @@ vi.mock("@/lib/infrastructure/ai", async () => {
       calls.push(options);
       return actual.hybridSearch(query, options, {
         loadCorpus: async () => corpus,
-        vector: async (_q: string, candidates: readonly Rule[]) =>
+        vector: async (
+          _q: () => Promise<number[]>,
+          candidates: readonly Rule[]
+        ) =>
           candidates.map((r) => ({
             ruleId: r.id,
             score: r.id === "fide" ? 0.95 : 0.6,
@@ -51,6 +54,8 @@ vi.mock("@/lib/infrastructure/ai", async () => {
           candidates.map((r) => ({ ruleId: r.id, score: 5 })),
       });
     },
+    // 意味検索用データなし: 検索語を送る確認は出ない（キーワード検索のみ）
+    hasSemanticSearchData: async () => false,
   };
 });
 

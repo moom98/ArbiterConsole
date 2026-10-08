@@ -12,56 +12,78 @@ import type {
   IllegalMoveDetection,
   IllegalMoveFacts,
   IllegalMoveSubtype,
+  MatePositionInput,
   PlayerColor,
   RepetitionClaimMode,
-  SideMaterial,
   SupervisionRegime,
+  TouchHow,
+  TouchMoveFacts,
+  TouchPromotion,
+  TouchWhatNext,
 } from "@/lib/domain/entities";
+import { TOUCH_MOVE_SUBTYPE } from "@/lib/domain/entities";
+import {
+  ENDED_BEFORE_FLAG_LABELS,
+  ENDED_BEFORE_FLAG_VALUES,
+  GAME_END_EVENT_LABELS,
+  GAME_END_EVENTS,
+  GAME_RECORD_STATE_LABELS,
+  GAME_RECORD_STATES,
+} from "@/lib/domain/services/game-end";
 
 /**
  * 追加確認質問（要件 §12）。
  * 質問の定義（ID・ラベル・選択肢・入力形式）はドメインが持ち、UIは表示と回答の収集のみを行う。
  */
 
-/** 駒数の質問 ID（例: "whiteQueens", "blackLightBishops"） */
-export type MaterialQuestionId =
-  `${PlayerColor}${Capitalize<keyof SideMaterial>}`;
-
 export type IncidentQuestionId =
   // 違法手（DT-001 / DT-002 / DT-003）
   | "playerColor"
   | "subtype"
-  | "gameEnded"
+  | "gameEndEvent"
+  | "gameRecordState"
   | "clockPressed"
-  | "opponentCanCheckmate"
   | "opponentMadeNextMove"
   | "detectedBy"
+  | "reinstatedFen"
   // 時計・時間（DT-004）
   | "clockTimeSubtype"
   | "flagFallen"
   | "bothFlagsOrder"
   | "quickplayGuidelinesApply"
   | "lastPeriod"
-  | "gameEndedBeforeFlag"
+  | "endedBeforeFlag"
   | "movesNotCompleted"
-  | MaterialQuestionId
-  | "materialConfirmed"
   | "positionFen"
-  | "positionBlocked"
-  // ドロー（DT-005）
+  // メイト可能性の局面（DT-001〜004。ADR-014 §5）
+  | "matePosition"
+  // ドロー（DT-005 Draw Claim / DT-006 Automatic Draw）
   | "drawSubtype"
   | "claimant"
-  | "claimantHasMove"
+  | "lastMover"
   | "claimMode"
   | "moveWritten"
   | "touchedPiece"
   | "repetitionCheck"
+  | "fiftyMoveCheck"
   | "fivefoldCheck"
   | "seventyFiveCheck"
-  | "lastMoveCheckmate"
   | "positionsText"
   | "historyConfirmed"
   | "intendedMove"
+  // 触れた駒の規則（DT-007。ADR-014 §6）
+  | "touchPlayer"
+  | "touchHow"
+  | "touchAdjustDeclared"
+  | "touchOnMove"
+  | "touchClaimedByOpponent"
+  | "touchClaimTiming"
+  | "touchWhatNext"
+  | "touchReleased"
+  | "touchChangedAfter"
+  | "touchPromotion"
+  | "touchedPieces"
+  | "touchFen"
   // 手動確認（決定木の対象外）
   | "situationNote";
 
@@ -72,6 +94,12 @@ export type FollowUpQuestionId = IncidentQuestionId | GameContextQuestionId;
 export interface FollowUpOption {
   value: string;
   label: string;
+  /**
+   * false の場合、unknown の回答で列挙しない（resolveUnknown。fact-model §3.3）。
+   * 例: 違法手の種類の「触れた駒の規則」は別の決定木へ移る選択肢で、7.5 の種類が
+   * 分からないことは、触れた駒の規則の可能性を意味しない
+   */
+  enumerate?: false;
 }
 
 /**
@@ -127,17 +155,26 @@ export const UNKNOWN_OPTION: FollowUpOption = {
 
 /** unknown のときに列挙する値（共通の unknown 以外の選択肢） */
 export function enumerableValues(q: FollowUpQuestion): string[] {
-  return q.options.map((o) => o.value).filter((v) => v !== UNKNOWN_VALUE);
+  return q.options
+    .filter((o) => o.value !== UNKNOWN_VALUE && o.enumerate !== false)
+    .map((o) => o.value);
 }
 
 /** showWhen の条件を満たすか（UI 用の純粋関数） */
 export function isQuestionVisible(
   q: FollowUpQuestion,
-  answers: Record<string, string>
+  answers: Record<string, string>,
+  /**
+   * 同じラウンドの質問。指定すると、条件の質問自体が非表示なら（以前の回答が残っていても）
+   * この質問も非表示にする（例: 局面の入力方法が隠れたら FEN 欄も隠す）
+   */
+  round?: FollowUpQuestion[]
 ): boolean {
   if (!q.showWhen) return true;
   const a = answers[q.showWhen.questionId];
-  return a !== undefined && q.showWhen.values.includes(a);
+  if (a === undefined || !q.showWhen.values.includes(a)) return false;
+  const parent = round?.find((p) => p.id === q.showWhen?.questionId);
+  return parent ? isQuestionVisible(parent, answers, round) : true;
 }
 
 const YES_NO: FollowUpOption[] = [
@@ -157,6 +194,9 @@ export const SUBTYPE_LABELS: Record<IllegalMoveSubtype, string> = {
   "two-hands": "両手で指した",
 };
 
+/** 違法手カテゴリの subtype の質問の選択肢（7.5 の違法手に加えて、触れた駒の規則） */
+export const TOUCH_MOVE_LABEL = "触れた駒の規則（タッチムーブ）";
+
 export const CLOCK_TIME_SUBTYPE_LABELS: Record<ClockTimeSubtype, string> = {
   "flag-fall": "フラッグが落ちた（時間切れ）",
   other: "その他の時計トラブル",
@@ -164,67 +204,14 @@ export const CLOCK_TIME_SUBTYPE_LABELS: Record<ClockTimeSubtype, string> = {
 
 export const DRAW_SUBTYPE_LABELS: Record<DrawSubtype, string> = {
   "threefold-repetition-claim": "三回同一局面のクレーム（9.2）",
+  "fifty-move-claim": "50手ルールのクレーム（9.3）",
   "fivefold-repetition": "五回同一局面（9.6.1）",
   "75-move-rule": "75手ルール（9.6.2）",
-  other: "その他（合意・50手ルール等）",
+  agreement: "ドローの合意",
+  stalemate: "ステイルメイト",
+  "dead-position": "これ以上メイトできない局面",
+  other: "その他",
 };
-
-const PIECE_LABELS: Record<keyof SideMaterial, string> = {
-  queens: "クイーン",
-  rooks: "ルーク",
-  lightBishops: "白マスのビショップ",
-  darkBishops: "黒マスのビショップ",
-  knights: "ナイト",
-  pawns: "ポーン",
-};
-
-/** 駒数入力の上限（昇格を含めて理論上ありうる最大値） */
-const PIECE_MAX: Record<keyof SideMaterial, number> = {
-  queens: 9,
-  rooks: 10,
-  lightBishops: 9,
-  darkBishops: 9,
-  knights: 10,
-  pawns: 8,
-};
-
-export const MATERIAL_KEYS: readonly (keyof SideMaterial)[] = [
-  "queens",
-  "rooks",
-  "lightBishops",
-  "darkBishops",
-  "knights",
-  "pawns",
-];
-
-export function materialQuestionId(
-  color: PlayerColor,
-  piece: keyof SideMaterial
-): MaterialQuestionId {
-  return `${color}${piece.charAt(0).toUpperCase()}${piece.slice(1)}` as MaterialQuestionId;
-}
-
-function materialQuestions(): Record<MaterialQuestionId, FollowUpQuestion> {
-  const out = {} as Record<MaterialQuestionId, FollowUpQuestion>;
-  for (const color of ["white", "black"] as const) {
-    for (const piece of MATERIAL_KEYS) {
-      const id = materialQuestionId(color, piece);
-      out[id] = {
-        id,
-        scope: "incident",
-        label: PIECE_LABELS[piece],
-        input: "count",
-        min: 0,
-        max: PIECE_MAX[piece],
-        defaultValue: "0",
-        options: [],
-        group:
-          color === "white" ? "白の駒（キング以外）" : "黒の駒（キング以外）",
-      };
-    }
-  }
-  return out;
-}
 
 /** 共通の unknown を加える（fact-model §3.3: すべての DT 質問に unknown） */
 function withUnknown(
@@ -250,17 +237,45 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     id: "subtype",
     scope: "incident",
     label: "どの違反ですか？",
-    help: "1つの手の中で複数該当する場合（例: 両手による違法キャスリング）は主なものを1つ選んでください。1回として数えます。",
-    options: (Object.keys(SUBTYPE_LABELS) as IllegalMoveSubtype[]).map(
-      (value) => ({ value, label: SUBTYPE_LABELS[value] })
-    ),
+    help: "1つの手の中で複数該当する場合（例: 両手による違法キャスリング）は主なものを1つ選んでください。1回として数えます。触れた駒の規則（タッチムーブ）は違法手の回数に数えません。",
+    options: [
+      ...(Object.keys(SUBTYPE_LABELS) as IllegalMoveSubtype[]).map((value) => ({
+        value,
+        label: SUBTYPE_LABELS[value],
+      })),
+      // 「わからない」は 7.5 の種類が分からないこと（触れた駒の規則は列挙しない）
+      { value: TOUCH_MOVE_SUBTYPE, label: TOUCH_MOVE_LABEL, enumerate: false },
+    ],
   },
-  gameEnded: {
-    id: "gameEnded",
+  gameEndEvent: {
+    id: "gameEndEvent",
     scope: "incident",
-    label: "対局はすでに終了していますか？",
-    help: "棋譜に署名済み、またはその他の方法で対局終了が明らかな場合は「はい」",
-    options: YES_NO,
+    label:
+      "違法手に気づいた時点で、対局を終わらせた出来事はありましたか？（観察したもの）",
+    help: "違法な手によるチェックメイト・ステイルメイトでは対局は終了しません（5.1.1 / 5.2.1）。その場合は「まだ対局中」です。握手だけでは対局の終了として扱いません。終了を確認できない場合は「わからない・確認できない」。",
+    options: GAME_END_EVENTS.map((value) => ({
+      value,
+      label: GAME_END_EVENT_LABELS[value],
+    })),
+  },
+  gameRecordState: {
+    id: "gameRecordState",
+    scope: "incident",
+    label: "（任意・記録用）結果の記入・署名の状態",
+    help: "判断には影響しません。記録と、署名の確認に使います。",
+    optional: true,
+    // 「わからない」は記録しない（未回答と同じ。判断には影響しない）
+    options: [
+      ...GAME_RECORD_STATES.map((value) => ({
+        value,
+        label: GAME_RECORD_STATE_LABELS[value],
+      })),
+      UNKNOWN_OPTION,
+    ],
+    showWhen: {
+      questionId: "gameEndEvent",
+      values: GAME_END_EVENTS.filter((v) => v !== "in-progress"),
+    },
   },
   clockPressed: {
     id: "clockPressed",
@@ -269,16 +284,24 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     help: "「手を指さずに時計を押した」の場合は「はい」",
     options: YES_NO,
   },
-  opponentCanCheckmate: {
-    id: "opponentCanCheckmate",
+  reinstatedFen: {
+    id: "reinstatedFen",
     scope: "incident",
-    label:
-      "相手は、あらゆる合法手の連続によって違反者のキングをチェックメイトできる局面ですか？",
-    help: "メイト不可能な場合はドロー（7.5.5 ただし書き）。判断できない場合は「わからない」を選ぶと、CA確認の判断支援になります。",
+    label: "違法手の直前に戻した局面の FEN（手番は違反者）",
+    help: "7.5.1〜7.5.4 により対局を再開する局面です（違法手を指した後の局面ではありません）。入力した局面は端末の外へ送りません。",
+    input: "text",
+    placeholder: "例: 6k1/5ppp/8/8/8/8/5PPP/3R2K1 b - - 0 30",
+    options: [],
+    showWhen: { questionId: "matePosition", values: ["fen"] },
+  },
+  matePosition: {
+    id: "matePosition",
+    scope: "incident",
+    label: "相手がメイト可能かを、局面から判定しますか？",
+    help: "局面（FEN）を入力すると、端末内でメイトまでの手順を探します。手順が見つかれば「メイト可能」、駒の構成上メイト不可能なら「メイト不可能」。それ以外はCAへ確認になります。",
     options: [
-      { value: "true", label: "メイト可能" },
-      { value: "false", label: "メイト不可能" },
-      { value: "unknown", label: "わからない（CAへ確認）" },
+      { value: "fen", label: "局面（FEN）を入力して判定する" },
+      { value: "unknown", label: "局面を入力できない（CAへ確認）" },
     ],
   },
   opponentMadeNextMove: {
@@ -341,13 +364,16 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     label: "残りの全ての手を指し切る最終ピリオドですか？",
     options: YES_NO,
   },
-  gameEndedBeforeFlag: {
-    id: "gameEndedBeforeFlag",
+  endedBeforeFlag: {
+    id: "endedBeforeFlag",
     scope: "incident",
     label:
-      "フラッグに気付く（主張される）前に、対局はすでに終了していましたか？",
-    help: "チェックメイト・ステイルメイト・投了・合意によるドロー・デッドポジション・五回同一局面・75手ルールなど",
-    options: YES_NO,
+      "フラッグが確定する前に（アービターが気付く、または有効な主張がされる前に）、対局を終わらせる出来事がありましたか？",
+    help: "表示が 0 になった後でも、フラッグの確定前のチェックメイトは有効です（6.8 / 5.1.1）。ただし、違法な手（第3条・4.2〜4.7 に反する手）によるチェックメイト・ステイルメイトでは対局は終了しません（5.1.1 / 5.2.1）。握手だけでは対局の終了として扱いません。",
+    options: ENDED_BEFORE_FLAG_VALUES.map((value) => ({
+      value,
+      label: ENDED_BEFORE_FLAG_LABELS[value],
+    })),
   },
   movesNotCompleted: {
     id: "movesNotCompleted",
@@ -361,33 +387,15 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
       { value: "unknown", label: "わからない（CAへ確認）" },
     ],
   },
-  ...materialQuestions(),
-  materialConfirmed: {
-    id: "materialConfirmed",
-    scope: "incident",
-    label: "盤上の駒数を上のとおり確認しましたか？",
-    help: "キング以外の駒を数えてください。FEN を入力した場合は FEN の駒が使われます。",
-    options: [{ value: "true", label: "確認した" }],
-  },
   positionFen: {
     id: "positionFen",
     scope: "incident",
-    label: "（任意）局面の FEN",
+    label: "フラッグ確定時の局面の FEN（正しい手番を含む）",
+    help: "入力した局面は端末の外へ送りません。",
     input: "text",
-    optional: true,
-    placeholder: "例: 8/8/8/4k3/8/8/4K3/7R w - - 0 1",
+    placeholder: "例: 8/8/8/4k3/8/8/4K3/7R b - - 0 60",
     options: [],
-  },
-  positionBlocked: {
-    id: "positionBlocked",
-    scope: "incident",
-    label:
-      "ポーンが固定され、駒が相手キングに到達できない「閉塞局面」の可能性はありますか？",
-    help: "盤上にポーンがあるため、駒数だけでは判定できません。",
-    options: [
-      { value: "false", label: "ない（通常の局面）" },
-      { value: "unknown", label: "ある／判断できない（CAへ確認）" },
-    ],
+    showWhen: { questionId: "matePosition", values: ["fen"] },
   },
 
   // ---- ドロー ----
@@ -405,11 +413,12 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     label: "クレームしたのはどちらのプレーヤーですか？",
     options: COLOR_OPTIONS,
   },
-  claimantHasMove: {
-    id: "claimantHasMove",
+  lastMover: {
+    id: "lastMover",
     scope: "incident",
-    label: "クレームしたプレーヤーの手番（自分の時計が動いている）ですか？",
-    options: YES_NO,
+    label: "クレームの直前に、盤上で最後に手を指したのはどちらですか？",
+    help: "手番は盤上の手から判断します（時計の状態からは判断しません）。クレームできるのは手番のプレーヤーだけです。",
+    options: COLOR_OPTIONS,
   },
   claimMode: {
     id: "claimMode",
@@ -418,11 +427,11 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     options: [
       {
         value: "just-appeared",
-        label: "相手の直前の手で3回目の局面が出現した（9.2.2）",
+        label: "相手の直前の手で条件が成立した（9.2.2 / 9.3.2）",
       },
       {
         value: "about-to-appear",
-        label: "自分の次の手で3回目の局面が出現する（9.2.1）",
+        label: "自分の次の手で条件が成立する（9.2.1 / 9.3.1）",
       },
     ],
   },
@@ -430,14 +439,15 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     id: "moveWritten",
     scope: "incident",
     label:
-      "クレームしたプレーヤーは、指す手を棋譜に記入し、その手を指す意思をアービターに宣言しましたか？",
+      "クレームしたプレーヤーは、指す手を棋譜に記入し、その手を指す意思をアービターに宣言しましたか？（盤上ではまだ指していない）",
     options: YES_NO,
   },
   touchedPiece: {
     id: "touchedPiece",
     scope: "incident",
     label:
-      "クレームの前に、クレームしたプレーヤーは動かす（取る）意図で駒に触れましたか？",
+      "クレームの前に、クレームしたプレーヤーはその手番で、動かす・取る意思で盤上の駒に触れましたか？",
+    help: "駒を整える目的の接触や、偶然の接触は含みません（9.4 / 4.3）。",
     options: YES_NO,
   },
   repetitionCheck: {
@@ -449,6 +459,19 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     options: [
       { value: "met", label: "3回以上を確認した" },
       { value: "not-met", label: "3回未満だった" },
+      { value: "unknown", label: "確認できない（CAへ）" },
+      CONDITION_AUTO,
+    ],
+  },
+  fiftyMoveCheck: {
+    id: "fiftyMoveCheck",
+    scope: "incident",
+    label:
+      "対局を再現して確認した結果、両プレーヤーとも直近50手以上を、ポーンの移動も駒取りもなく指していますか？",
+    help: "9.3.1（次の手で成立）の場合は、記入した手を含めて数えます。51手目以降でもクレームできます。",
+    options: [
+      { value: "met", label: "50手以上を確認した" },
+      { value: "not-met", label: "50手未満だった" },
       { value: "unknown", label: "確認できない（CAへ）" },
       CONDITION_AUTO,
     ],
@@ -470,18 +493,17 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     scope: "incident",
     label:
       "両プレーヤーとも、ポーンの移動も駒取りもなく75手以上を指したことを確認しましたか？",
+    help: "75手に達した手でチェックメイトになった場合は、チェックメイトが優先されます（9.6.2）。",
     options: [
-      { value: "met", label: "75手以上を確認した" },
+      { value: "met", label: "75手以上を確認した（チェックメイトではない）" },
+      {
+        value: "met-checkmate",
+        label: "75手に達した手でチェックメイトになった",
+      },
       { value: "not-met", label: "75手未満だった" },
       { value: "unknown", label: "確認できない（CAへ）" },
       CONDITION_AUTO,
     ],
-  },
-  lastMoveCheckmate: {
-    id: "lastMoveCheckmate",
-    scope: "incident",
-    label: "最後の手はチェックメイトでしたか？",
-    options: YES_NO,
   },
   positionsText: {
     id: "positionsText",
@@ -514,6 +536,128 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     optional: true,
     placeholder: "Nf3",
     options: [],
+  },
+
+  // ---- 触れた駒の規則（DT-007） ----
+  touchPlayer: {
+    id: "touchPlayer",
+    scope: "incident",
+    label: "駒に触れたのはどちらのプレーヤーですか？",
+    options: COLOR_OPTIONS,
+  },
+  touchHow: {
+    id: "touchHow",
+    scope: "incident",
+    label: "どのように触れましたか？",
+    help: "明らかに偶然の接触以外は、動かす・取る意思があったとみなします（4.2.2）。",
+    options: [
+      { value: "grasped", label: "指でつかんだ" },
+      { value: "lifted", label: "持ち上げた" },
+      { value: "pushed", label: "指で押した" },
+      { value: "brushed", label: "袖や手が当たった（明らかに偶然）" },
+    ],
+  },
+  touchAdjustDeclared: {
+    id: "touchAdjustDeclared",
+    scope: "incident",
+    label: "触れる前に「整えます（j'adoube）」などと言いましたか？",
+    // 偶然の接触以外では常に意味がある。touchHow が「わからない」でも質問できるよう、
+    // 表示条件を付けない（fact-model §3.3）
+    options: YES_NO,
+  },
+  touchOnMove: {
+    id: "touchOnMove",
+    scope: "incident",
+    label: "触れたのは、そのプレーヤーの手番のときでしたか？",
+    options: YES_NO,
+  },
+  touchClaimedByOpponent: {
+    id: "touchClaimedByOpponent",
+    scope: "incident",
+    label: "相手からの申し立てで始まりましたか？",
+    options: [
+      { value: "true", label: "はい（相手が申し立てた）" },
+      { value: "false", label: "いいえ（相手の申し立てではない）" },
+    ],
+  },
+  touchClaimTiming: {
+    id: "touchClaimTiming",
+    scope: "incident",
+    label:
+      "相手が申し立てたのは、相手自身が（動かす・取る意思で）駒に触れる前でしたか？",
+    help: "駒に触れた後の申し立てでは、4.1〜4.7 の違反を申し立てる権利を失っています（4.8）。",
+    options: YES_NO,
+    showWhen: { questionId: "touchClaimedByOpponent", values: ["true"] },
+  },
+  touchWhatNext: {
+    id: "touchWhatNext",
+    scope: "incident",
+    label: "触れた後、そのプレーヤーは何をしましたか？",
+    options: [
+      { value: "moved-touched", label: "触れた駒を動かした" },
+      { value: "moved-other", label: "触れた駒ではなく、別の駒を動かした" },
+      { value: "not-moved", label: "まだ指していない" },
+    ],
+  },
+  touchReleased: {
+    id: "touchReleased",
+    scope: "incident",
+    label: "動かした駒を、マスの上で手から離しましたか？",
+    options: YES_NO,
+    showWhen: { questionId: "touchWhatNext", values: ["moved-touched"] },
+  },
+  touchChangedAfter: {
+    id: "touchChangedAfter",
+    scope: "incident",
+    label:
+      "手を離した後（昇格では、選んだ駒が昇格のマスに触れた後）に、別のマスへ動かし直したり、別の駒に替えたりしましたか？",
+    options: YES_NO,
+    showWhen: { questionId: "touchReleased", values: ["true"] },
+  },
+  touchPromotion: {
+    id: "touchPromotion",
+    scope: "incident",
+    label: "昇格（プロモーション）の手でしたか？",
+    options: [
+      {
+        value: "promotion-placed",
+        label: "昇格：選んだ駒を昇格のマスに触れさせた",
+      },
+      {
+        value: "promotion-not-placed",
+        label: "昇格：まだ駒を昇格のマスに触れさせていない",
+      },
+      { value: "none", label: "昇格の手ではない" },
+    ],
+    showWhen: { questionId: "touchWhatNext", values: ["moved-touched"] },
+  },
+  touchedPieces: {
+    id: "touchedPieces",
+    scope: "incident",
+    label: "触れた駒とマス（触れた順に）",
+    help: "駒の記号（白は大文字・黒は小文字。K キング・Q クイーン・R ルーク・B ビショップ・N ナイト・P ポーン）とマスを、触れた順に書きます（例: Pe2 Qd1）。下に局面（FEN）を入力する場合は、マスだけでも構いません（例: e2 d1）。自分の駒と相手の駒のどちらを先に触れたか分からない場合は、自分の駒を先に書きます（4.3.3）。入力した内容は端末の外へ送りません。",
+    input: "text",
+    placeholder: "Pe2 Qd1",
+    options: [],
+    showWhen: {
+      questionId: "touchWhatNext",
+      values: ["moved-other", "not-moved"],
+    },
+  },
+  touchFen: {
+    id: "touchFen",
+    scope: "incident",
+    label: "（任意）触れた時点の局面の FEN（手番は触れたプレーヤー）",
+    help: "入力すると、触れた駒で指せる合法手を端末内で判定します。入力しない場合は盤上で確認してください。入力した局面は端末の外へ送りません。",
+    input: "text",
+    optional: true,
+    placeholder:
+      "例: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+    options: [],
+    showWhen: {
+      questionId: "touchWhatNext",
+      values: ["moved-other", "not-moved"],
+    },
   },
 
   // ---- 手動確認 ----
@@ -551,15 +695,15 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
 
 /**
  * 共通の unknown を持つ質問（fact-model §3.3）。
- * 独自の unknown 値を持つ質問（opponentCanCheckmate・bothFlagsOrder・movesNotCompleted・
- * positionBlocked・同一局面の確認・対局履歴の照合）は各 DT が独自の手動確認で扱うため含めない。
- * 駒数（count）・テキストは列挙できず、テキストは任意（空欄 = 不明）のため含めない。
+ * 独自の unknown 値を持つ質問（matePosition・bothFlagsOrder・movesNotCompleted・
+ * 同一局面の確認・対局履歴の照合）は各 DT が独自の手動確認で扱うため含めない。
+ * テキスト（FEN・棋譜）は列挙できないため含めない。
  * game-context（競技区分・規則）は大会プロファイルから与えるため含めない。
  */
 const ENUMERATED_UNKNOWN: readonly IncidentQuestionId[] = [
   "playerColor",
   "subtype",
-  "gameEnded",
+  "gameEndEvent",
   "clockPressed",
   "opponentMadeNextMove",
   "detectedBy",
@@ -567,19 +711,26 @@ const ENUMERATED_UNKNOWN: readonly IncidentQuestionId[] = [
   "flagFallen",
   "quickplayGuidelinesApply",
   "lastPeriod",
-  "gameEndedBeforeFlag",
+  "endedBeforeFlag",
   "drawSubtype",
   "claimant",
-  "claimantHasMove",
+  "lastMover",
   "claimMode",
   "moveWritten",
   "touchedPiece",
-  "lastMoveCheckmate",
+  "touchPlayer",
+  "touchHow",
+  "touchAdjustDeclared",
+  "touchOnMove",
+  "touchClaimedByOpponent",
+  "touchClaimTiming",
+  "touchWhatNext",
+  "touchReleased",
+  "touchChangedAfter",
+  "touchPromotion",
 ];
-const MANUAL_REVIEW_UNKNOWN: readonly IncidentQuestionId[] = [
-  // 「確認した」の1択。確認できなければ駒数が使えないため手動確認
-  "materialConfirmed",
-];
+/** 列挙できない質問（unknown なら手動確認）。現在はなし（駒数の確認は ADR-014 §5 で廃止） */
+const MANUAL_REVIEW_UNKNOWN: readonly IncidentQuestionId[] = [];
 
 export const QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
   ...BASE_QUESTIONS,
@@ -619,27 +770,34 @@ function isOneOf<T extends string>(
   return (allowed as readonly string[]).includes(value);
 }
 
-/** 駒数の回答を解釈する（範囲外・非整数は無視） */
-function parseCount(raw: string, max: number): number | undefined {
-  const trimmed = raw.trim();
-  if (!/^\d+$/.test(trimmed)) return undefined;
-  const n = Number(trimmed);
-  return n <= max ? n : undefined;
-}
-
-const MATERIAL_ID_MAP: Record<
-  string,
-  { color: PlayerColor; piece: keyof SideMaterial }
-> = Object.fromEntries(
-  (["white", "black"] as const).flatMap((color) =>
-    MATERIAL_KEYS.map((piece) => [
-      materialQuestionId(color, piece),
-      { color, piece },
-    ])
-  )
-);
-
 const CONDITION_CHECKS = ["met", "not-met", "unknown", "auto"] as const;
+/** 75手の確認だけが「75手に達した手でチェックメイト」を持つ（9.6.2） */
+const SEVENTY_FIVE_CHECKS = [...CONDITION_CHECKS, "met-checkmate"] as const;
+/** 盤上の手順の確認結果（auto を含む）を表す質問 */
+const CONDITION_CHECK_QUESTIONS = [
+  "repetitionCheck",
+  "fiftyMoveCheck",
+  "fivefoldCheck",
+  "seventyFiveCheck",
+] as const;
+
+/** 触れた駒の規則の質問 → TouchMoveFacts のキー（touchPlayer は Incident.playerColor） */
+const TOUCH_FACT_KEYS = {
+  touchHow: "how",
+  touchAdjustDeclared: "adjustDeclared",
+  touchOnMove: "onMove",
+  touchClaimedByOpponent: "claimedByOpponent",
+  touchClaimTiming: "claimBeforeOwnTouch",
+  touchWhatNext: "whatNext",
+  touchReleased: "released",
+  touchChangedAfter: "changedAfter",
+  touchPromotion: "promotion",
+  touchedPieces: "touchedText",
+  touchFen: "fen",
+} as const satisfies Partial<Record<IncidentQuestionId, keyof TouchMoveFacts>>;
+const TOUCH_FACT_KEYS_BY_ID: Partial<
+  Record<IncidentQuestionId, keyof TouchMoveFacts>
+> = TOUCH_FACT_KEYS;
 
 /**
  * Incident スコープの回答を Incident に反映した新しい Incident を返す（純粋関数）。
@@ -650,21 +808,15 @@ export function applyIncidentAnswers(
   answers: Partial<Record<IncidentQuestionId, string>>
 ): Incident {
   const facts: Partial<IllegalMoveFacts> = { ...incident.illegalMoveFacts };
-  const flag: Partial<FlagFallFacts> = {
-    ...incident.flagFallFacts,
-    material: incident.flagFallFacts?.material
-      ? {
-          white: { ...incident.flagFallFacts.material.white },
-          black: { ...incident.flagFallFacts.material.black },
-        }
-      : undefined,
-  };
+  const flag: Partial<FlagFallFacts> = { ...incident.flagFallFacts };
   const draw: Partial<DrawClaimFacts> = { ...incident.drawClaimFacts };
+  const touch: Partial<TouchMoveFacts> = { ...incident.touchMoveFacts };
   let playerColor: PlayerColor | undefined = incident.playerColor;
   let subtype: string | undefined = incident.subtype;
   let touchedIllegal = false;
   let touchedFlag = false;
   let touchedDraw = false;
+  let touchedTouch = false;
   let next_description = incident.description;
   const unknown = new Set(incident.unknownAnswers ?? []);
 
@@ -675,11 +827,15 @@ export function applyIncidentAnswers(
         playerColor = undefined;
         break;
       case "subtype":
-      case "gameEnded":
       case "clockPressed":
       case "opponentMadeNextMove":
       case "detectedBy":
         delete facts[id];
+        touchedIllegal = true;
+        break;
+      case "gameEndEvent":
+        delete facts.endEvent;
+        delete facts.recordState;
         touchedIllegal = true;
         break;
       case "clockTimeSubtype":
@@ -692,9 +848,11 @@ export function applyIncidentAnswers(
         break;
       case "quickplayGuidelinesApply":
       case "lastPeriod":
-      case "gameEndedBeforeFlag":
-      case "materialConfirmed":
         delete flag[id];
+        touchedFlag = true;
+        break;
+      case "endedBeforeFlag":
+        delete flag.endedBeforeFlag;
         touchedFlag = true;
         break;
       case "drawSubtype":
@@ -707,16 +865,42 @@ export function applyIncidentAnswers(
         if (incident.category === "draw") playerColor = undefined;
         touchedDraw = true;
         break;
-      case "claimantHasMove":
+      case "lastMover":
       case "claimMode":
       case "moveWritten":
       case "touchedPiece":
-      case "lastMoveCheckmate":
         delete draw[id];
         touchedDraw = true;
         break;
+      case "touchPlayer":
+        playerColor = undefined;
+        break;
+      default: {
+        const key = TOUCH_FACT_KEYS_BY_ID[id];
+        if (key !== undefined) {
+          delete touch[key];
+          touchedTouch = true;
+        }
+      }
     }
   };
+
+  // 確認結果の意味はドローの種類ごとに違う（3回・50手・5回・75手）ため、種類を変えたら
+  // 以前の確認結果を消す（同じ送信の確認結果は、この後の反映で入る）
+  const previousDrawSubtype =
+    incident.category === "draw"
+      ? (incident.drawClaimFacts?.subtype ?? incident.subtype)
+      : undefined;
+  if (
+    answers.drawSubtype !== undefined &&
+    previousDrawSubtype !== undefined &&
+    answers.drawSubtype !== previousDrawSubtype
+  ) {
+    delete draw.conditionCheck;
+    delete draw.historyConfirmed;
+    delete draw.lastMoveCheckmate;
+    touchedDraw = true;
+  }
 
   for (const [id, raw] of Object.entries(answers) as [
     IncidentQuestionId,
@@ -733,17 +917,6 @@ export function applyIncidentAnswers(
     }
     unknown.delete(id);
 
-    const material = MATERIAL_ID_MAP[id];
-    if (material) {
-      const n = parseCount(raw, PIECE_MAX[material.piece]);
-      if (n !== undefined) {
-        flag.material = flag.material ?? { white: {}, black: {} };
-        flag.material[material.color][material.piece] = n;
-        touchedFlag = true;
-      }
-      continue;
-    }
-
     switch (id) {
       // ---- 違法手 ----
       case "playerColor":
@@ -753,9 +926,31 @@ export function applyIncidentAnswers(
         if (isOneOf(raw, Object.keys(SUBTYPE_LABELS) as IllegalMoveSubtype[])) {
           facts.subtype = raw;
           touchedIllegal = true;
+        } else if (raw === TOUCH_MOVE_SUBTYPE) {
+          // 触れた駒の規則は 7.5 の違法手ではない（DT-007。ADR-014 §6）
+          delete facts.subtype;
+          subtype = raw;
+          touchedIllegal = true;
         }
         break;
-      case "gameEnded":
+      case "gameEndEvent":
+        if (isOneOf(raw, GAME_END_EVENTS)) {
+          facts.endEvent = raw;
+          // 対局中なら結果の記入・署名の状態は意味を持たない
+          if (raw === "in-progress") delete facts.recordState;
+          touchedIllegal = true;
+        }
+        break;
+      case "gameRecordState":
+        if (isOneOf(raw, GAME_RECORD_STATES)) {
+          facts.recordState = raw;
+          touchedIllegal = true;
+        } else if (raw === UNKNOWN_VALUE) {
+          // 「わからない」は記録しない（以前の記録も残さない）
+          delete facts.recordState;
+          touchedIllegal = true;
+        }
+        break;
       case "clockPressed":
       case "opponentMadeNextMove": {
         const b = parseBoolean(raw);
@@ -765,9 +960,20 @@ export function applyIncidentAnswers(
         }
         break;
       }
-      case "opponentCanCheckmate": {
-        const b = parseBoolean(raw);
-        facts.opponentCanCheckmate = b ?? "unknown";
+      case "matePosition":
+        if (isOneOf(raw, ["fen", "unknown"] as readonly MatePositionInput[])) {
+          if (incident.category === "illegal-move") {
+            facts.matePosition = raw;
+            touchedIllegal = true;
+          } else if (incident.category === "clock-time") {
+            flag.matePosition = raw;
+            touchedFlag = true;
+          }
+        }
+        break;
+      case "reinstatedFen": {
+        const fen = raw.trim();
+        facts.positionFen = fen === "" ? undefined : fen;
         touchedIllegal = true;
         break;
       }
@@ -814,10 +1020,14 @@ export function applyIncidentAnswers(
           touchedFlag = true;
         }
         break;
+      case "endedBeforeFlag":
+        if (isOneOf(raw, ENDED_BEFORE_FLAG_VALUES)) {
+          flag.endedBeforeFlag = raw;
+          touchedFlag = true;
+        }
+        break;
       case "quickplayGuidelinesApply":
-      case "lastPeriod":
-      case "gameEndedBeforeFlag":
-      case "materialConfirmed": {
+      case "lastPeriod": {
         const b = parseBoolean(raw);
         if (b !== undefined) {
           flag[id] = b;
@@ -825,8 +1035,7 @@ export function applyIncidentAnswers(
         }
         break;
       }
-      case "movesNotCompleted":
-      case "positionBlocked": {
+      case "movesNotCompleted": {
         const t = parseTriState(raw);
         if (t !== undefined) {
           flag[id] = t;
@@ -857,10 +1066,14 @@ export function applyIncidentAnswers(
           touchedDraw = true;
         }
         break;
-      case "claimantHasMove":
+      case "lastMover":
+        if (isOneOf(raw, ["white", "black"] as const)) {
+          draw.lastMover = raw;
+          touchedDraw = true;
+        }
+        break;
       case "moveWritten":
-      case "touchedPiece":
-      case "lastMoveCheckmate": {
+      case "touchedPiece": {
         const b = parseBoolean(raw);
         if (b !== undefined) {
           draw[id] = b;
@@ -880,13 +1093,90 @@ export function applyIncidentAnswers(
         }
         break;
       case "repetitionCheck":
+      case "fiftyMoveCheck":
       case "fivefoldCheck":
       case "seventyFiveCheck":
-        if (isOneOf(raw, CONDITION_CHECKS as readonly ConditionCheck[])) {
+        if (
+          isOneOf(
+            raw,
+            (id === "seventyFiveCheck"
+              ? SEVENTY_FIVE_CHECKS
+              : CONDITION_CHECKS) as readonly ConditionCheck[]
+          )
+        ) {
           draw.conditionCheck = raw;
+          // 75手の手動確認では「チェックメイトではない（met）」も明示の観測として記録する。
+          // 旧（J1b-5 より前）の「75手以上」には記録がなく、DT-006 は確認をやり直す
+          if (id === "seventyFiveCheck" && raw === "met")
+            draw.lastMoveCheckmate = false;
+          else delete draw.lastMoveCheckmate;
+          // 旧「最後の手はチェックメイトか」への「わからない」は、新しい確認結果で置き換える
+          unknown.delete("lastMoveCheckmate");
           touchedDraw = true;
         }
         break;
+      // ---- 触れた駒の規則 ----
+      case "touchPlayer":
+        if (isOneOf(raw, ["white", "black"] as const)) playerColor = raw;
+        break;
+      case "touchHow":
+        if (
+          isOneOf(raw, [
+            "grasped",
+            "lifted",
+            "pushed",
+            "brushed",
+          ] as readonly TouchHow[])
+        ) {
+          touch.how = raw;
+          touchedTouch = true;
+        }
+        break;
+      case "touchAdjustDeclared":
+      case "touchOnMove":
+      case "touchClaimedByOpponent":
+      case "touchClaimTiming":
+      case "touchReleased":
+      case "touchChangedAfter": {
+        const b = parseBoolean(raw);
+        if (b !== undefined) {
+          touch[TOUCH_FACT_KEYS[id]] = b;
+          touchedTouch = true;
+        }
+        break;
+      }
+      case "touchWhatNext":
+        if (
+          isOneOf(raw, [
+            "moved-touched",
+            "moved-other",
+            "not-moved",
+          ] as readonly TouchWhatNext[])
+        ) {
+          touch.whatNext = raw;
+          touchedTouch = true;
+        }
+        break;
+      case "touchPromotion":
+        if (
+          isOneOf(raw, [
+            "promotion-placed",
+            "promotion-not-placed",
+            "none",
+          ] as readonly TouchPromotion[])
+        ) {
+          touch.promotion = raw;
+          touchedTouch = true;
+        }
+        break;
+      case "touchedPieces":
+      case "touchFen": {
+        const text = raw.trim();
+        touch[TOUCH_FACT_KEYS[id]] = text === "" ? undefined : text;
+        touchedTouch = true;
+        break;
+      }
+
       case "situationNote": {
         const note = raw.trim();
         if (note !== "") {
@@ -919,14 +1209,25 @@ export function applyIncidentAnswers(
     }
   }
 
+  // J1b-8 より前の「対局は終了していたか（はい/いいえ）」の回答と「わからない」は、
+  // 対局を終わらせた出来事の回答（unknown を含む）で置き換える（ADR-014 §3）
+  if (answers.gameEndEvent !== undefined) {
+    delete facts.gameEnded;
+    unknown.delete("gameEnded");
+  }
+  if (answers.endedBeforeFlag !== undefined) {
+    delete flag.gameEndedBeforeFlag;
+    unknown.delete("gameEndedBeforeFlag");
+  }
+
   // 別の対局履歴に対する照合結果は引き継がない（ADR-014 §4）。同じ送信で新しい棋譜と
   // 照合結果が届いた場合も、照合は表示していた旧い棋譜に対するものなので消す
   if (draw.positionsText !== incident.drawClaimFacts?.positionsText)
     delete draw.historyConfirmed;
   // 「判定する」を選び直した場合は、照合からやり直す（「一致しない」の誤タップを取り消せる）
-  const reselectedAuto = (
-    ["repetitionCheck", "fivefoldCheck", "seventyFiveCheck"] as const
-  ).some((id) => answers[id] === "auto");
+  const reselectedAuto = CONDITION_CHECK_QUESTIONS.some(
+    (id) => answers[id] === "auto"
+  );
   if (reselectedAuto && answers.historyConfirmed === undefined)
     delete draw.historyConfirmed;
 
@@ -948,11 +1249,11 @@ export function applyIncidentAnswers(
     // 「わからない」と回答された場合は、以前の subtype を残さない（ログ・CSV・回数の明細に出さない）
     if (incident.category === "illegal-move")
       next.subtype =
-        facts.subtype ??
-        (unknown.has("subtype") ? undefined : incident.subtype);
+        facts.subtype ?? (unknown.has("subtype") ? undefined : subtype);
   }
   if (touchedFlag || incident.flagFallFacts) next.flagFallFacts = flag;
   if (touchedDraw || incident.drawClaimFacts) next.drawClaimFacts = draw;
+  if (touchedTouch || incident.touchMoveFacts) next.touchMoveFacts = touch;
   return next;
 }
 
@@ -983,6 +1284,12 @@ export interface QuickReport {
 
 export const QUICK_REPORTS: readonly QuickReport[] = [
   {
+    id: "touch-move",
+    category: "illegal-move",
+    subtype: TOUCH_MOVE_SUBTYPE,
+    label: "タッチムーブ（触れた駒）",
+  },
+  {
     id: "flag-fall",
     category: "clock-time",
     subtype: "flag-fall",
@@ -993,6 +1300,12 @@ export const QUICK_REPORTS: readonly QuickReport[] = [
     category: "draw",
     subtype: "threefold-repetition-claim",
     label: "三回同一局面のクレーム",
+  },
+  {
+    id: "fifty-move",
+    category: "draw",
+    subtype: "fifty-move-claim",
+    label: "50手ルールのクレーム",
   },
   {
     id: "fivefold",
@@ -1008,6 +1321,22 @@ export const QUICK_REPORTS: readonly QuickReport[] = [
   },
 ];
 
+/**
+ * Incident に保存されうる種別か（外部AIへ送る構造化されたコードの確認。
+ * external-ai-data-protection.md §2）。違法手は 7.5 の4種類と touch-move
+ */
+export function isReportableSubtype(
+  category: Incident["category"],
+  subtype: string
+): boolean {
+  if (category === "illegal-move")
+    return (
+      Object.keys(SUBTYPE_LABELS).includes(subtype) ||
+      subtype === TOUCH_MOVE_SUBTYPE
+    );
+  return isKnownSubtype(category, subtype);
+}
+
 /** カテゴリに対して有効な subtype か（報告時の検証用） */
 export function isKnownSubtype(
   category: Incident["category"],
@@ -1017,6 +1346,9 @@ export function isKnownSubtype(
     return Object.keys(CLOCK_TIME_SUBTYPE_LABELS).includes(subtype);
   if (category === "draw")
     return Object.keys(DRAW_SUBTYPE_LABELS).includes(subtype);
+  // 違法手は、決定木の振り分けが変わる touch-move だけを報告時に確定できる
+  // （7.5 の種類は決定木の質問で確認する）
+  if (category === "illegal-move") return subtype === TOUCH_MOVE_SUBTYPE;
   return false;
 }
 

@@ -1,6 +1,10 @@
 # ADR-012: Sensitive Gate and PII Redaction for Every External AI Send
 
-**Status:** Accepted. The user decided it on 2026-10-08, and answered Q-DP1 and Q-DP2 the same day. Not implemented.
+**Status:** Accepted. The user decided it on 2026-10-08, and answered Q-DP1 and Q-DP2 the same day. Implemented:
+
+- the pure privacy package and its evaluation (J1a-1, design §10);
+- the guard on every client route with the mandatory confirmation (J1a-2, design §11);
+- the server re-check (J1a-3, design §12).
 
 **Date:** 2026-10-08
 
@@ -55,6 +59,44 @@ Today the incident description, the article text and search queries go to Gemini
    - False positives are tracked as a secondary metric.
    - PII leaks must be 0 on the covered identifier types.
    - Only synthetic data is used.
+
+## Amendment (2026-10-08, user decision after the J1a-1 review)
+
+- **A known-vocabulary layer (L3v) decides `clear`.** Incident-derived text is sent only when every content word is explained by known chess and incident vocabulary; otherwise it is handled locally. L2 and L3 remain for the `blocked` reasons and the benign phrases.
+- **Why:** an independent review found that the term lists let about 115 of 151 independently written sensitive reports through. A list of sensitive words cannot reach 0 false negatives.
+- **Accepted trade-off:** free-text reports with words outside the vocabulary get no external AI help. The vocabulary grows only through review, like the term lists, and must never contain sensitive words or single kanji that combine into them.
+- Details: design §4.2 (L3v), §10.
+
+## Amendment 2 (2026-10-08, user decision after the second J1a-1 review)
+
+- **The arbiter confirms every external send** (step F becomes mandatory): the de-identified payload is shown, and nothing is sent until the arbiter confirms it contains nothing sensitive.
+- **Why:** 117 of 270 new, independently written sensitive phrases passed the known-vocabulary gate. Free text about people's actions can be written with ordinary chess words, so no lexical gate guarantees 0 false negatives.
+- **Release condition:** the gate's false-negative rate on held-out sets is measured, reported and minimized; 0 false negatives is still required on the regression sets. The human confirmation is the final defense.
+
+## Implementation notes (J1a-2, 2026-10-09)
+
+How Amendment 2 is applied per route (design §11.2):
+
+- **Reasoning:** the port returns "needs confirmation" with the de-identified preview before any search or send; the engine stores a manual-review decision meanwhile, and the arbiter's tap re-runs the evaluation with an approval key that must equal the freshly prepared payload.
+- **Classification:** preview with 「確認してAIで分類」 / 「送らない」.
+- **Rule search screen:** keyword results are shown at once and nothing is sent; semantic search runs only after the arbiter confirms the de-identified query. This was the open UX point of the J1a-2 plan; it was decided this way because D13 says every send is confirmed and the keyword path stays as fast as before.
+- **Document embeddings** carry no incident data and need no confirmation; tournament regulations are de-identified.
+- **Exception to "the arbiter sees the payload":** tournament regulation articles attached to a reasoning request are chosen after the confirmation, so the preview only states that they are sent with the narrow redaction (§5.5) and does not show their text. They are rule text, not incident data. Residual risk: an unregistered name without an honorific inside a regulation is sent.
+
+## Implementation notes (J1a-3, 2026-10-09)
+
+- **One re-check function on both sides.**
+  - `lib/domain/privacy/server-recheck.ts` is run by the server (L5) and by the client on the exact text it is about to send (step E2, and the tournament-article filter in the guard).
+  - So a correct client is never rejected, and the server never needs the device's identifiers.
+  - The server only rejects; it never rewrites.
+- **New public error code `not-sendable` (HTTP 400)** for an L5 rejection. Shape errors stay `invalid-request`.
+  - Nothing goes upstream and the daily cap is not used.
+  - The log line carries the route and the code only.
+  - The reasoning port maps `not-sendable` to the local handling (`not-sent`), not to a retryable error, because resending the same payload gives the same answer.
+- **Exact key sets.** The server accepts only the minimized shapes of §5.3. Anything else is a 400, including `tournamentId` and the old classify `{ text }`.
+  - Codes (`subtype`, `rulesVersion`, article `id`) are checked against fixed sets or an identifier form.
+  - FIDE, JCF and commentary source names and versions get the narrow regulation check.
+- **Accepted limit.** The server cannot tell a tournament article mislabelled as FIDE from a real one, or tell which source a document embedding comes from. Their text is not checked (rule text, §2). This is defence in depth, not a substitute for the client guard.
 
 ## Consequences
 

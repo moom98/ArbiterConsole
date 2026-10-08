@@ -34,9 +34,11 @@ import {
   type RateLimitDecision,
 } from "./rate-limiter";
 import {
+  NOT_SENDABLE_MESSAGE,
   validateClassificationRequest,
   validateEmbedRequest,
   validateReasoningRequest,
+  type Validated,
 } from "./request-validation";
 
 /**
@@ -80,6 +82,7 @@ const MAX_OUTPUT_TOKENS: Record<LlmGenerateKind, number> = {
 
 const STATUS: Record<LlmApiErrorCode, number> = {
   "invalid-request": 400,
+  "not-sendable": 400,
   "unsupported-media-type": 415,
   "payload-too-large": 413,
   "rate-limited": 429,
@@ -251,6 +254,21 @@ async function readBody(
   }
 }
 
+/**
+ * 検証で拒否した応答。L5 の再確認で止めた場合はコードだけを記録する（本文・欄の内容は残さない）
+ */
+function rejected(
+  kind: LlmApiKind,
+  v: Extract<Validated<unknown>, { ok: false }>,
+  deps: BaseHandlerDeps
+): Response {
+  if (v.code === "not-sendable") {
+    deps.log({ route: kind, code: "not-sendable" });
+    return fail("not-sendable", NOT_SENDABLE_MESSAGE);
+  }
+  return fail("invalid-request", v.errors.join(" / "));
+}
+
 type Guarded =
   | { ok: true; config: LlmServerConfig & { apiKey: string }; body: unknown }
   | { ok: false; response: Response };
@@ -327,14 +345,14 @@ export function createLlmRouteHandler(
     let schema: unknown;
     if (kind === "reason") {
       const v = validateReasoningRequest(guarded.body);
-      if (!v.ok) return fail("invalid-request", v.errors.join(" / "));
+      if (!v.ok) return rejected(kind, v, deps);
       model = config.reasoningModel;
       systemInstruction = REASONING_SYSTEM_PROMPT;
       userContent = buildReasoningUserContent(v.value);
       schema = reasoningResponseSchema(v.value.articles.map((a) => a.id));
     } else {
       const v = validateClassificationRequest(guarded.body);
-      if (!v.ok) return fail("invalid-request", v.errors.join(" / "));
+      if (!v.ok) return rejected(kind, v, deps);
       model = config.classifierModel;
       systemInstruction = CLASSIFIER_SYSTEM_PROMPT;
       userContent = buildClassificationUserContent(v.value);
@@ -418,7 +436,7 @@ export function createEmbedRouteHandler(
     const { config } = guarded;
 
     const v = validateEmbedRequest(guarded.body);
-    if (!v.ok) return fail("invalid-request", v.errors.join(" / "));
+    if (!v.ok) return rejected("embed", v, deps);
 
     if (!deps.dailyCounter.take(config.dailyEmbedRequestLimit)) {
       deps.log({ route: "embed", code: "quota-exceeded" });

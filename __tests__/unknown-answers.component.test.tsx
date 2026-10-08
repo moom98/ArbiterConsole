@@ -26,7 +26,7 @@ describe("unknown answers in the UI (fact-model §3.3)", () => {
     const onSubmit = vi.fn();
     render(
       <FollowUpQuestions
-        questions={[QUESTIONS.gameEnded]}
+        questions={[QUESTIONS.gameEndEvent]}
         onSubmit={onSubmit}
       />
     );
@@ -34,14 +34,14 @@ describe("unknown answers in the UI (fact-model §3.3)", () => {
       screen.getByRole("button", { name: "わからない・確認できない" })
     );
     fireEvent.click(screen.getByRole("button", { name: "回答して再評価" }));
-    expect(onSubmit).toHaveBeenCalledWith({ gameEnded: "unknown" });
+    expect(onSubmit).toHaveBeenCalledWith({ gameEndEvent: "unknown" });
   });
 
   it("shows the facts that could not be confirmed with the decision", () => {
     const incident = applyIncidentAnswers(INCIDENT, {
       playerColor: "white",
       subtype: "illegal-move",
-      gameEnded: "false",
+      gameEndEvent: "in-progress",
       clockPressed: "unknown",
     });
     const { decision } = new DecisionEngine(fixedProviders()).processIncident({

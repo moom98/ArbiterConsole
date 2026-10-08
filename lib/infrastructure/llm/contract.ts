@@ -20,8 +20,11 @@ export type LlmGenerateKind = Exclude<LlmApiKind, "embed">;
 export const EMBEDDING_MODEL = {
   id: "gemini-embedding-001",
   dimensions: 768,
-  /** Embedding.model に保存する識別子（モデルと次元の組） */
-  key: "gemini-embedding-001@768",
+  /**
+   * Embedding.model に保存する識別子（モデルと次元と送信前処理の組）。
+   * +deid1: 大会規定の名前・連絡先などを置き換えてから埋め込む（ADR-012）。変えると全条文を作り直す
+   */
+  key: "gemini-embedding-001@768+deid1",
 } as const;
 
 /** 埋め込みの用途。文書（条文）と検索語でベクトルの作り方が異なる */
@@ -45,8 +48,10 @@ export const LLM_ACCESS_TOKEN_HEADER = "x-arbiter-access-token";
 /** 入力サイズの上限（サーバーで検証し、クライアントはこれに収まるように送る） */
 export const LLM_LIMITS = {
   maxBodyBytes: 160_000,
-  maxDescriptionChars: 2_000,
-  maxClassifyTextChars: 2_000,
+  /** reason の description（外部AIガードで最小化した記述。external-ai-data-protection.md §5.3） */
+  maxReasonDescriptionChars: 1_000,
+  /** classify の narrative（外部AIガードで最小化した記述。external-ai-data-protection.md §5.3） */
+  maxClassifyNarrativeChars: 500,
   maxArticles: 8,
   maxArticleContentChars: 4_000,
   maxArticleTitleChars: 300,
@@ -61,11 +66,21 @@ export const LLM_LIMITS = {
    * 余裕をみて 2,000 文字とする（実 API で長文条文の挙動を確認すること。ADR-010）
    */
   maxEmbedTextChars: 2_000,
+  /** 埋め込みの検索語（外部AIガードで最小化した長さ。external-ai-data-protection.md §5.3） */
+  maxEmbedQueryChars: 200,
 } as const;
+
+/** 送る条文の ID の形（端末内の UUID・英数字の識別子。自由記述を紛れ込ませない） */
+export const ARTICLE_ID = /^[A-Za-z0-9_.:-]+$/;
+
+/** 送る大会規定の資料名（端末内の名前・版は送らない。external-ai-data-protection.md §5.3） */
+export const TOURNAMENT_SOURCE_NAME = "大会規定";
 
 export type LlmApiErrorCode =
   /** 入力が不正 */
   | "invalid-request"
+  /** 送信前の再確認（L5）で止めた。外部AIには送っていない（external-ai-data-protection.md §7, §12） */
+  | "not-sendable"
   /** Content-Type が application/json でない */
   | "unsupported-media-type"
   /** 本文が大きすぎる */

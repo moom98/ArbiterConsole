@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { DecisionEngine } from "@/lib/domain/decision-engine";
 import type { Incident } from "@/lib/domain/entities";
-import { classifyIncidentText } from "@/lib/application/llm-classification";
+import { prepareIncidentClassification } from "@/lib/application/llm-classification";
 import { FAIR_PLAY_CONCLUSION } from "@/lib/domain/services/fair-play";
 import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
-import { createLlmAssistPort } from "@/lib/infrastructure/llm/llm-assist-port";
+import { createLlmAssistPort } from "@/lib/application/llm-assist";
+import { NO_IDENTIFIERS } from "@/lib/domain/privacy";
 import { fixedProviders, FIXED_NOW } from "../helpers";
 
 const INCIDENT: Incident = {
@@ -41,10 +42,14 @@ describe("fair-play incidents (§23)", () => {
 
   it("free text that looks like fair-play is classified locally only (not sent)", async () => {
     const call = vi.fn();
-    const r = await classifyIncidentText("相手が不正をしている疑いがある", {
-      call,
-    });
+    const step = await prepareIncidentClassification(
+      "相手が不正をしている疑いがある",
+      {},
+      { call, identifiers: async () => NO_IDENTIFIERS }
+    );
     expect(call).not.toHaveBeenCalled();
+    if (step.status !== "done") throw new Error("must not ask to send");
+    const r = step.result;
     expect(r.classification).toMatchObject({
       category: "fair-play",
       method: "keyword",
@@ -84,12 +89,18 @@ describe("fair-play incidents (§23)", () => {
 
   it("classification never sends text that mentions fair-play even if another category scores higher", async () => {
     const call = vi.fn();
-    const r = await classifyIncidentText(MIXED, { call });
+    const deps = { call, identifiers: async () => NO_IDENTIFIERS };
+    const step = await prepareIncidentClassification(MIXED, {}, deps);
     expect(call).not.toHaveBeenCalled();
-    expect(r.notice).toMatch(/送信しません/);
-    await classifyIncidentText("Suspected engine assistance by white", {
-      call,
-    });
+    expect(step.status === "done" && step.result.notice).toMatch(
+      /送信しません/
+    );
+    const english = await prepareIncidentClassification(
+      "Suspected engine assistance by white",
+      {},
+      deps
+    );
+    expect(english.status).toBe("done");
     expect(call).not.toHaveBeenCalled();
   });
 
@@ -113,7 +124,12 @@ describe("fair-play incidents (§23)", () => {
   it("the assist port refuses fair-play text as a second guard (no search, no call)", async () => {
     const search = vi.fn();
     const call = vi.fn();
-    const port = createLlmAssistPort({ search, call, isOnline: () => true });
+    const port = createLlmAssistPort({
+      search,
+      call,
+      isOnline: () => true,
+      identifiers: async () => NO_IDENTIFIERS,
+    });
     const out = await port.assist({
       incident: {
         category: "player-behavior",

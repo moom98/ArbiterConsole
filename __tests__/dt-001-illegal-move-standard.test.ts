@@ -5,15 +5,15 @@ import {
   type DecisionTreeResult,
 } from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
 import type { Decision, IllegalMoveSubtype } from "@/lib/domain/entities";
-import { fixedProviders, FIXED_NOW } from "./helpers";
+import { fixedProviders, FIXED_NOW, mateOf } from "./helpers";
 
 const base: IllegalMoveStandardInput = {
   playerColor: "white",
   subtype: "illegal-move",
   clockPressed: true,
-  gameEnded: false,
+  endEvent: "in-progress",
   playerIncidentCount: 0,
-  opponentCanCheckmate: "unknown",
+  ...mateOf("unknown"),
 };
 
 function run(input: Partial<IllegalMoveStandardInput>): DecisionTreeResult {
@@ -32,14 +32,15 @@ function articles(d: Decision): string[] {
 
 describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
   describe("follow-up questions", () => {
-    it("asks colour, subtype, gameEnded and clockPressed in one round when nothing is known", () => {
+    it("asks colour, subtype, gameEndEvent (+ optional record state) and clockPressed in one round when nothing is known", () => {
       const r = run({});
       expect(r.status).toBe("needs-input");
       if (r.status !== "needs-input") return;
       expect(r.questions.map((q) => q.id)).toEqual([
         "playerColor",
         "subtype",
-        "gameEnded",
+        "gameEndEvent",
+        "gameRecordState",
         "clockPressed",
       ]);
       expect(r.decision.kind).toBe("follow-up-required");
@@ -52,7 +53,7 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       const r = run({
         playerColor: "black",
         subtype: "illegal-move",
-        gameEnded: false,
+        endEvent: "in-progress",
       });
       expect(r.status).toBe("needs-input");
       if (r.status !== "needs-input") return;
@@ -65,7 +66,8 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       if (r.status !== "needs-input") return;
       expect(r.questions.map((q) => q.id)).toEqual([
         "playerColor",
-        "gameEnded",
+        "gameEndEvent",
+        "gameRecordState",
       ]);
     });
 
@@ -73,7 +75,7 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       const d = decided({
         playerColor: "black",
         subtype: "clock-without-move",
-        gameEnded: false,
+        endEvent: "in-progress",
         playerIncidentCount: 0,
       });
       expect(d.penalties[0].type).toBe("time-addition-opponent");
@@ -83,7 +85,7 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       const d = decided({
         playerColor: "white",
         subtype: "illegal-move",
-        gameEnded: true,
+        endEvent: "resignation",
       });
       expect(d.intervention).toBe("no-intervention");
     });
@@ -91,7 +93,11 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
 
   describe("game already ended", () => {
     it("result stands, no correction, no penalty, regardless of history", () => {
-      const d = decided({ ...base, gameEnded: true, playerIncidentCount: 1 });
+      const d = decided({
+        ...base,
+        endEvent: "resignation",
+        playerIncidentCount: 1,
+      });
       expect(d.kind).toBe("recommendation");
       expect(d.penalties).toHaveLength(0);
       expect(d.conclusion).toContain("結果はそのまま確定");
@@ -214,18 +220,21 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
   });
 
   describe("second completed illegal move", () => {
-    it("asks whether the opponent can checkmate when not yet answered", () => {
-      const { opponentCanCheckmate: _omit, ...rest } = base;
+    it("asks for the reinstated position (never asks 'can the opponent mate?')", () => {
+      const { matePosition: _omit, ...rest } = base;
       void _omit;
       const r = run({ ...rest, playerIncidentCount: 1 });
       expect(r.status).toBe("needs-input");
       if (r.status !== "needs-input") return;
-      expect(r.questions.map((q) => q.id)).toEqual(["opponentCanCheckmate"]);
+      expect(r.questions.map((q) => q.id)).toEqual([
+        "matePosition",
+        "reinstatedFen",
+      ]);
       expect(r.questions[0].options.map((o) => o.value)).toEqual([
-        "true",
-        "false",
+        "fen",
         "unknown",
       ]);
+      expect(r.decision.conclusion).toContain("違法手の直前に戻した局面");
       expect(r.decision.penalties).toHaveLength(0);
       expect(r.decision.conclusion).toContain("2回目");
     });
@@ -234,7 +243,7 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       const d = decided({
         ...base,
         playerIncidentCount: 1,
-        opponentCanCheckmate: "unknown",
+        ...mateOf("unknown"),
       });
       expect(d.kind).toBe("manual-review");
       expect(d.intervention).toBe("consult-ca");
@@ -245,14 +254,14 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
 
     it("lists the previously counted illegal moves (time + subtype) for verification", () => {
       const reportedAt = new Date(2026, 0, 1, 10, 23);
-      for (const opponentCanCheckmate of [true, false, "unknown"] as const) {
+      for (const canMate of [true, false, "unknown"] as const) {
         const d = decided({
           ...base,
           playerIncidentCount: 1,
           priorIllegalMoves: [
             { incidentId: "p1", reportedAt, subtype: "two-hands" },
           ],
-          opponentCanCheckmate,
+          ...mateOf(canMate),
         });
         expect(d.actions.join("\n")).toContain(
           "記録済み 1回目: 10:23 両手で指した"
@@ -264,7 +273,7 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       const d = decided({
         ...base,
         playerIncidentCount: 1,
-        opponentCanCheckmate: true,
+        ...mateOf(true),
       });
       expect(d.actions.join("\n")).toContain("明細なし");
     });
@@ -273,7 +282,7 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       const d = decided({
         ...base,
         playerIncidentCount: 1,
-        opponentCanCheckmate: true,
+        ...mateOf(true),
       });
       expect(d.penalties).toEqual([
         { type: "game-loss", playerColor: "white", description: "白の負け" },
@@ -286,7 +295,7 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       const d = decided({
         ...base,
         playerIncidentCount: 1,
-        opponentCanCheckmate: false,
+        ...mateOf(false),
       });
       expect(d.penalties).toHaveLength(1);
       expect(d.penalties[0].type).toBe("draw");
@@ -307,7 +316,7 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
           ...base,
           subtype,
           playerIncidentCount: 1,
-          opponentCanCheckmate: true,
+          ...mateOf(true),
         });
         expect(d.penalties[0].type).toBe("game-loss");
       }
@@ -317,7 +326,7 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
       const d = decided({
         ...base,
         playerIncidentCount: 2,
-        opponentCanCheckmate: true,
+        ...mateOf(true),
       });
       expect(d.penalties[0].type).toBe("game-loss");
       expect(d.escalationRecommended).toBe(true);
@@ -332,7 +341,7 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
         const d = decided({
           ...base,
           playerIncidentCount: count as number,
-          opponentCanCheckmate: true,
+          ...mateOf(true),
         });
         expect(d.kind).toBe("manual-review");
         expect(d.penalties).toHaveLength(0);
@@ -346,8 +355,8 @@ describe("DT-001: Illegal Move (Standard, FIDE Laws 2023)", () => {
     it("every decision with a penalty passes source validation", () => {
       for (const input of [
         base,
-        { ...base, playerIncidentCount: 1, opponentCanCheckmate: true },
-        { ...base, playerIncidentCount: 1, opponentCanCheckmate: false },
+        { ...base, playerIncidentCount: 1, ...mateOf(true) },
+        { ...base, playerIncidentCount: 1, ...mateOf(false) },
       ]) {
         const d = decided(input);
         expect(d.validationPassed).toBe(true);

@@ -1,6 +1,6 @@
 # ADR-014: Draw Claim and Automatic Draw Trees, Touch-Move Tree, Local Game History, Position-Based Mate Possibility
 
-**Status:** Accepted. The user approved it in the catalogue re-review on 2026-10-08. Partly implemented: §4 (game history) in J1b-3, 2026-10-08. See fact-model §3.5 "Implementation (J1b-3)". §1–§3 and §5–§7 are not implemented yet.
+**Status:** Accepted. The user approved it in the catalogue re-review on 2026-10-08. Partly implemented, all on 2026-10-08: §4 (game history) in J1b-3, §5 (mate possibility) in J1b-4, §1 (draw trees) and §2 (side to move) in J1b-5, §6 (touch move) in J1b-6, §7 (time control periods) in J1b-7, §3 (game end) in J1b-8. See fact-model §3.5 "Implementation (J1b-3)" and "Implementation (J1b-5)", §3.7 "Implementation (J1b-4)", §3.8 "Implementation (J1b-6)", §3.6 "Implementation (J1b-7)", §3.9 "Implementation (J1b-8)" and [ADR-015](./ADR-015-local-helpmate-search.md). Every section is now implemented.
 
 **Date:** 2026-10-08
 
@@ -74,6 +74,11 @@ The clock state (`dr.clock-state`) is recorded, but **never** used to derive the
 - `game.record-state` records whether the result is written and signed.
 - **A handshake alone never ends the game.**
 - `gameEnded` (DT-001…003) and `gameEndedBeforeFlag` (DT-004) are derived from `game.end-event`.
+- **Amendment (J1b-8, 2026-10-08):**
+  - DT-004 asks `ct.ended-before-flag` (the event before the flag was established, catalogue) rather than `game.end-event`, because the time-out itself is not an earlier end.
+  - Stored yes/no answers from before J1b-8 are not used: an old "yes" may rest on a handshake, so the event is asked again.
+  - `game.record-state` is asked as an optional, record-only question in the same round; it never changes the ruling.
+  - Checkmate and stalemate end the game only if the move that produced them was legal (FIDE 5.1.1 / 5.2.1). For these events, the "result stands" decision asks the arbiter to check that move and has confidence medium.
 
 ### 4. Local game history (`game.history`)
 
@@ -147,10 +152,14 @@ A new domain service, `assessMatePossibility(position)`, replaces both the count
 - 8.4 says "at some stage in a period", so the exemption lasts for the rest of the period, even after an increment takes the clock above 5:00 again. The tree uses `ss.remaining-time < 5:00` **or** `ss.below-five-in-period = yes`.
 - 8.4 applies only where 8.1.1 requires recording (Standard).
 - **Migration.** `timeControl` is not an index, so the Dexie `stores()` definition does not change. A `version(8).upgrade()` (or a normalizer at read time) converts each stored value:
-  - `initialMinutes` and `incrementSeconds` become one period;
+  - `initialMinutes` and `incrementSeconds` become one period, **marked `periodsIncomplete` until the arbiter confirms it** (see the J1b-7 amendment below);
   - when the legacy `additionalTimeAfterMove` is present, its meaning (after which move?) is unknown. It is kept, and the time control is marked `periodsIncomplete: true`. Then the current period and the increment are **asked**.
   - Provisional tournaments (ADR-004) have no `timeControl`, so they also ask.
 - The tournament profile form, its validation and `formatTimeControl` are updated.
+- **Amendment (J1b-7 review, 2026-10-08):**
+  - The old profile form never offered a second period, so a legacy `{ initialMinutes, incrementSeconds }` may hide one. **Every legacy value becomes one period marked `periodsIncomplete: true`**, not just values with `additionalTimeAfterMove`. The profile form asks the arbiter to confirm the periods.
+  - For DT-004, an explicit `lastPeriod` answer takes precedence over the value derived from the settings. The derived value only fills an unanswered or "unknown" question, so an incomplete setting can never override "not the last period" into a draw.
+  - A delay (`delaySeconds`) is not treated as "additional time added with each move". With a delay, the 8.4 assessment does not confirm the exemption (consult the CA).
 
 ## Consequences
 

@@ -29,6 +29,11 @@ export interface NormalizedPosition {
   fullmoveNumber: number;
   isCheckmate: boolean;
   sideToMove: "white" | "black";
+  /**
+   * 手番でない側のキングがチェックされている（実戦では起こりえない局面。
+   * FEN の手番の誤りなど）
+   */
+  opponentInCheck: boolean;
 }
 
 export interface ChessPositionPort {
@@ -40,6 +45,37 @@ export interface ChessPositionPort {
   replay(history: GameHistory): PortResult<{ fens: string[]; sans: string[] }>;
   /** 局面に1手（SAN、厳密に解釈）を指した後の FEN */
   play(fen: string, san: string): PortResult<{ fen: string }>;
+  /**
+   * 局面の駒配置と、手番の側の合法手の一覧（触れた駒の規則 4.3〜4.5 の判定に使う。ADR-014 §6）
+   */
+  legalMoves(fen: string): PortResult<PositionMoves>;
+}
+
+export type PieceKind = "k" | "q" | "r" | "b" | "n" | "p";
+
+export interface BoardPiece {
+  /** 例: "e2" */
+  square: string;
+  color: "white" | "black";
+  kind: PieceKind;
+}
+
+export interface LegalMove {
+  san: string;
+  from: string;
+  to: string;
+  /** 取る駒のマス（アンパッサンでは to と異なる）。駒を取らない手は undefined */
+  capturedSquare?: string;
+  /** キャスリングの場合の側 */
+  castling?: "king-side" | "queen-side";
+  /** 昇格の手 */
+  promotion?: boolean;
+}
+
+export interface PositionMoves {
+  sideToMove: "white" | "black";
+  pieces: BoardPiece[];
+  moves: LegalMove[];
 }
 
 export interface RepetitionAnalysis {

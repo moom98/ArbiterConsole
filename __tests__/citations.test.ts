@@ -36,6 +36,14 @@ const EXPECTED: Record<string, { text: string; page: number }> = {
     page: 28,
     text: "After the action taken under Article 7.5.1, 7.5.2, 7.5.3 or 7.5.4 for the first completed illegal move by a player, the arbiter shall give two minutes extra time to his/her opponent; for the second completed illegal move by the same player the arbiter shall declare the game lost by this player. However, the game is drawn if the position is such that the opponent cannot checkmate the player’s king by any possible series of legal moves.",
   },
+  "FIDE 8.1.1": {
+    page: 29,
+    text: "In the course of play each player is required to record his/her own moves and those of his/her opponent in the correct manner, move after move, as clearly and legibly as possible, in one of the following ways:",
+  },
+  "FIDE 8.4": {
+    page: 29,
+    text: "If a player has less than five minutes left on his/her clock during an allotted period of time and does not have additional time of 30 seconds or more added with each move, then for the remainder of the period he/she is not obliged to meet the requirements of Article 8.1.1.",
+  },
   "FIDE 8.7": {
     page: 30,
     text: "At the conclusion of the game both players shall indicate the result of the game by signing both scoresheets or approve the result on their electronic scoresheets. Even if incorrect, this result shall stand, unless the arbiter decides otherwise.",
@@ -60,6 +68,14 @@ const EXPECTED: Record<string, { text: string; page: number }> = {
   "FIDE B.3": {
     page: 42,
     text: "Otherwise, play shall be governed by the Rapid chess Laws as in Article A.2, A.3 and A.5.",
+  },
+  "FIDE 5.1.1": {
+    page: 19,
+    text: "The game is won by the player who has checkmated his/her opponent’s king. This immediately ends the game, provided that the move producing the checkmate position was in accordance with Article 3 and Articles 4.2 – 4.7.",
+  },
+  "FIDE 5.2.1": {
+    page: 19,
+    text: "The game is drawn when the player to move has no legal move and his/her king is not in check. The game is said to end in ‘stalemate’. This immediately ends the game, provided that the move producing the stalemate position was in accordance with Article 3 and Articles 4.2 – 4.7.",
   },
   "FIDE 5.2.2": {
     page: 19,
@@ -473,5 +489,112 @@ describe("Round checklist citations (Milestone 7)", () => {
       expect(CITATIONS[k].source).toBe("FIDE");
       expect(CITATIONS[k].edition).toBe("FIDE Laws of Chess 2023");
     }
+  });
+});
+
+/**
+ * J1b-5（DT-005 Draw Claim / DT-006 Automatic Draw）で追加した引用。pdfjs-dist の抽出テキストと
+ * 照合済み（FIDE は改行を半角スペース、JCF は行頭の箇条書き記号「・」を除く）。
+ */
+const EXPECTED_J1B5: Record<string, { page: number; text: string }> = {
+  FIDE_9_3: {
+    page: 33,
+    text: "The game is drawn, upon a correct claim by a player having the move, if: 9.3.1 he/she indicates his/her move, which cannot be changed, by writing it on the paper scoresheet or entering it on the electronic scoresheet and declares to the arbiter his/her intention to make this move which will result in the last 50 moves by each player having been made without the movement of any pawn and without any capture, or 9.3.2 the last 50 moves by each player have been completed without the movement of any pawn and without any capture.",
+  },
+  FIDE_11_12: {
+    page: 37,
+    text: "Checking a ‘three times occurrence of the position’ or a ’50 moves’ claim is a duty of the players, under supervision of the arbiter.",
+  },
+  JCF_NA_P67_OWN_MOVE: {
+    page: 67,
+    text: "前提: 自分の手番であること",
+  },
+  JCF_NA_P67_CLAIM_LATER: {
+    page: 67,
+    text: "三回同一局面のケースは4回目でも主張可能。50手ルールは51手目以降でも主張可能",
+  },
+};
+
+describe("Draw claim citations (J1b-5)", () => {
+  it.each(Object.entries(EXPECTED_J1B5))("%s is verbatim", (key, exp) => {
+    const c = CITATIONS[key as keyof typeof CITATIONS];
+    expect(c, `citation ${key} missing`).toBeDefined();
+    expect(c.text).toBe(exp.text);
+    expect(c.page).toBe(exp.page);
+  });
+
+  it("FIDE 9.3 and 11.12 are Laws 2023 articles", () => {
+    for (const k of ["FIDE_9_3", "FIDE_11_12"] as const) {
+      expect(CITATIONS[k].source).toBe("FIDE");
+      expect(CITATIONS[k].edition).toBe("FIDE Laws of Chess 2023");
+    }
+  });
+});
+
+/**
+ * J1b-6（DT-007 Touch Move）で追加した引用。pdfjs-dist の抽出テキストと照合済み
+ * （FIDE は改行を半角スペース、JCF は改行を詰めて結合）。FIDE 12.9 は印刷ページ 39。
+ */
+const EXPECTED_J1B6: Record<string, { page: number; text: string }> = {
+  FIDE_4_2_1: {
+    page: 16,
+    text: "Only the player having the move may adjust one or more pieces on their squares, provided that he/she first expresses his/her intention (for example by saying “j’adoube” or “I adjust”).",
+  },
+  FIDE_4_2_2: {
+    page: 16,
+    text: "Any other physical contact with a piece, except for clearly accidental contact, shall be considered to be intent.",
+  },
+  FIDE_4_4: {
+    page: 17,
+    text: "If a player having the move: 4.4.1 touches his/her king and a rook he/she must castle on that side if it is legal to do so 4.4.2 deliberately touches a rook and then his/her king he/she is not allowed to castle on that side on that move and the situation shall be governed by Article 4.3.1. 4.4.3 intending to castle, touches the king and then a rook, but castling with this rook is illegal, the player must make another legal move with his/her king (which may include castling with the other rook). If the king has no legal move, the player is free to make any legal move. 4.4.4 promotes a pawn, the choice of the piece is finalised when the piece has touched the square of promotion.",
+  },
+  FIDE_4_5: {
+    page: 17,
+    text: "If none of the pieces touched in accordance with Article 4.3 or Article 4.4 can be moved or captured, the player may make any legal move.",
+  },
+  FIDE_4_8: {
+    page: 18,
+    text: "A player forfeits his/her right to claim against his/her opponent’s violation of Articles 4.1 – 4.7 once the player touches a piece with the intention of moving or capturing it.",
+  },
+  FIDE_12_9: {
+    page: 39,
+    text: "Options available to the arbiter concerning penalties: 12.9.1 warning, 12.9.2 increasing the remaining time of the opponent, 12.9.3 reducing the remaining time of the offending player, 12.9.4 increasing the points scored in the game by the opponent to the maximum available for that game, 12.9.5 reducing the points scored in the game by the offending person, 12.9.6 declaring the game to be lost by the offending player (the arbiter shall also decide the opponent’s score), 12.9.7 a fine announced in advance, 12.9.8 exclusion from one or more rounds, 12.9.9 expulsion from the competition.",
+  },
+  MANUAL_4_2_1_DISPLACED: {
+    page: 16,
+    text: "Article 4.2.1 may only be used to correct displaced pieces. If the opponent is not present then an arbiter, if present, should be informed before any adjustment takes place. The player should always announce his/her intention to adjust a piece. If he/she does not do this then the normal touch move rules apply (see 4.3).",
+  },
+  MANUAL_4_ACCIDENTAL: {
+    page: 16,
+    text: "The accidental touch doesn’t imply a psychological analysis of the player’s intentions.",
+  },
+  MANUAL_4_4_2_ROOK_FIRST: {
+    page: 17,
+    text: "In this case the player must move his/her rook, if possible. If no rook move is possible, he/she should move his/her king. (Article 4.3.1)",
+  },
+  JCF_NA_P20_RELEASED: {
+    page: 20,
+    text: "※2 e4でポーンを離したあと、時計を押す前にe3に変更することもタッチアンドムーブ違反(e4着手が成立)。",
+  },
+  JCF_NA_P20_WARNING: {
+    page: 20,
+    text: "①白が時計を押す前にアービターが上記状況に気付いた場合、または、相手が気付いてアービターを呼んだ場合。⇒白にタッチアンドムーブワーニング。e4で再開。（時間加算/減算なしが一般的）",
+  },
+  JCF_NA_P20_CLOCK_PRESSED: {
+    page: 20,
+    text: "②上記状況で白が時計を押していた場合⇒白にタッチアンドムーブワーニング。時計を押してしまっているため、相手に時間加算。e4で再開。",
+  },
+  JCF_NA_P20_THIRD: {
+    page: 20,
+    text: "※大会によって異なるが、タッチアンドムーブ違反は3回目で失格となる場合がある",
+  },
+};
+
+describe("Touch move citations (J1b-6)", () => {
+  it.each(Object.entries(EXPECTED_J1B6))("%s is verbatim", (key, exp) => {
+    const c = CITATIONS[key as keyof typeof CITATIONS];
+    expect(c, `citation ${key} missing`).toBeDefined();
+    expect(c.text).toBe(exp.text);
+    expect(c.page).toBe(exp.page);
   });
 });

@@ -32,7 +32,7 @@ export interface RequiredFactsInput {
   context: FactContext;
   /** DT の needs-input が返した質問 ID */
   dtRequestedQuestionIds?: readonly IncidentQuestionId[];
-  /** DT が fact を直接要求する場合（例: DT-007 の tch.special） */
+  /** DT が fact を直接要求する場合（fact plan の条件のない conditional fact） */
   requestedFactIds?: readonly FactId[];
 }
 

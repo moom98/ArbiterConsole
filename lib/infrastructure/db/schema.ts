@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
+import { normalizeTimeControl } from "@/lib/domain/services/time-control";
 import type {
   Tournament,
   Game,
@@ -76,6 +77,23 @@ export class ArbiterDatabase extends Dexie {
       roundChecklists: "id, tournamentId",
       checklistTemplates: "tournamentId",
     });
+
+    // v8: 持ち時間のピリオド（ADR-014 §7, J1b-7）。timeControl はインデックスではないため
+    // stores は変えず、旧形式 { initialMinutes, incrementSeconds } を1つのピリオドへ変換する。
+    // 旧形式の additionalTimeAfterMove は意味が不明なため保持し、periodsIncomplete とする。
+    // 解釈できない値は変更しない（破壊しない。読み込み時も normalizeTimeControl を通す）。
+    this.version(8)
+      .stores({})
+      .upgrade((tx) =>
+        tx
+          .table("tournaments")
+          .toCollection()
+          .modify((t: { timeControl?: unknown }) => {
+            if (t.timeControl === undefined) return;
+            const tc = normalizeTimeControl(t.timeControl);
+            if (tc) t.timeControl = tc;
+          })
+      );
   }
 }
 

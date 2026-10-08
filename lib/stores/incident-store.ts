@@ -10,6 +10,7 @@ import type {
 import {
   DecisionEngine,
   type DecisionEngineResult,
+  type EvaluateOptions,
 } from "@/lib/domain/decision-engine";
 import {
   applyIncidentAnswers,
@@ -28,7 +29,13 @@ import { incidentStatusAfterDecision } from "@/lib/domain/services/incident-stat
 import { db as defaultDb, type ArbiterDatabase } from "@/lib/infrastructure/db";
 import { chessJsPositionPort } from "@/lib/infrastructure/chess/chess-js-position-port";
 import type { LlmAssistPort } from "@/lib/domain/llm/ports";
-import { createLlmAssistPort } from "@/lib/infrastructure/llm/llm-assist-port";
+import type { ExternalAiPreview } from "@/lib/domain/llm/types";
+import { createLlmAssistPort } from "@/lib/application/llm-assist";
+import {
+  mateSearchNeeded,
+  type HelpmateSearchPort,
+} from "@/lib/domain/services/mate-possibility";
+import { createHelpmateSearchPort } from "@/lib/infrastructure/chess/helpmate/port";
 import {
   ensureGameForContext,
   loadGameRecords,
@@ -52,6 +59,14 @@ export interface SubmitIncidentParams {
   subtype?: string;
   description: string;
   arbiterObserved: boolean;
+  /** 「外部AIに送らない」（external-ai-data-protection.md §4.4）。既定 false */
+  externalAiOptOut?: boolean;
+}
+
+/** 外部AIへ送る前の確認待ち（D13）。まだ何も送っていない */
+export interface ExternalAiConfirmation {
+  preview: ExternalAiPreview;
+  approvalKey: string;
 }
 
 export interface IncidentStore {
@@ -61,8 +76,12 @@ export interface IncidentStore {
   isProcessing: boolean;
   /** AI 参考情報（LLM）を取得中（決定木の対象外の事象のみ） */
   llmPending: boolean;
+  /** 局面からメイトの手順を探している（端末内。ADR-015） */
+  mateSearchPending: boolean;
   error: string | null;
   lastContext: ReportContext | null;
+  /** 外部AIへ送る内容の確認待ち（現在の Incident の AI 参考情報） */
+  externalAiConfirmation: ExternalAiConfirmation | null;
 
   loadLastContext: () => Promise<void>;
   /** 新しい Incident を登録し、判断支援を評価する */
@@ -71,8 +90,22 @@ export interface IncidentStore {
   answerFollowUp: (
     answers: Partial<Record<IncidentQuestionId, string>>
   ) => Promise<SubmitResult>;
-  /** 現在の Incident を再評価する（例: オフラインだった AI 参考情報をオンラインで再取得） */
+  /**
+   * 現在の Incident を再評価する（例: オフラインだった AI 参考情報をオンラインで再取得）。
+   * この Incident でアービターが確認済みの送信内容と同じなら、もう一度確認を求めずに送る
+   */
   retryEvaluation: () => Promise<SubmitResult>;
+  /**
+   * 保存済みの Incident（例: インシデント履歴で選んだもの）を現在の Incident にして再評価する。
+   * 確認・再送の扱いは retryEvaluation と同じ（確認していない内容は送らず、確認を求める）。
+   *
+   * 注意: 違法手・タッチムーブの回数は、この Incident を除く対局の全記録から数える
+   * （後から報告された Incident も含む）。現在これを呼ぶのは AI 参考情報の判断の再取得だけで、
+   * 回数を使う決定木には届かない。回数を使う判断の再評価に広げる場合は、報告時刻より前の記録に絞ること
+   */
+  retryIncident: (incidentId: string) => Promise<SubmitResult>;
+  /** アービターが確認した内容（externalAiConfirmation）で AI 参考情報を取得する（D13） */
+  confirmExternalAiSend: () => Promise<SubmitResult>;
   reset: () => void;
 }
 
@@ -81,7 +114,15 @@ export interface IncidentStoreDeps {
   providers: DomainProviders;
   /** 決定木の対象外の事象の AI 参考情報（未指定なら手動確認のみ）。ADR-007 */
   llm?: LlmAssistPort;
+  /**
+   * メイト可能性の局面のヘルプメイト探索（端末内の Web Worker。ADR-015）。
+   * 未指定なら探索しない（局面からメイト可能を確定できず、CAへ確認になる）
+   */
+  mateSearch?: HelpmateSearchPort;
 }
+
+/** 後の操作・reset に置き換えられ、画面に反映しなかった操作の結果 */
+export const SUPERSEDED = "別の操作に置き換えられました";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -95,14 +136,15 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
   const { db, providers } = deps;
   // 同時に複数の AI 参考情報の取得が走っても正しく表示できるよう件数で管理する
   let setLlmPending: (pending: boolean) => void = () => {};
+  let setMateSearchPending: (pending: boolean) => void = () => {};
   let inFlight = 0;
   const llm: LlmAssistPort | undefined = deps.llm
     ? {
-        assist: async (request) => {
+        assist: async (request, options) => {
           inFlight++;
           setLlmPending(true);
           try {
-            return await deps.llm!.assist(request);
+            return await deps.llm!.assist(request, options);
           } finally {
             inFlight--;
             setLlmPending(inFlight > 0);
@@ -132,7 +174,30 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
     return derived.ok ? derived.ruleset : undefined;
   }
 
-  async function evaluate(incident: Incident): Promise<DecisionEngineResult> {
+  /**
+   * 判定にヘルプメイトの手順が必要で、この局面の探索結果がなければ探索して Incident に付ける。
+   * 探索の失敗は記録しない（次の評価で再試行。今回は「探索を利用できない」として CA 確認）。
+   */
+  async function withMateSearch(incident: Incident): Promise<Incident> {
+    if (!deps.mateSearch) return incident;
+    const request = mateSearchNeeded(chessJsPositionPort, incident);
+    if (!request) return incident;
+    setMateSearchPending(true);
+    try {
+      return { ...incident, mateSearch: await deps.mateSearch.search(request) };
+    } catch (error) {
+      console.error("Helpmate search failed:", error);
+      return incident;
+    } finally {
+      setMateSearchPending(false);
+    }
+  }
+
+  async function evaluate(
+    input: Incident,
+    options: EvaluateOptions = {}
+  ): Promise<DecisionEngineResult> {
+    const incident = await withMateSearch(input);
     const game = await db.games.get(incident.gameId);
     const ruleset = await rulesetFor(incident, game);
     const records = await loadGameRecords(db, incident.gameId);
@@ -141,14 +206,23 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
       incident.gameId,
       { excludeIncidentId: incident.id }
     );
+    const touchMoveViolations = IncidentCounter.touchMoveViolationsByColor(
+      records,
+      incident.gameId,
+      { excludeIncidentId: incident.id }
+    );
 
     // 決定木を優先し、対象外の事象のみ AI 参考情報を取得する（DecisionEngine.evaluate）
-    const result = await engine.evaluate({
-      incident,
-      ruleset,
-      illegalMoveHistory,
-      tournamentId: game?.tournamentId,
-    });
+    const result = await engine.evaluate(
+      {
+        incident,
+        ruleset,
+        illegalMoveHistory,
+        touchMoveViolations,
+        tournamentId: game?.tournamentId,
+      },
+      options
+    );
 
     const now = providers.now();
     if (result.requiresFollowUp) {
@@ -213,10 +287,34 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
 
   return create<IncidentStore>((set, get) => {
     setLlmPending = (pending) => set({ llmPending: pending });
+    /** アービターが確認した送信内容（Incident ごと。メモリ内だけ） */
+    let approved: { incidentId: string; approvalKey: string } | null = null;
+    setMateSearchPending = (pending) => set({ mateSearchPending: pending });
+    /** 確認済みの送信内容（同じ Incident のみ）を付けて再評価する */
+    async function reevaluate(
+      stored: Incident
+    ): Promise<{ incident: Incident; result: DecisionEngineResult }> {
+      const result = await evaluate(stored, {
+        approvalKey:
+          approved?.incidentId === stored.id ? approved.approvalKey : undefined,
+      });
+      return {
+        incident: (await db.incidents.get(stored.id)) ?? stored,
+        result,
+      };
+    }
+    /**
+     * 画面に反映してよい最新の操作の番号。reset と新しい操作で進める。
+     * 古い操作（例: 履歴で閉じた Incident の送信）が後から完了しても、
+     * 別の Incident の表示・確認待ちの内容を上書きしない（保存済みの判断はそのまま残る）
+     */
+    let epoch = 0;
     async function run(
       fn: () => Promise<{ incident: Incident; result: DecisionEngineResult }>,
       options: { clearPrevious: boolean }
     ): Promise<SubmitResult> {
+      const mine = ++epoch;
+      const isCurrent = () => mine === epoch;
       set({ isProcessing: true, error: null });
       // 新規報告では前回の判断を必ず消す（失敗時に古い判断が表示されないように）
       if (options.clearPrevious) {
@@ -224,23 +322,27 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
           currentIncident: null,
           currentDecision: null,
           followUpQuestions: [],
+          externalAiConfirmation: null,
         });
       }
       try {
         const { incident, result } = await fn();
+        if (!isCurrent()) return { ok: false, error: SUPERSEDED };
         set({
           currentIncident: incident,
           currentDecision: result.decision,
           followUpQuestions: result.followUpQuestions,
+          externalAiConfirmation: result.externalAiConfirmation ?? null,
         });
         return { ok: true, result };
       } catch (error) {
         console.error("Failed to process incident:", error);
+        if (!isCurrent()) return { ok: false, error: SUPERSEDED };
         const message = errorMessage(error);
         set({ error: message });
         return { ok: false, error: message };
       } finally {
-        set({ isProcessing: false });
+        if (isCurrent()) set({ isProcessing: false });
       }
     }
 
@@ -250,8 +352,10 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
       followUpQuestions: [],
       isProcessing: false,
       llmPending: false,
+      mateSearchPending: false,
       error: null,
       lastContext: null,
+      externalAiConfirmation: null,
 
       loadLastContext: async () => {
         try {
@@ -284,6 +388,7 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
               subtype: params.subtype,
               rulesetSnapshot: ruleset,
               description: params.description,
+              ...(params.externalAiOptOut ? { externalAiOptOut: true } : {}),
               arbiterObserved: params.arbiterObserved,
               reportedBy: "arbiter",
               reportedAt: now,
@@ -323,8 +428,39 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
           async () => {
             const current = get().currentIncident;
             if (!current) throw new Error("再評価するIncidentがありません");
+            return reevaluate((await db.incidents.get(current.id)) ?? current);
+          },
+          { clearPrevious: false }
+        ),
+
+      retryIncident: (incidentId) =>
+        run(
+          async () => {
+            const stored = await db.incidents.get(incidentId);
+            if (!stored) throw new Error("Incidentが見つかりません");
+            return reevaluate(stored);
+          },
+          // 別の Incident の判断・確認待ちの内容を残さない
+          { clearPrevious: get().currentIncident?.id !== incidentId }
+        ),
+
+      confirmExternalAiSend: () =>
+        run(
+          async () => {
+            const current = get().currentIncident;
+            const confirmation = get().externalAiConfirmation;
+            if (!current || !confirmation)
+              throw new Error("確認する送信内容がありません");
+            // await の前に記録する（直後の reset で確実に消えるように）
+            approved = {
+              incidentId: current.id,
+              approvalKey: confirmation.approvalKey,
+            };
             const stored = (await db.incidents.get(current.id)) ?? current;
-            const result = await evaluate(stored);
+            // 送る直前の内容が確認した内容と違えば、ポートは送らずにもう一度確認を求める
+            const result = await evaluate(stored, {
+              approvalKey: confirmation.approvalKey,
+            });
             return {
               incident: (await db.incidents.get(stored.id)) ?? stored,
               result,
@@ -333,19 +469,36 @@ export function createIncidentStore(deps: IncidentStoreDeps) {
           { clearPrevious: false }
         ),
 
-      reset: () =>
+      reset: () => {
+        approved = null;
+        epoch++;
         set({
+          isProcessing: false,
           currentIncident: null,
           currentDecision: null,
           followUpQuestions: [],
+          externalAiConfirmation: null,
           error: null,
-        }),
+        });
+      },
     };
   });
 }
+
+/**
+ * インシデント履歴の AI 参考情報の再取得・送信確認用（報告画面とは別のインスタンス）。
+ * 片方の画面の送信中の操作・確認待ちの内容が、もう片方の画面に出ないようにする
+ */
+export const useIncidentLogStore = createIncidentStore({
+  db: defaultDb,
+  providers: defaultProviders,
+  llm: createLlmAssistPort(),
+  mateSearch: createHelpmateSearchPort(),
+});
 
 export const useIncidentStore = createIncidentStore({
   db: defaultDb,
   providers: defaultProviders,
   llm: createLlmAssistPort(),
+  mateSearch: createHelpmateSearchPort(),
 });

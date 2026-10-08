@@ -66,8 +66,15 @@ export type DecisionTreeId =
   /** Rapid / Blitz の違法手（それ以外: A.5 / B.3） */
   | "DT-003-illegal-move-fast-basic"
   | "DT-004-flag-fall"
-  /** 同一局面（9.2 / 9.6.1）および 75手ルール（9.6.2） */
-  | "DT-005-repetition";
+  /**
+   * Draw Claim: 三回同一局面（9.2）・50手（9.3）のクレーム（ADR-014 §1）。
+   * ID は保存済みの判断との互換のため変えない。J1b-5 より前は 9.6.1 / 9.6.2 も含んでいた
+   */
+  | "DT-005-repetition"
+  /** Automatic Draw: 五回同一局面（9.6.1）・75手（9.6.2） */
+  | "DT-006-automatic-draw"
+  /** Touch Move: 触れた駒の規則（Article 4。ADR-014 §6） */
+  | "DT-007-touch-move";
 
 /** 判断の種類 */
 export type DecisionKind =
@@ -89,9 +96,17 @@ export type DecisionKind =
  * - offline:     オフラインのため LLM を呼び出さなかった
  * - unavailable: LLM の呼び出しに失敗した（サーバー未設定・タイムアウト等）
  * - no-articles: 関連する登録規則が見つからなかった（LLM を呼び出さない）
+ * - awaiting-confirmation: 外部AIへ送る内容をアービターが確認していない（まだ送っていない。D13）
+ * - not-sent:    Sensitive Gate・残存チェックにより外部AIへ送らなかった（ADR-012）
  */
 export type LlmAssistStatus =
-  "passed" | "rejected" | "offline" | "unavailable" | "no-articles";
+  | "passed"
+  | "rejected"
+  | "offline"
+  | "unavailable"
+  | "no-articles"
+  | "awaiting-confirmation"
+  | "not-sent";
 
 export interface LlmDecisionMeta {
   status: LlmAssistStatus;
@@ -103,6 +118,13 @@ export interface LlmDecisionMeta {
   message?: string;
   /** 失敗時のエラーコード（例: "unauthorized" はアクセストークンの入力が必要） */
   errorCode?: string;
+  /** not-sent の理由（Sensitive Gate の理由コード。本文は含めない） */
+  gateReasons?: string[];
+  /**
+   * AI の出力に、このリクエストの対応表にないプレースホルダー（〈選手C〉など）があった。
+   * そのまま表示し、要確認とする（external-ai-data-protection.md §6.2）
+   */
+  needsReview?: boolean;
 }
 
 export interface Decision {
@@ -127,6 +149,11 @@ export interface Decision {
    * どの値でも同じ判断になった場合、または判断を確定できなかった場合に設定する（fact-model §3.3）。
    */
   unconfirmedFacts?: string[];
+  /**
+   * DT-007 のみ: 触れた駒の規則（4.3 / 4.4）に従わずに別の駒を動かした（違反の記録）。
+   * タッチムーブの回数として、7.5 の違法手とは別に数える（ADR-014 §6）。ペナルティではない。
+   */
+  touchMoveViolation?: boolean;
   generatedBy: "decision-tree" | "llm";
   /** 決定木の対象外で AI 参考情報を試みた場合の状態（ADR-007） */
   llm?: LlmDecisionMeta;

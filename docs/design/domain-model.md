@@ -716,7 +716,7 @@ interface IllegalMoveInput extends DecisionTreeInput {
   clockPressed: boolean;               // 時計を押したか
   opponentMoved: boolean;              // 相手が次の手を指したか
   arbiterObserved: boolean;            // アービター自身が目撃したか
-  gameEnded: boolean;                  // 対局がすでに終了していないか
+  endEvent?: GameEndEvent;             // 対局を終わらせた出来事（ADR-014 §3。旧 gameEnded: boolean）
 
   // History
   playerIncidentCount: number;         // この選手の今回の対局での違法手回数

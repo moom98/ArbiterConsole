@@ -48,7 +48,9 @@ export function FollowUpQuestions({
   const [answers, setAnswers] = useState<Record<string, string>>(() =>
     initialAnswers(questions)
   );
-  const visible = questions.filter((q) => isQuestionVisible(q, answers));
+  const visible = questions.filter((q) =>
+    isQuestionVisible(q, answers, questions)
+  );
   const allAnswered = visible.every(
     (q) => q.optional || (answers[q.id] !== undefined && answers[q.id] !== "")
   );

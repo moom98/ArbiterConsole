@@ -122,6 +122,11 @@ Constraints that still apply:
   search over IndexedDB. It sends **only** the retrieved candidate articles (up to 8) plus a
   structured context (competition type, supervision regime, rules version, tournament id, category,
   subtype, description) to the server. Player names and other PII are not sent.
+  - **Amended by ADR-012 (J1a-2, 2026-10-09):** the port is now `lib/application/llm-assist.ts` and
+    goes through `lib/application/external-ai-guard.ts`, the only caller of `callLlmApi`. The
+    description is de-identified, the tournament id is no longer sent (context or articles),
+    tournament regulation text is redacted, and nothing is sent until the arbiter confirms the
+    payload (D13).
 - After the response, the cited article IDs are re-read from IndexedDB (`db.rules.bulkGet`), so the
   validator can confirm they still exist.
 

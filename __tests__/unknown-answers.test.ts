@@ -13,16 +13,26 @@ import {
   type BranchResult,
 } from "@/lib/domain/decision-trees/tree-support";
 import {
-  MATERIAL_KEYS,
   QUESTIONS,
   UNKNOWN_VALUE,
   applyIncidentAnswers,
-  materialQuestionId,
   type FollowUpQuestion,
   type IncidentQuestionId,
 } from "@/lib/domain/follow-up";
 import { IncidentCounter } from "@/lib/domain/services/incident-counter";
 import { fixedProviders, FIXED_NOW } from "./helpers";
+import { chessJsPositionPort } from "@/lib/infrastructure/chess/chess-js-position-port";
+import { runHelpmateSearch } from "@/lib/infrastructure/chess/helpmate/run";
+import { mateSearchNeeded } from "@/lib/domain/services/mate-possibility";
+
+/** ストアと同じく、局面があればヘルプメイトを探して Incident に付ける（ADR-015） */
+function withSearch(inc: Incident): Incident {
+  const request = mateSearchNeeded(chessJsPositionPort, inc);
+  return request ? { ...inc, mateSearch: runHelpmateSearch(request) } : inc;
+}
+
+/** 黒が K+Q（白の手番）。黒のメイトの手順が見つかる局面 */
+const BLACK_QUEEN_WHITE_TO_MOVE = "6k1/8/8/8/8/8/5q2/6K1 w - - 0 40";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -74,8 +84,10 @@ function evaluate(
   answers: Partial<Record<IncidentQuestionId, string>>,
   ctx: Partial<DecisionEngineContext> = {}
 ) {
-  const inc = applyIncidentAnswers(incident(base), answers);
-  return new DecisionEngine(fixedProviders()).processIncident({
+  const inc = withSearch(applyIncidentAnswers(incident(base), answers));
+  return new DecisionEngine(fixedProviders(), {
+    positions: chessJsPositionPort,
+  }).processIncident({
     incident: inc,
     ruleset: STANDARD,
     illegalMoveHistory: { white: [], black: [] },
@@ -96,7 +108,7 @@ function expectManualReview(d: Decision, facts: IncidentQuestionId[]) {
 
 const ILLEGAL_BASE = {
   subtype: "illegal-move",
-  gameEnded: "false",
+  gameEndEvent: "in-progress",
   clockPressed: "true",
   playerColor: "white",
 } as const;
@@ -130,10 +142,9 @@ describe("unknown answers: questions", () => {
 
   it("questions with their own unknown value keep it (handled by their tree)", () => {
     for (const id of [
-      "opponentCanCheckmate",
+      "matePosition",
       "bothFlagsOrder",
       "movesNotCompleted",
-      "positionBlocked",
       "repetitionCheck",
     ] as const)
       expect(QUESTIONS[id].onUnknown).toBeUndefined();
@@ -143,11 +154,11 @@ describe("unknown answers: questions", () => {
 describe("unknown answers: applyIncidentAnswers (§3.3 e)", () => {
   it("records unknown in unknownAnswers and leaves the value unset (not needs-input)", () => {
     const inc = applyIncidentAnswers(incident(), {
-      gameEnded: "unknown",
+      gameEndEvent: "unknown",
       clockPressed: "true",
     });
-    expect(inc.unknownAnswers).toEqual(["gameEnded"]);
-    expect(inc.illegalMoveFacts?.gameEnded).toBeUndefined();
+    expect(inc.unknownAnswers).toEqual(["gameEndEvent"]);
+    expect(inc.illegalMoveFacts?.endEvent).toBeUndefined();
     expect(inc.illegalMoveFacts?.clockPressed).toBe(true);
   });
 
@@ -166,10 +177,10 @@ describe("unknown answers: applyIncidentAnswers (§3.3 e)", () => {
   });
 
   it("a later concrete answer removes the unknown", () => {
-    const first = applyIncidentAnswers(incident(), { gameEnded: "unknown" });
-    const next = applyIncidentAnswers(first, { gameEnded: "false" });
+    const first = applyIncidentAnswers(incident(), { gameEndEvent: "unknown" });
+    const next = applyIncidentAnswers(first, { gameEndEvent: "in-progress" });
     expect(next.unknownAnswers).toBeUndefined();
-    expect(next.illegalMoveFacts?.gameEnded).toBe(false);
+    expect(next.illegalMoveFacts?.endEvent).toBe("in-progress");
   });
 
   it("an unknown illegal-move subtype also clears Incident.subtype (log, CSV, counts)", () => {
@@ -181,7 +192,7 @@ describe("unknown answers: applyIncidentAnswers (§3.3 e)", () => {
     expect(next.subtype).toBeUndefined();
     expect(next.illegalMoveFacts?.subtype).toBeUndefined();
     // 別の質問への回答で以前の subtype が復活しない
-    const later = applyIncidentAnswers(next, { gameEnded: "false" });
+    const later = applyIncidentAnswers(next, { gameEndEvent: "in-progress" });
     expect(later.subtype).toBeUndefined();
   });
 
@@ -512,14 +523,20 @@ describe("DT-001 with unknown answers", () => {
   it("subtype unknown on a second offence: mate possibility still asked, then decided", () => {
     const ctx = { illegalMoveHistory: { white: priors(1), black: [] } };
     const r1 = evaluate({}, { ...ILLEGAL_BASE, subtype: "unknown" }, ctx);
-    // どの種類でも同じ質問（opponentCanCheckmate）が必要 → その質問を尋ねる
+    // どの種類でも同じ質問（局面）が必要 → その質問を尋ねる
     expect(r1.requiresFollowUp).toBe(true);
     expect(r1.followUpQuestions.map((x) => x.id)).toEqual([
-      "opponentCanCheckmate",
+      "matePosition",
+      "reinstatedFen",
     ]);
     const r2 = evaluate(
       {},
-      { ...ILLEGAL_BASE, subtype: "unknown", opponentCanCheckmate: "true" },
+      {
+        ...ILLEGAL_BASE,
+        subtype: "unknown",
+        matePosition: "fen",
+        reinstatedFen: BLACK_QUEEN_WHITE_TO_MOVE,
+      },
       ctx
     );
     expect(r2.decision.penalties).toEqual([
@@ -528,20 +545,20 @@ describe("DT-001 with unknown answers", () => {
     expect(r2.decision.unconfirmedFacts).toEqual([QUESTIONS.subtype.label]);
   });
 
-  it("gameEnded unknown with the clock not pressed: no intervention either way → decided", () => {
+  it("gameEndEvent unknown with the clock not pressed: no intervention either way → decided", () => {
     const r = evaluate(
       {},
-      { ...ILLEGAL_BASE, gameEnded: "unknown", clockPressed: "false" }
+      { ...ILLEGAL_BASE, gameEndEvent: "unknown", clockPressed: "false" }
     );
     expect(r.decision.kind).toBe("recommendation");
     expect(r.decision.intervention).toBe("no-intervention");
     expect(r.decision.penalties).toEqual([]);
-    expect(r.decision.unconfirmedFacts).toEqual([QUESTIONS.gameEnded.label]);
+    expect(r.decision.unconfirmedFacts).toEqual([QUESTIONS.gameEndEvent.label]);
   });
 
-  it("gameEnded unknown with the clock pressed: penalty only if not ended → manual-review", () => {
-    const r = evaluate({}, { ...ILLEGAL_BASE, gameEnded: "unknown" });
-    expectManualReview(r.decision, ["gameEnded"]);
+  it("gameEndEvent unknown with the clock pressed: penalty only if not ended → manual-review", () => {
+    const r = evaluate({}, { ...ILLEGAL_BASE, gameEndEvent: "unknown" });
+    expectManualReview(r.decision, ["gameEndEvent"]);
   });
 
   it("clockPressed unknown → manual-review (no penalty)", () => {
@@ -566,9 +583,9 @@ describe("DT-001 with unknown answers", () => {
   it("two unknown facts are enumerated together", () => {
     const r = evaluate(
       {},
-      { ...ILLEGAL_BASE, gameEnded: "unknown", clockPressed: "unknown" }
+      { ...ILLEGAL_BASE, gameEndEvent: "unknown", clockPressed: "unknown" }
     );
-    expectManualReview(r.decision, ["gameEnded", "clockPressed"]);
+    expectManualReview(r.decision, ["gameEndEvent", "clockPressed"]);
   });
 
   it("more than two unknown facts → manual-review without enumeration", () => {
@@ -577,24 +594,26 @@ describe("DT-001 with unknown answers", () => {
       {
         subtype: "illegal-move",
         playerColor: "unknown",
-        gameEnded: "unknown",
+        gameEndEvent: "unknown",
         clockPressed: "unknown",
       }
     );
     expectManualReview(r.decision, [
       "playerColor",
-      "gameEnded",
+      "gameEndEvent",
       "clockPressed",
     ]);
     expect(r.decision.escalationReason).toContain("3件");
   });
 
   it("asks the unanswered questions first, without repeating the unknown one", () => {
-    const r = evaluate({}, { gameEnded: "unknown" });
+    const r = evaluate({}, { gameEndEvent: "unknown" });
     expect(r.requiresFollowUp).toBe(true);
     const ids = r.followUpQuestions.map((x) => x.id);
     expect(ids).toEqual(["playerColor", "subtype", "clockPressed"]);
-    expect(r.decision.missingFields).not.toContain(QUESTIONS.gameEnded.label);
+    expect(r.decision.missingFields).not.toContain(
+      QUESTIONS.gameEndEvent.label
+    );
   });
 });
 
@@ -620,8 +639,8 @@ describe("DT-002 / DT-003 with unknown answers", () => {
     expect(r.decision.unconfirmedFacts).toEqual([QUESTIONS.subtype.label]);
   });
 
-  it("DT-002 gameEnded / clockPressed / playerColor unknown → manual-review", () => {
-    for (const id of ["gameEnded", "clockPressed", "playerColor"] as const) {
+  it("DT-002 gameEndEvent / clockPressed / playerColor unknown → manual-review", () => {
+    for (const id of ["gameEndEvent", "clockPressed", "playerColor"] as const) {
       const r = evaluate(
         {},
         { ...ILLEGAL_BASE, [id]: "unknown" },
@@ -745,8 +764,8 @@ describe("DT-002 / DT-003 with unknown answers", () => {
     expect(r.decision.unconfirmedFacts).toEqual([QUESTIONS.detectedBy.label]);
   });
 
-  it("DT-003 gameEnded / clockPressed unknown → manual-review", () => {
-    for (const id of ["gameEnded", "clockPressed"] as const) {
+  it("DT-003 gameEndEvent / clockPressed unknown → manual-review", () => {
+    for (const id of ["gameEndEvent", "clockPressed"] as const) {
       const r = evaluate(
         {},
         { ...BASIC, [id]: "unknown" },
@@ -762,20 +781,13 @@ describe("DT-002 / DT-003 with unknown answers", () => {
 // ---------------------------------------------------------------------------
 
 const FLAG = { category: "clock-time" as const, subtype: "flag-fall" };
-/** 駒数の回答（UI と同じく全項目。既定値 0） */
-const ZERO_MATERIAL = Object.fromEntries(
-  (["white", "black"] as const).flatMap((c) =>
-    MATERIAL_KEYS.map((p) => [materialQuestionId(c, p), "0"])
-  )
-);
-/** 白のフラッグ。黒は K+Q（メイト可能）、白は K のみ */
+/** 白のフラッグ。黒は K+Q（局面からメイトの手順が見つかる）、白は K のみ */
 const FLAG_BASE = {
-  ...ZERO_MATERIAL,
   flagFallen: "white",
-  gameEndedBeforeFlag: "false",
+  endedBeforeFlag: "none",
   movesNotCompleted: "true",
-  blackQueens: "1",
-  materialConfirmed: "true",
+  matePosition: "fen",
+  positionFen: BLACK_QUEEN_WHITE_TO_MOVE,
 } as const;
 
 describe("DT-004 with unknown answers", () => {
@@ -791,21 +803,23 @@ describe("DT-004 with unknown answers", () => {
     expectManualReview(r.decision, ["flagFallen"]);
   });
 
-  it("gameEndedBeforeFlag unknown: the earlier result or a loss → manual-review", () => {
-    const r = evaluate(FLAG, { ...FLAG_BASE, gameEndedBeforeFlag: "unknown" });
-    expectManualReview(r.decision, ["gameEndedBeforeFlag"]);
+  it("endedBeforeFlag unknown: the earlier result or a loss → manual-review", () => {
+    const r = evaluate(FLAG, { ...FLAG_BASE, endedBeforeFlag: "unknown" });
+    expectManualReview(r.decision, ["endedBeforeFlag"]);
   });
 
-  it("materialConfirmed unknown cannot be enumerated → manual-review (never re-asks the counts)", () => {
-    const r = evaluate(FLAG, { ...FLAG_BASE, materialConfirmed: "unknown" });
+  it("position unavailable is the tree's own unknown (specific consult-CA, not enumerated)", () => {
+    const r = evaluate(FLAG, { ...FLAG_BASE, matePosition: "unknown" });
     expect(r.requiresFollowUp).toBe(false);
-    expectManualReview(r.decision, ["materialConfirmed"]);
+    expect(r.decision.kind).toBe("manual-review");
+    expect(r.decision.penalties).toEqual([]);
+    expect(r.decision.unconfirmedFacts ?? []).toEqual([]);
   });
 
   const BOTH = {
     flagFallen: "both",
     bothFlagsOrder: "unknown",
-    gameEndedBeforeFlag: "false",
+    endedBeforeFlag: "none",
     quickplayGuidelinesApply: "true",
     lastPeriod: "true",
   } as const;
@@ -846,7 +860,7 @@ describe("DT-004 with unknown answers", () => {
 });
 
 // ---------------------------------------------------------------------------
-// DT-005 (repetition / 75 moves)
+// DT-005 Draw Claim / DT-006 Automatic Draw
 // ---------------------------------------------------------------------------
 
 const DRAW = {
@@ -856,20 +870,17 @@ const DRAW = {
 const CLAIM = {
   drawSubtype: "threefold-repetition-claim",
   claimant: "white",
-  claimantHasMove: "true",
+  lastMover: "black",
   claimMode: "just-appeared",
   touchedPiece: "false",
   repetitionCheck: "met",
 } as const;
 
 describe("DT-005 with unknown answers", () => {
-  it("claimant unknown with a correct claim: a draw either way → decided", () => {
+  it("claimant unknown: whether the claimant had the move depends on who claimed → manual-review", () => {
+    // 黒が最後に指した: 白のクレームなら正しいクレーム（ドロー）、黒なら手番ではない
     const r = evaluate(DRAW, { ...CLAIM, claimant: "unknown" });
-    expect(r.decision.kind).toBe("recommendation");
-    expect(r.decision.penalties).toEqual([
-      expect.objectContaining({ type: "draw" }),
-    ]);
-    expect(r.decision.unconfirmedFacts).toEqual([QUESTIONS.claimant.label]);
+    expectManualReview(r.decision, ["claimant"]);
   });
 
   it("claimant unknown with an incorrect claim: time goes to different players → manual-review", () => {
@@ -881,9 +892,23 @@ describe("DT-005 with unknown answers", () => {
     expectManualReview(r.decision, ["claimant"]);
   });
 
-  it("claimantHasMove unknown → manual-review", () => {
-    const r = evaluate(DRAW, { ...CLAIM, claimantHasMove: "unknown" });
-    expectManualReview(r.decision, ["claimantHasMove"]);
+  it("lastMover unknown → manual-review (the side to move is never taken from the clock)", () => {
+    const r = evaluate(DRAW, { ...CLAIM, lastMover: "unknown" });
+    expectManualReview(r.decision, ["lastMover"]);
+  });
+
+  it("lastMover unknown with a correct 50-move claim: not-on-move vs draw → manual-review", () => {
+    const r = evaluate(
+      { category: "draw", subtype: "fifty-move-claim" },
+      {
+        ...CLAIM,
+        drawSubtype: "fifty-move-claim",
+        repetitionCheck: undefined,
+        fiftyMoveCheck: "met",
+        lastMover: "unknown",
+      }
+    );
+    expectManualReview(r.decision, ["lastMover"]);
   });
 
   it("touchedPiece unknown → manual-review", () => {
@@ -917,31 +942,20 @@ describe("DT-005 with unknown answers", () => {
     expectManualReview(r.decision, ["moveWritten"]);
   });
 
-  it("lastMoveCheckmate unknown with 75 moves met: checkmate or draw → manual-review", () => {
+  it("75 moves: the last-move checkmate is part of the reconstruction result, not a separate question", () => {
+    expect(
+      (QUESTIONS as Record<string, unknown>).lastMoveCheckmate
+    ).toBeUndefined();
+    expect(QUESTIONS.seventyFiveCheck.options.map((o) => o.value)).toContain(
+      "met-checkmate"
+    );
     const r = evaluate(
       { category: "draw", subtype: "75-move-rule" },
-      {
-        drawSubtype: "75-move-rule",
-        seventyFiveCheck: "met",
-        lastMoveCheckmate: "unknown",
-      }
+      { drawSubtype: "75-move-rule", seventyFiveCheck: "met-checkmate" }
     );
-    expectManualReview(r.decision, ["lastMoveCheckmate"]);
-  });
-
-  it("lastMoveCheckmate unknown with 75 moves not met: no intervention either way → decided", () => {
-    const r = evaluate(
-      { category: "draw", subtype: "75-move-rule" },
-      {
-        drawSubtype: "75-move-rule",
-        seventyFiveCheck: "not-met",
-        lastMoveCheckmate: "unknown",
-      }
-    );
-    expect(r.decision.intervention).toBe("no-intervention");
-    expect(r.decision.unconfirmedFacts).toEqual([
-      QUESTIONS.lastMoveCheckmate.label,
-    ]);
+    expect(r.decision.treeId).toBe("DT-006-automatic-draw");
+    expect(r.decision.penalties).toHaveLength(0);
+    expect(r.decision.conclusion).toContain("チェックメイトが優先");
   });
 
   it("drawSubtype unknown → manual-review", () => {
@@ -978,7 +992,7 @@ describe("IncidentCounter with decisions on unknown paths", () => {
   });
 
   it("does not count a manual-review decision on an unknown path", () => {
-    for (const id of ["clockPressed", "gameEnded", "playerColor"] as const) {
+    for (const id of ["clockPressed", "gameEndEvent", "playerColor"] as const) {
       const r = counted({ ...ILLEGAL_BASE, [id]: "unknown" });
       expect(r.decision.kind).toBe("manual-review");
       expect(r.penalised).toBe(false);
@@ -1027,20 +1041,20 @@ describe("merged decision text", () => {
   it("labels escalation reasons with their branch when only some branches have one", () => {
     const fields = unknownResolutionFields({
       kind: "agreed",
-      facts: [QUESTIONS.gameEnded],
+      facts: [QUESTIONS.gameEndEvent],
       branches: [
         {
-          assignment: { gameEnded: "true" },
+          assignment: { gameEndEvent: "resignation" },
           result: decided({
             escalationRecommended: true,
             escalationReason: "理由A",
           }),
         },
-        { assignment: { gameEnded: "false" }, result: decided() },
+        { assignment: { gameEndEvent: "in-progress" }, result: decided() },
       ],
     });
     expect(fields.escalationRecommended).toBe(true);
     expect(fields.escalationReason).toContain("理由A");
-    expect(fields.escalationReason).toContain("「はい」");
+    expect(fields.escalationReason).toContain("「投了の発言や動作」");
   });
 });

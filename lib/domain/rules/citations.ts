@@ -67,6 +67,51 @@ export const CITATIONS = {
     16,
     "Except as provided in Article 4.2.1, if the player having the move touches on the chessboard, with the intention of moving or capturing: 4.3.1 one or more of his/her own pieces, he/she must move the first piece touched that can be moved. 4.3.2 one or more of his/her opponent’s pieces, he/she must capture the first piece touched that can be captured. 4.3.3 one or more pieces of each colour, he/she must capture the first touched opponent’s piece with his/her first touched piece or, if this is illegal, move or capture the first piece touched that can be moved or captured. If it is unclear whether the player’s own piece or his/her opponent’s was touched first, the player’s own piece shall be considered to have been touched before his/her opponent’s."
   ),
+  FIDE_4_2_1: fide(
+    "4.2.1",
+    16,
+    "Only the player having the move may adjust one or more pieces on their squares, provided that he/she first expresses his/her intention (for example by saying “j’adoube” or “I adjust”)."
+  ),
+  FIDE_4_2_2: fide(
+    "4.2.2",
+    16,
+    "Any other physical contact with a piece, except for clearly accidental contact, shall be considered to be intent."
+  ),
+  FIDE_4_4: fide(
+    "4.4",
+    17,
+    "If a player having the move: 4.4.1 touches his/her king and a rook he/she must castle on that side if it is legal to do so 4.4.2 deliberately touches a rook and then his/her king he/she is not allowed to castle on that side on that move and the situation shall be governed by Article 4.3.1. 4.4.3 intending to castle, touches the king and then a rook, but castling with this rook is illegal, the player must make another legal move with his/her king (which may include castling with the other rook). If the king has no legal move, the player is free to make any legal move. 4.4.4 promotes a pawn, the choice of the piece is finalised when the piece has touched the square of promotion."
+  ),
+  FIDE_4_5: fide(
+    "4.5",
+    17,
+    "If none of the pieces touched in accordance with Article 4.3 or Article 4.4 can be moved or captured, the player may make any legal move."
+  ),
+  FIDE_4_8: fide(
+    "4.8",
+    18,
+    "A player forfeits his/her right to claim against his/her opponent’s violation of Articles 4.1 – 4.7 once the player touches a piece with the intention of moving or capturing it."
+  ),
+  FIDE_12_9: fide(
+    "12.9",
+    39,
+    "Options available to the arbiter concerning penalties: 12.9.1 warning, 12.9.2 increasing the remaining time of the opponent, 12.9.3 reducing the remaining time of the offending player, 12.9.4 increasing the points scored in the game by the opponent to the maximum available for that game, 12.9.5 reducing the points scored in the game by the offending person, 12.9.6 declaring the game to be lost by the offending player (the arbiter shall also decide the opponent’s score), 12.9.7 a fine announced in advance, 12.9.8 exclusion from one or more rounds, 12.9.9 expulsion from the competition."
+  ),
+  MANUAL_4_2_1_DISPLACED: manual(
+    "Article 4.2.1 (adjusting)",
+    16,
+    "Article 4.2.1 may only be used to correct displaced pieces. If the opponent is not present then an arbiter, if present, should be informed before any adjustment takes place. The player should always announce his/her intention to adjust a piece. If he/she does not do this then the normal touch move rules apply (see 4.3)."
+  ),
+  MANUAL_4_ACCIDENTAL: manual(
+    "Article 4.2.2 (accidental touch)",
+    16,
+    "The accidental touch doesn’t imply a psychological analysis of the player’s intentions."
+  ),
+  MANUAL_4_4_2_ROOK_FIRST: manual(
+    "Article 4.4.2 (rook touched first)",
+    17,
+    "In this case the player must move his/her rook, if possible. If no rook move is possible, he/she should move his/her king. (Article 4.3.1)"
+  ),
   FIDE_4_7: fide(
     "4.7",
     18,
@@ -101,6 +146,16 @@ export const CITATIONS = {
   ),
 
   // ---- Article 5: The Completion of the Game ----
+  FIDE_5_1_1: fide(
+    "5.1.1",
+    19,
+    "The game is won by the player who has checkmated his/her opponent’s king. This immediately ends the game, provided that the move producing the checkmate position was in accordance with Article 3 and Articles 4.2 – 4.7."
+  ),
+  FIDE_5_2_1: fide(
+    "5.2.1",
+    19,
+    "The game is drawn when the player to move has no legal move and his/her king is not in check. The game is said to end in ‘stalemate’. This immediately ends the game, provided that the move producing the stalemate position was in accordance with Article 3 and Articles 4.2 – 4.7."
+  ),
   FIDE_5_2_2: fide(
     "5.2.2",
     19,
@@ -135,6 +190,11 @@ export const CITATIONS = {
     32,
     "Positions are considered the same if and only if the same player has the move, pieces of the same kind and colour occupy the same squares and the possible moves of all the pieces of both players are the same. Thus positions are not the same if: 9.2.3.1 at the start of the sequence a pawn could have been captured en passant 9.2.3.2 a king had castling rights with a rook that has not been moved, but forfeited these after moving. The castling rights are lost only after the king or rook is moved."
   ),
+  FIDE_9_3: fide(
+    "9.3",
+    33,
+    "The game is drawn, upon a correct claim by a player having the move, if: 9.3.1 he/she indicates his/her move, which cannot be changed, by writing it on the paper scoresheet or entering it on the electronic scoresheet and declares to the arbiter his/her intention to make this move which will result in the last 50 moves by each player having been made without the movement of any pawn and without any capture, or 9.3.2 the last 50 moves by each player have been completed without the movement of any pawn and without any capture."
+  ),
   FIDE_9_4: fide(
     "9.4",
     33,
@@ -159,6 +219,25 @@ export const CITATIONS = {
     "9.6",
     33,
     "If one or both of the following occur(s) then the game is drawn: 9.6.1 the same position has appeared, as in 9.2.2 at least five times. 9.6.2 any series of at least 75 moves have been made by each player without the movement of any pawn and without any capture. If the last move resulted in checkmate, that shall take precedence."
+  ),
+
+  // ---- Article 11.12 ----
+  FIDE_11_12: fide(
+    "11.12",
+    37,
+    "Checking a ‘three times occurrence of the position’ or a ’50 moves’ claim is a duty of the players, under supervision of the arbiter."
+  ),
+
+  // ---- Article 8.1.1 / 8.4: The Recording of the Moves ----
+  FIDE_8_1_1: fide(
+    "8.1.1",
+    29,
+    "In the course of play each player is required to record his/her own moves and those of his/her opponent in the correct manner, move after move, as clearly and legibly as possible, in one of the following ways:"
+  ),
+  FIDE_8_4: fide(
+    "8.4",
+    29,
+    "If a player has less than five minutes left on his/her clock during an allotted period of time and does not have additional time of 30 seconds or more added with each move, then for the remainder of the period he/she is not obliged to meet the requirements of Article 8.1.1."
   ),
 
   // ---- Article 8.7 ----
@@ -363,6 +442,22 @@ export const CITATIONS = {
   ),
 
   // ---- JCF NA Seminar ----
+  JCF_NA_P20_RELEASED: jcf(
+    20,
+    "※2 e4でポーンを離したあと、時計を押す前にe3に変更することもタッチアンドムーブ違反(e4着手が成立)。"
+  ),
+  JCF_NA_P20_WARNING: jcf(
+    20,
+    "①白が時計を押す前にアービターが上記状況に気付いた場合、または、相手が気付いてアービターを呼んだ場合。⇒白にタッチアンドムーブワーニング。e4で再開。（時間加算/減算なしが一般的）"
+  ),
+  JCF_NA_P20_CLOCK_PRESSED: jcf(
+    20,
+    "②上記状況で白が時計を押していた場合⇒白にタッチアンドムーブワーニング。時計を押してしまっているため、相手に時間加算。e4で再開。"
+  ),
+  JCF_NA_P20_THIRD: jcf(
+    20,
+    "※大会によって異なるが、タッチアンドムーブ違反は3回目で失格となる場合がある"
+  ),
   JCF_NA_P47_TOUCH_MOVE: jcf(
     47,
     "※イリーガルムーブの代わりに手を指す際にはタッチアンドムーブが適用される"
@@ -394,6 +489,11 @@ export const CITATIONS = {
   JCF_NA_P65_SAME_POSITION: jcf(
     65,
     "同じプレーヤーが指す手番で、同じ種類と色の駒が同じマスに置かれており、両プレーヤーのすべての駒の可能な指し手（動くことのできる範囲）が同じ場合※以下の要素が変わると同一局面とは言わない・アンパッサンの可否・キャスリングの可否"
+  ),
+  JCF_NA_P67_OWN_MOVE: jcf(67, "前提: 自分の手番であること"),
+  JCF_NA_P67_CLAIM_LATER: jcf(
+    67,
+    "三回同一局面のケースは4回目でも主張可能。50手ルールは51手目以降でも主張可能"
   ),
   JCF_NA_P69_INCORRECT_CLAIM: jcf(
     69,

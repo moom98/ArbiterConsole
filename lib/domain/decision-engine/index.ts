@@ -1,13 +1,21 @@
 import type {
   CompetitionType,
   Decision,
+  DrawSubtype,
+  FlagFallFacts,
+  IllegalMoveFacts,
   Incident,
   PlayerColor,
   RuleCitation,
   SupervisionRegime,
+  TimeControl,
   TournamentOverrides,
 } from "@/lib/domain/entities";
-import { SUPPORTED_RULES_VERSIONS } from "@/lib/domain/entities";
+import {
+  SUPPORTED_RULES_VERSIONS,
+  TOUCH_MOVE_SUBTYPE,
+  drawClaimBasisOf,
+} from "@/lib/domain/entities";
 import {
   IllegalMoveStandardTree,
   type PriorIllegalMove,
@@ -19,10 +27,10 @@ import {
 import { IllegalMoveFastCompetitionTree } from "@/lib/domain/decision-trees/dt-002-illegal-move-fast-competition";
 import { IllegalMoveFastBasicTree } from "@/lib/domain/decision-trees/dt-003-illegal-move-fast-basic";
 import { FlagFallTree } from "@/lib/domain/decision-trees/dt-004-flag-fall";
-import {
-  RepetitionTree,
-  type RepetitionInput,
-} from "@/lib/domain/decision-trees/dt-005-repetition";
+import { DrawClaimTree } from "@/lib/domain/decision-trees/dt-005-draw-claim";
+import { AutomaticDrawTree } from "@/lib/domain/decision-trees/dt-006-automatic-draw";
+import { TouchMoveTree } from "@/lib/domain/decision-trees/dt-007-touch-move";
+import type { DrawTreeInput } from "@/lib/domain/decision-trees/draw-shared";
 import type { DecisionTreeResult } from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
 import {
   QUESTIONS,
@@ -45,7 +53,16 @@ import {
   parseGameHistoryText,
   validateGameHistory,
 } from "@/lib/domain/services/game-history";
+import {
+  assessMatePossibility,
+  matePositionRequest,
+  type MatePossibility,
+} from "@/lib/domain/services/mate-possibility";
+import { touchObligation } from "@/lib/domain/services/touch-move";
+import { lastPeriodFromTimeControl } from "@/lib/domain/services/time-control";
 import type { LlmAssistOutcome, LlmAssistPort } from "@/lib/domain/llm/ports";
+import type { ExternalAiPreview } from "@/lib/domain/llm/types";
+import { notSentNotice } from "@/lib/domain/llm/external-ai";
 import { buildLlmDecision } from "@/lib/domain/llm/llm-decision";
 import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
 import {
@@ -55,7 +72,10 @@ import {
 } from "@/lib/domain/services/fair-play";
 
 export interface DecisionEngineDeps {
-  /** 同一局面の自動判定に使う局面解析（未指定なら自動判定は利用不可） */
+  /**
+   * 局面解析。同一局面の自動判定と、メイト可能性の手順の検証（ADR-014 §5）に使う
+   * （未指定ならどちらも利用不可）
+   */
   positions?: ChessPositionPort;
   /**
    * 決定木の対象外の事象について AI 参考情報を取得するポート（ADR-007）。
@@ -79,6 +99,8 @@ function isUncovered(
 }
 
 const OFFLINE_AI_NOTE = "オンライン時にAI参考情報を取得できます。";
+const AWAITING_CONFIRMATION_NOTE =
+  "AI参考情報が必要な場合は、外部AIへ送る内容を確認してください。";
 
 /**
  * 判断に用いる規則セット。すべて明示的に与えること（既定値を仮定しない）。
@@ -94,6 +116,11 @@ export interface RulesetContext {
    * 現在は Blitz B.2 の加算時間のみ参照する（ADR-005 / ADR-006）。
    */
   tournamentOverrides?: TournamentOverrides;
+  /**
+   * 報告時の持ち時間（ADR-014 §7）。最終ピリオドかどうか（DT-004 lastPeriod）を設定から
+   * 求めるために使う。未指定なら質問する。
+   */
+  timeControl?: TimeControl;
 }
 
 export interface DecisionEngineContext {
@@ -104,6 +131,11 @@ export interface DecisionEngineContext {
    * 件数が回数になる。評価中の Incident 自身は含めないこと。
    */
   illegalMoveHistory?: Record<PlayerColor, PriorIllegalMove[]>;
+  /**
+   * この対局で各プレーヤーに記録済みのタッチムーブ違反の回数（IncidentCounter が算出。
+   * 7.5 の違法手とは別に数える。ADR-014 §6）。評価中の Incident 自身は含めないこと。
+   */
+  touchMoveViolations?: Record<PlayerColor, number>;
   /** 大会 ID（AI 参考情報の規則検索で大会固有規定を対象にするため） */
   tournamentId?: string;
 }
@@ -113,6 +145,19 @@ export interface DecisionEngineResult {
   requiresFollowUp: boolean;
   /** requiresFollowUp の場合に回答が必要な質問 */
   followUpQuestions: FollowUpQuestion[];
+  /**
+   * AI 参考情報を取得する前に、アービターが外部AIへ送る内容を確認する必要がある（D13）。
+   * decision は手動確認（まだ何も送っていない）。確認後に approvalKey を付けて evaluate する
+   */
+  externalAiConfirmation?: {
+    preview: ExternalAiPreview;
+    approvalKey: string;
+  };
+}
+
+export interface EvaluateOptions {
+  /** アービターが確認した外部AIへの送信内容（LlmAssistPort の approvalKey） */
+  approvalKey?: string;
 }
 
 /**
@@ -141,7 +186,8 @@ export class DecisionEngine {
    * 決定木の対象外の事象のみ、LLM ポートが注入されていれば AI 参考情報を取得する。
    */
   async evaluate(
-    context: DecisionEngineContext
+    context: DecisionEngineContext,
+    options: EvaluateOptions = {}
   ): Promise<DecisionEngineResult> {
     const routed = this.routeResolvingUnknown(context);
     if (!isUncovered(routed)) return routed;
@@ -152,21 +198,25 @@ export class DecisionEngine {
 
     let outcome: LlmAssistOutcome;
     try {
-      outcome = await this.deps.llm.assist({
-        incident: {
-          category: incident.category,
-          subtype: incident.subtype,
-          playerColor: incident.playerColor,
-          description: incident.description,
-          arbiterObserved: incident.arbiterObserved,
-        },
-        context: {
-          competitionType: routed.ruleset.competitionType,
-          supervisionRegime: routed.ruleset.supervisionRegime,
-          rulesVersion: routed.rulesVersion,
+      outcome = await this.deps.llm.assist(
+        {
+          incident: {
+            category: incident.category,
+            subtype: incident.subtype,
+            playerColor: incident.playerColor,
+            description: incident.description,
+            arbiterObserved: incident.arbiterObserved,
+          },
+          context: {
+            competitionType: routed.ruleset.competitionType,
+            supervisionRegime: routed.ruleset.supervisionRegime,
+            rulesVersion: routed.rulesVersion,
+          },
           tournamentId: context.tournamentId,
+          doNotSend: incident.externalAiOptOut === true,
         },
-      });
+        { approvalKey: options.approvalKey }
+      );
     } catch (error) {
       outcome = {
         status: "error",
@@ -192,8 +242,37 @@ export class DecisionEngine {
           model: outcome.model,
           articles: outcome.articles,
           storedArticleIds: outcome.storedArticleIds,
+          reidentify: outcome.reidentify,
+          localSourceLabels: outcome.localSourceLabels,
         });
         return { decision, requiresFollowUp: false, followUpQuestions: [] };
+      }
+      case "needs-confirmation":
+        // まだ何も送っていない。手動確認の判断を先に示し、確認後に AI 参考情報で置き換える
+        return {
+          ...this.manualReview(incident, rulesVersion, {
+            extraAction: AWAITING_CONFIRMATION_NOTE,
+            escalationReason:
+              "AI参考情報は、外部AIへ送る内容をアービターが確認した後に取得します。CAへ確認してください。",
+            llm: { status: "awaiting-confirmation" },
+          }),
+          externalAiConfirmation: {
+            preview: outcome.preview,
+            approvalKey: outcome.approvalKey,
+          },
+        };
+      case "not-sent": {
+        // 機微な内容の可能性: 外部へ送らずローカルで処理する（D10, §4.3）
+        const notice = notSentNotice(outcome.reasons);
+        return this.manualReview(incident, rulesVersion, {
+          extraAction: notice,
+          escalationReason: `${notice}。CAへ確認してください。`,
+          llm: {
+            status: "not-sent",
+            message: notice,
+            gateReasons: [...outcome.reasons],
+          },
+        });
       }
       case "offline":
         return this.manualReview(incident, rulesVersion, {
@@ -381,6 +460,9 @@ export class DecisionEngine {
     const regime = ruleset.supervisionRegime;
 
     if (incident.category === "illegal-move") {
+      // 触れた駒の規則は DT-001〜003 より先に DT-007 へ（ADR-014 §6）
+      if (incident.subtype === TOUCH_MOVE_SUBTYPE)
+        return this.processTouchMove(context, rulesVersion);
       if (competitionType === "standard") {
         return this.processIllegalMoveStandard(context, rulesVersion);
       }
@@ -400,9 +482,16 @@ export class DecisionEngine {
         return this.finish(
           incident,
           tree.evaluate({
-            ...incident.flagFallFacts,
+            ...currentFlagFallFacts(incident),
+            // 最終ピリオド: アービターの明示的な回答を優先し、未回答・「わからない」の場合だけ
+            // 設定から求める（確認済みの単一ピリオドなら常に最終。複数ピリオド・未確認の
+            // 旧形式は質問する。ADR-014 §7）。設定が不完全でも、回答に反してドローにしない
+            lastPeriod:
+              incident.flagFallFacts?.lastPeriod ??
+              lastPeriodFromTimeControl(ruleset.timeControl),
             competitionType,
             supervisionRegime: regime,
+            mate: this.mateFor(incident),
           }),
           rulesVersion
         );
@@ -412,15 +501,19 @@ export class DecisionEngine {
     if (incident.category === "draw") {
       if (incident.subtype === undefined)
         return this.ask(incident, [QUESTIONS.drawSubtype], rulesVersion);
+      // DT-005 Draw Claim（9.2 / 9.3）/ DT-006 Automatic Draw（9.6）。合意・ステイルメイト・
+      // デッドポジション・その他は Decision Tree を持たない（ADR-014 §1）
+      const claimBasis = drawClaimBasisOf(incident.subtype);
       if (
-        incident.subtype === "threefold-repetition-claim" ||
+        claimBasis !== undefined ||
         incident.subtype === "fivefold-repetition" ||
         incident.subtype === "75-move-rule"
       ) {
         const facts = incident.drawClaimFacts ?? {};
-        const input: Partial<RepetitionInput> = {
+        const input: Partial<DrawTreeInput> = {
           ...facts,
-          subtype: incident.subtype,
+          // 上の条件で DT-005 / DT-006 の subtype に絞り込み済み
+          subtype: incident.subtype as DrawSubtype,
           competitionType,
           supervisionRegime: regime,
           tournamentOverrides: ruleset.tournamentOverrides,
@@ -437,7 +530,8 @@ export class DecisionEngine {
               ? analyzeRepetition(
                   port,
                   validated,
-                  incident.subtype === "threefold-repetition-claim" &&
+                  // 9.2.1 / 9.3.1: 記入した手を指した後の局面で判定する
+                  claimBasis !== undefined &&
                     facts.claimMode === "about-to-appear"
                     ? facts.intendedMove
                     : undefined
@@ -448,8 +542,13 @@ export class DecisionEngine {
               : { ok: false, error: analysed.error };
           }
         }
-        const tree = new RepetitionTree(this.providers, rulesVersion);
-        return this.finish(incident, tree.evaluate(input), rulesVersion);
+        const result =
+          claimBasis !== undefined
+            ? new DrawClaimTree(this.providers, rulesVersion).evaluate(input)
+            : new AutomaticDrawTree(this.providers, rulesVersion).evaluate(
+                input
+              );
+        return this.finish(incident, result, rulesVersion);
       }
     }
 
@@ -485,6 +584,37 @@ export class DecisionEngine {
     };
   }
 
+  private processTouchMove(
+    context: DecisionEngineContext,
+    rulesVersion: string
+  ): DecisionEngineResult {
+    const { incident } = context;
+    const facts = incident.touchMoveFacts ?? {};
+    const player = incident.playerColor;
+    // 触れた駒と局面は端末内だけで解析する（ADR-012）
+    const obligation =
+      player &&
+      (facts.whatNext === "moved-other" || facts.whatNext === "not-moved") &&
+      facts.touchedText !== undefined
+        ? touchObligation(
+            this.deps.positions,
+            player,
+            facts.touchedText,
+            facts.fen
+          )
+        : undefined;
+    const result = new TouchMoveTree(this.providers, rulesVersion).evaluate({
+      ...facts,
+      player,
+      arbiterObserved: incident.arbiterObserved,
+      obligation,
+      priorViolations: player
+        ? context.touchMoveViolations?.[player]
+        : undefined,
+    });
+    return this.finish(incident, result, rulesVersion);
+  }
+
   private processIllegalMoveStandard(
     context: DecisionEngineContext,
     rulesVersion: string
@@ -495,10 +625,11 @@ export class DecisionEngine {
     const prior =
       color && illegalMoveHistory ? illegalMoveHistory[color] : undefined;
     const result = tree.evaluate({
-      ...incident.illegalMoveFacts,
+      ...currentIllegalMoveFacts(incident),
       playerColor: color,
       playerIncidentCount: Array.isArray(prior) ? prior.length : undefined,
       priorIllegalMoves: prior,
+      mate: this.mateFor(incident),
     });
     const decision = {
       ...result.decision,
@@ -526,11 +657,12 @@ export class DecisionEngine {
     const prior =
       color && illegalMoveHistory ? illegalMoveHistory[color] : undefined;
     const input = {
-      ...incident.illegalMoveFacts,
+      ...currentIllegalMoveFacts(incident),
       playerColor: color,
       playerIncidentCount: Array.isArray(prior) ? prior.length : undefined,
       priorIllegalMoves: prior,
       tournamentOverrides: context.ruleset?.tournamentOverrides,
+      mate: this.mateFor(incident),
     };
     const result =
       regime === "competition-rules"
@@ -545,6 +677,31 @@ export class DecisionEngine {
             rulesVersion
           ).evaluate(input);
     return this.finish(incident, result, rulesVersion);
+  }
+
+  /**
+   * メイト可能性（6.9 / 7.5.5 / A.5.3）を局面から判定する（ADR-014 §5）。
+   * ヘルプメイトの手順は Incident.mateSearch の候補を、毎回ポートで再生して検証する。
+   */
+  private mateFor(incident: Incident): MatePossibility {
+    const request = matePositionRequest(incident);
+    if (!request)
+      return {
+        verdict: "unknown",
+        cause: "no-position",
+        reason: "局面が入力されていません",
+      };
+    if (!this.deps.positions)
+      return {
+        verdict: "unknown",
+        cause: "not-searched",
+        reason: "局面解析を利用できません",
+      };
+    return assessMatePossibility(
+      this.deps.positions,
+      request,
+      incident.mateSearch
+    );
   }
 
   private finish(
@@ -649,4 +806,27 @@ export * from "@/lib/domain/decision-trees/dt-001-illegal-move-standard";
 export { DT_002_ID } from "@/lib/domain/decision-trees/dt-002-illegal-move-fast-competition";
 export { DT_003_ID } from "@/lib/domain/decision-trees/dt-003-illegal-move-fast-basic";
 export { DT_004_ID } from "@/lib/domain/decision-trees/dt-004-flag-fall";
-export { DT_005_ID } from "@/lib/domain/decision-trees/dt-005-repetition";
+export { DT_005_ID } from "@/lib/domain/decision-trees/dt-005-draw-claim";
+export { DT_006_ID } from "@/lib/domain/decision-trees/dt-006-automatic-draw";
+export { DT_007_ID } from "@/lib/domain/decision-trees/dt-007-touch-move";
+
+/**
+ * 違法手の事実から、J1b-8 より前の「対局は終了していたか（はい/いいえ）」を除く。
+ * 握手だけで「はい」と答えられたため判断に使わず、対局を終わらせた出来事を質問し直す
+ * （ADR-014 §3）
+ */
+function currentIllegalMoveFacts(
+  incident: Incident
+): Partial<Omit<IllegalMoveFacts, "gameEnded">> {
+  const { gameEnded: _legacy, ...facts } = incident.illegalMoveFacts ?? {};
+  return facts;
+}
+
+/** フラッグの事実から、J1b-8 より前の「フラッグの前に終了していたか」を除く（ADR-014 §3） */
+function currentFlagFallFacts(
+  incident: Incident
+): Partial<Omit<FlagFallFacts, "gameEndedBeforeFlag">> {
+  const { gameEndedBeforeFlag: _legacy, ...facts } =
+    incident.flagFallFacts ?? {};
+  return facts;
+}

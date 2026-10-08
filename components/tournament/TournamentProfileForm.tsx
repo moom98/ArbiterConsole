@@ -13,6 +13,7 @@ import {
   validateTournamentProfile,
   type TournamentProfileInput,
 } from "@/lib/domain/services/tournament-profile";
+import { MAX_TIME_CONTROL_PERIODS } from "@/lib/domain/services/time-control";
 
 /** <input type="date"> の "YYYY-MM-DD" をローカル日付として解釈する */
 function parseLocalDate(value: string): Date | undefined {
@@ -36,6 +37,18 @@ function parseIntOrUndefined(value: string): number | undefined {
   return Number.isFinite(n) ? n : NaN;
 }
 
+interface PeriodFields {
+  moves: string;
+  minutes: string;
+  incrementSeconds: string;
+}
+
+const EMPTY_PERIOD: PeriodFields = {
+  moves: "",
+  minutes: "",
+  incrementSeconds: "",
+};
+
 interface FormFields {
   name: string;
   startDate: string;
@@ -45,9 +58,14 @@ interface FormFields {
   competitionType?: CompetitionType;
   supervisionRegime?: SupervisionRegime;
   rulesVersion?: RulesVersion;
-  initialMinutes: string;
-  incrementSeconds: string;
+  /** 持ち時間のピリオド（ADR-014 §7）。最後のピリオドの moves は使わない */
+  periods: PeriodFields[];
   delaySeconds: string;
+  /** 旧形式の追加時間（何手目の後か不明）。確認済みにするまで保存し直しても引き継ぐ */
+  legacyAdditionalMinutes?: number;
+  /** 読み込んだ持ち時間のピリオドが不完全だったか（確認欄を表示し続ける） */
+  legacyIncomplete: boolean;
+  periodsConfirmed: boolean;
   totalRounds: string;
   b2Minutes: string;
   b2Document: string;
@@ -66,9 +84,19 @@ function toFields(input?: TournamentProfileInput): FormFields {
     competitionType: input?.competitionType,
     supervisionRegime: input?.supervisionRegime,
     rulesVersion: input?.rulesVersion,
-    initialMinutes: input?.timeControl?.initialMinutes?.toString() ?? "",
-    incrementSeconds: input?.timeControl?.incrementSeconds?.toString() ?? "",
+    periods: input?.timeControl?.periods?.length
+      ? input.timeControl.periods.map((p) => ({
+          moves: p.moves?.toString() ?? "",
+          minutes: p.minutes?.toString() ?? "",
+          incrementSeconds: p.incrementSeconds?.toString() ?? "",
+        }))
+      : [{ ...EMPTY_PERIOD }],
     delaySeconds: input?.timeControl?.delaySeconds?.toString() ?? "",
+    legacyAdditionalMinutes: input?.timeControl?.periodsIncomplete
+      ? input.timeControl.additionalTimeAfterMove
+      : undefined,
+    legacyIncomplete: !!input?.timeControl?.periodsIncomplete,
+    periodsConfirmed: !input?.timeControl?.periodsIncomplete,
     totalRounds: input?.totalRounds?.toString() ?? "",
     b2Minutes: o?.seconds !== undefined ? String(o.seconds / 60) : "",
     b2Document: o?.source?.document ?? "",
@@ -94,9 +122,19 @@ function toInput(f: FormFields): TournamentProfileInput {
     supervisionRegime: f.supervisionRegime,
     rulesVersion: f.rulesVersion,
     timeControl: {
-      initialMinutes: parseIntOrUndefined(f.initialMinutes),
-      incrementSeconds: parseIntOrUndefined(f.incrementSeconds),
+      periods: f.periods.map((p, i) => ({
+        moves:
+          i < f.periods.length - 1 ? parseIntOrUndefined(p.moves) : undefined,
+        minutes: parseIntOrUndefined(p.minutes),
+        incrementSeconds: parseIntOrUndefined(p.incrementSeconds),
+      })),
       delaySeconds: parseIntOrUndefined(f.delaySeconds),
+      ...(f.periodsConfirmed
+        ? {}
+        : {
+            periodsIncomplete: true,
+            additionalTimeAfterMove: f.legacyAdditionalMinutes,
+          }),
     },
     totalRounds: parseIntOrUndefined(f.totalRounds),
     blitzCompetitionTimePenalty: hasB2
@@ -140,6 +178,12 @@ export function TournamentProfileForm(props: TournamentProfileFormProps) {
   const errors = validateTournamentProfile(input);
   const showB2 = acceptsBlitzCompetitionOverride(f);
   const set = (patch: Partial<FormFields>) => setF((p) => ({ ...p, ...patch }));
+  const setPeriod = (index: number, patch: Partial<PeriodFields>) =>
+    setF((p) => ({
+      ...p,
+      periods: p.periods.map((x, i) => (i === index ? { ...x, ...patch } : x)),
+    }));
+  const multi = f.periods.length > 1;
 
   const handleSubmit = async () => {
     setSubmitted(true);
@@ -268,29 +312,116 @@ export function TournamentProfileForm(props: TournamentProfileFormProps) {
         ))}
       </fieldset>
 
-      <div className="grid grid-cols-3 gap-3">
-        <label className="block font-semibold">
-          持ち時間（分）
-          <input
-            type="number"
-            inputMode="numeric"
-            min={1}
-            value={f.initialMinutes}
-            onChange={(e) => set({ initialMinutes: e.target.value })}
-            className={inputClass}
-          />
-        </label>
-        <label className="block font-semibold">
-          加算（秒/手）
-          <input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={f.incrementSeconds}
-            onChange={(e) => set({ incrementSeconds: e.target.value })}
-            className={inputClass}
-          />
-        </label>
+      <fieldset className="space-y-3">
+        <legend className="font-semibold mb-2">持ち時間</legend>
+        {f.periods.map((p, i) => {
+          const isLast = i === f.periods.length - 1;
+          const prefix = multi ? `第${i + 1}ピリオド ` : "";
+          return (
+            <div
+              key={i}
+              className={multi ? "p-3 border border-gray-200 rounded-lg" : ""}
+            >
+              {multi && (
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-semibold">
+                    第{i + 1}ピリオド{isLast ? "（残りの全ての手）" : ""}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`第${i + 1}ピリオドを削除`}
+                    onClick={() =>
+                      set({ periods: f.periods.filter((_, j) => j !== i) })
+                    }
+                    className="min-h-10 px-3 text-sm text-red-700 bg-red-50 rounded-lg"
+                  >
+                    削除
+                  </button>
+                </div>
+              )}
+              <div
+                className={`grid gap-3 ${multi && !isLast ? "grid-cols-3" : "grid-cols-2"}`}
+              >
+                {multi && !isLast && (
+                  <label className="block font-semibold">
+                    {prefix}手数
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      value={p.moves}
+                      onChange={(e) => setPeriod(i, { moves: e.target.value })}
+                      className={inputClass}
+                    />
+                  </label>
+                )}
+                <label className="block font-semibold">
+                  {prefix}持ち時間（分）
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    value={p.minutes}
+                    onChange={(e) => setPeriod(i, { minutes: e.target.value })}
+                    className={inputClass}
+                  />
+                </label>
+                <label className="block font-semibold">
+                  {prefix}加算（秒/手）
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={p.incrementSeconds}
+                    onChange={(e) =>
+                      setPeriod(i, { incrementSeconds: e.target.value })
+                    }
+                    className={inputClass}
+                  />
+                </label>
+              </div>
+            </div>
+          );
+        })}
+        {f.periods.length < MAX_TIME_CONTROL_PERIODS && (
+          <button
+            type="button"
+            onClick={() =>
+              set({ periods: [...f.periods, { ...EMPTY_PERIOD }] })
+            }
+            className="w-full min-h-12 px-3 rounded-lg border-2 border-dashed border-gray-300 font-semibold"
+          >
+            ピリオドを追加（例: 40手90分 → 残り30分）
+          </button>
+        )}
+        <p className="text-xs text-gray-600">
+          複数のピリオドがある場合、最後のピリオドは残りの全ての手を指すため、手数を入力しません。最終ピリオドかどうか（両フラッグの判断など）と
+          8.4 の加算はこの設定から求めます。
+        </p>
+        {f.legacyIncomplete && (
+          <div
+            role="status"
+            className="p-3 border border-yellow-300 bg-yellow-50 rounded-lg text-sm space-y-2"
+          >
+            <p>
+              この持ち時間は以前の形式で保存されており、2つ目以降のピリオド（例:
+              40手の後の追加時間）があるかどうかが分かりません。
+              {f.legacyAdditionalMinutes !== undefined
+                ? `旧形式の追加時間の値（単位・何手目の後かは不明）: ${f.legacyAdditionalMinutes}。`
+                : ""}
+              大会要項を見てピリオドを入力し直し、確認してください。確認するまで、最終ピリオドかどうかは毎回質問します。
+            </p>
+            <label className="flex items-center gap-2 min-h-12 font-semibold">
+              <input
+                type="checkbox"
+                className="w-5 h-5"
+                checked={f.periodsConfirmed}
+                onChange={(e) => set({ periodsConfirmed: e.target.checked })}
+              />
+              大会要項でピリオドを確認して入力した（ピリオドが1つだけなら、全ての手をこの持ち時間で指す）
+            </label>
+          </div>
+        )}
         <label className="block font-semibold">
           遅延（秒・任意）
           <input
@@ -302,7 +433,7 @@ export function TournamentProfileForm(props: TournamentProfileFormProps) {
             className={inputClass}
           />
         </label>
-      </div>
+      </fieldset>
 
       <div className="grid grid-cols-2 gap-3">
         <label className="block font-semibold">

@@ -1,3 +1,4 @@
+import { TOUCH_MOVE_SUBTYPE } from "@/lib/domain/entities";
 import type {
   FactCondition,
   FactDefinition,
@@ -121,7 +122,7 @@ export const ILLEGAL_MOVE_75_SUBTYPES = [
   "two-hands",
 ] as const;
 
-export const TOUCH_MOVE_SUBTYPE = "touch-move";
+export { TOUCH_MOVE_SUBTYPE };
 
 // ---------------------------------------------------------------------------
 // 定義
@@ -143,7 +144,7 @@ export const FACT_DEFINITIONS: readonly FactDefinition[] = [
         ["other", "その他"]
       )
     ),
-    [req("§12"), fide("5"), fide("6.8")]
+    [req("§12"), fide("5"), fide("6.8"), dt("gameEndEvent")]
   ),
   observed(
     "game.record-state",
@@ -279,6 +280,12 @@ export const FACT_DEFINITIONS: readonly FactDefinition[] = [
     fide("4.7"),
   ]),
   observed(
+    "tch.changed-after",
+    "手を離した後（昇格では、選んだ駒が昇格のマスに触れた後）に、別のマスへ動かし直したり、別の駒に替えたりしましたか",
+    YN,
+    [fide("4.7"), fide("4.4.4"), design("J1b-6", "違反として別に数える")]
+  ),
+  observed(
     "tch.claimed-by-opponent",
     "相手からの申し立てで始まりましたか",
     YN,
@@ -328,7 +335,7 @@ export const FACT_DEFINITIONS: readonly FactDefinition[] = [
         ["other", "その他"]
       )
     ),
-    [fide("6.8"), fide("5.1.1"), dt("gameEndedBeforeFlag")]
+    [fide("6.8"), fide("5.1.1"), dt("endedBeforeFlag")]
   ),
   derived(
     "ct.last-period",
@@ -860,25 +867,15 @@ const DRAW_POSITIONS = is(
   "75-move-rule"
 );
 
-/** はい/いいえの DT 質問へ変換（指定した値が false、他は true） */
-const toBoolean = (
-  falseValue: string,
-  trueValues: readonly string[]
-): Readonly<Record<string, string>> =>
-  Object.fromEntries([
-    [falseValue, "false"],
-    ...trueValues.map((v) => [v, "true"]),
-  ]);
-
 export const FACT_USAGES: readonly FactUsage[] = [
   // ---- 違法手（7.5）: DT-001/002/003
   {
     factId: "im.action",
     category: "illegal-move",
     level: "blocking",
+    // touch-move も subtype の選択肢。DecisionEngine が DT-001〜003 ではなく DT-007 へ
+    // 振り分ける（ADR-014 §6）
     dtQuestionIds: ["subtype"],
-    // touch-move は DT-001〜003 ではなく DT-007 へ振り分ける（ADR-014 §6）
-    dtUnhandled: [TOUCH_MOVE_SUBTYPE],
   },
   {
     factId: "im.player",
@@ -896,18 +893,12 @@ export const FACT_USAGES: readonly FactUsage[] = [
     factId: "game.end-event",
     ...IM,
     level: "blocking",
-    dtQuestionIds: ["gameEnded"],
-    // 「まだ対局中」以外は終了（握手は選択肢にない）
-    dtValues: toBoolean("in-progress", [
-      "checkmate",
-      "resignation",
-      "stalemate",
-      "draw-agreement",
-      "time-out",
-      "other",
-    ]),
+    // 値は DT の質問と同じ。「まだ対局中」以外は終了（握手は選択肢にない。ADR-014 §3）
+    dtQuestionIds: ["gameEndEvent"],
   },
-  // DT は使わないが記録に残す fact（DT の判断には影響しない。fact-model §3.1）
+  // DT の判断には影響しないが記録に残す fact（fact-model §3.1）。DT は任意の質問
+  // gameRecordState として同じラウンドで尋ねるが、必要かどうかは appliesWhen だけで決まる
+  // （dtQuestionIds を持つと DT が尋ねただけで必要になるため、対応付けない）
   {
     factId: "game.record-state",
     ...IM,
@@ -935,47 +926,104 @@ export const FACT_USAGES: readonly FactUsage[] = [
     level: "conditional",
     dtQuestionIds: ["detectedBy"],
   },
-  // 7.5.5: 違法手の直前に戻した局面でメイト可能性を判定する（ADR-014 §5）。
-  // 既存の質問 opponentCanCheckmate は J1b-4 で廃止するまで、対局履歴から計算して答える
+  // 7.5.5: 違法手の直前に戻した局面でメイト可能性を判定する（ADR-014 §5、J1b-4）。
+  // 局面は FEN で入力する（入力方法 matePosition と FEN reinstatedFen）。メイト可能性はコードが判定する。
+  // 対局履歴から局面を求めるのは後続（対局履歴の入力 UI ができてから）
+  { factId: "game.history", ...IM, level: "conditional" },
   {
-    factId: "game.history",
+    factId: "game.position",
     ...IM,
     level: "conditional",
-    dtQuestionIds: ["opponentCanCheckmate"],
+    dtQuestionIds: ["matePosition", "reinstatedFen"],
     dtValues: "computed",
   },
-  // 対局履歴がない・検証に失敗したときだけ、DT が requestedFactIds で要求する
-  { factId: "game.position", ...IM, level: "conditional" },
   // 記録から求めるだけで質問しない
   { factId: "im.count", ...IM, level: "optional" },
 
-  // ---- 触れた駒: DT-007
-  { factId: "tch.player", ...TCH, level: "blocking" },
-  { factId: "tch.how", ...TCH, level: "blocking" },
-  { factId: "tch.adjust-declared", ...TCH, level: "blocking" },
-  { factId: "tch.on-move", ...TCH, level: "blocking" },
-  { factId: "tch.touched", ...TCH, level: "blocking" },
-  { factId: "tch.what-next", ...TCH, level: "blocking" },
-  // 条件が構造化データ（tch.touched）にあるため、DT-007 が requestedFactIds で要求する
-  { factId: "tch.special", ...TCH, level: "conditional" },
+  // ---- 触れた駒: DT-007（J1b-6）
+  {
+    factId: "tch.player",
+    ...TCH,
+    level: "blocking",
+    dtQuestionIds: ["touchPlayer"],
+  },
+  { factId: "tch.how", ...TCH, level: "blocking", dtQuestionIds: ["touchHow"] },
+  {
+    factId: "tch.adjust-declared",
+    ...TCH,
+    level: "blocking",
+    dtQuestionIds: ["touchAdjustDeclared"],
+  },
+  {
+    factId: "tch.on-move",
+    ...TCH,
+    level: "blocking",
+    dtQuestionIds: ["touchOnMove"],
+  },
+  // 触れた駒は「まだ指していない・別の駒を動かした」の分岐だけで使う（DT-007 が要求したとき）
+  {
+    factId: "tch.touched",
+    ...TCH,
+    level: "conditional",
+    appliesWhen: is("tch.what-next", "moved-other", "not-moved"),
+    dtQuestionIds: ["touchedPieces"],
+  },
+  {
+    factId: "tch.what-next",
+    ...TCH,
+    level: "blocking",
+    dtQuestionIds: ["touchWhatNext"],
+  },
+  // DT-007 は昇格（4.4.4）だけを質問する。キャスリング（4.4.1〜4.4.3）は tch.touched の
+  // 触れた順から求める
+  {
+    factId: "tch.special",
+    ...TCH,
+    level: "conditional",
+    dtQuestionIds: ["touchPromotion"],
+    dtValues: "computed",
+  },
   {
     factId: "tch.released",
     ...TCH,
     level: "conditional",
     appliesWhen: is("tch.what-next", "moved-touched"),
+    dtQuestionIds: ["touchReleased"],
   },
-  { factId: "tch.claimed-by-opponent", ...TCH, level: "optional" },
+  // 手（または昇格の駒）が確定した後に変えたか。DT-007 が要求したときだけ（J1b-6）
+  {
+    factId: "tch.changed-after",
+    ...TCH,
+    level: "conditional",
+    appliesWhen: any(
+      is("tch.released", "true"),
+      is("tch.special", "promotion-placed")
+    ),
+    dtQuestionIds: ["touchChangedAfter"],
+  },
+  // 4.8 の判断に使う。アービターが観察した違反には申し立てに関係なく介入するため、
+  // DT-007 はアービターが観察していない場合だけ質問する
+  {
+    factId: "tch.claimed-by-opponent",
+    ...TCH,
+    level: "conditional",
+    appliesWhen: { incident: "arbiterObserved", is: false },
+    dtQuestionIds: ["touchClaimedByOpponent"],
+  },
   {
     factId: "tch.claim-timing",
     ...TCH,
     level: "conditional",
     appliesWhen: is("tch.claimed-by-opponent", "true"),
+    dtQuestionIds: ["touchClaimTiming"],
   },
   {
     factId: "game.position",
     ...TCH,
     level: "conditional",
     appliesWhen: is("tch.what-next", "moved-other", "not-moved"),
+    dtQuestionIds: ["touchFen"],
+    dtValues: "computed",
   },
 
   // ---- 時計: DT-004
@@ -1004,26 +1052,19 @@ export const FACT_USAGES: readonly FactUsage[] = [
     category: "clock-time",
     level: "conditional",
     appliesWhen: is("ct.event", "flag-fall"),
-    dtQuestionIds: ["gameEndedBeforeFlag"],
-    dtValues: toBoolean("none", [
-      "checkmate",
-      "resignation",
-      "draw-agreement",
-      "stalemate",
-      "other",
-    ]),
+    // 値は DT の質問と同じ。「なし」以外は終了（ADR-014 §3）
+    dtQuestionIds: ["endedBeforeFlag"],
   },
-  // フラッグ確定時の局面でメイト可能性を判定する（ADR-014 §5）。
-  // 既存の局面入力（positionFen・駒数の確認）は対局履歴から計算して答える
+  // フラッグ確定時の局面でメイト可能性を判定する（ADR-014 §5、J1b-4）。
+  // 局面は FEN で入力する（駒数の入力は廃止）。メイト可能性はコードが判定する
+  { factId: "game.history", category: "clock-time", level: "conditional" },
   {
-    factId: "game.history",
+    factId: "game.position",
     category: "clock-time",
     level: "conditional",
-    dtQuestionIds: ["positionFen", "materialConfirmed"],
+    dtQuestionIds: ["matePosition", "positionFen"],
     dtValues: "computed",
   },
-  // 対局履歴がないときだけ、DT が requestedFactIds で要求する
-  { factId: "game.position", category: "clock-time", level: "conditional" },
   // 設定から求められない場合のみ質問する
   {
     factId: "ct.last-period",
@@ -1055,18 +1096,8 @@ export const FACT_USAGES: readonly FactUsage[] = [
     factId: "dr.kind",
     category: "draw",
     level: "blocking",
+    // 値は DT の subtype と同じ（J1b-5 で全種類を DT の subtype にした。ADR-014 §1）
     dtQuestionIds: ["drawSubtype"],
-    // DT-005/006 の再構成（J1b-5）までは、新しい種類を既存の "other" に変換する
-    dtValues: {
-      "threefold-repetition-claim": "threefold-repetition-claim",
-      "fifty-move-claim": "other",
-      "fivefold-repetition": "fivefold-repetition",
-      "75-move-rule": "75-move-rule",
-      agreement: "other",
-      stalemate: "other",
-      "dead-position": "other",
-      other: "other",
-    },
   },
   {
     factId: "dr.claimant",
@@ -1087,9 +1118,9 @@ export const FACT_USAGES: readonly FactUsage[] = [
     category: "draw",
     level: "conditional",
     appliesWhen: DRAW_CLAIM,
-    dtQuestionIds: ["claimantHasMove"],
-    // 申立人と最後に指した側から手番を求める（時計からは求めない。ADR-014 §2）
-    dtValues: "computed",
+    // DT-005 が申立人と最後に指した側から手番を求める（時計からは求めない。ADR-014 §2）。
+    // 照合済みの対局履歴がある場合、DT-005 はこの質問をしない
+    dtQuestionIds: ["lastMover"],
   },
   {
     factId: "dr.clock-state",
@@ -1132,7 +1163,12 @@ export const FACT_USAGES: readonly FactUsage[] = [
     category: "draw",
     level: "conditional",
     appliesWhen: DRAW_POSITIONS,
-    dtQuestionIds: ["repetitionCheck", "fivefoldCheck", "seventyFiveCheck"],
+    dtQuestionIds: [
+      "repetitionCheck",
+      "fiftyMoveCheck",
+      "fivefoldCheck",
+      "seventyFiveCheck",
+    ],
     dtValues: {
       met: "met",
       "not-met": "not-met",

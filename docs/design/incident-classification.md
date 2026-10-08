@@ -64,7 +64,7 @@ Per §9, the 10 primary categories are:
 | `two-hands-castling` | Castling with two hands | Decision Tree | Same as general |
 | `promotion-issue` | Incorrect promotion procedure | Decision Tree | Piece placed? Clock pressed? |
 | `illegal-castling` | Castled when not allowed | Decision Tree | Why illegal? (King moved? Through check?) |
-| `touch-move` | Touched piece not moved (Article 4) | Decision Tree (DT-007, ADR-014) | Pieces touched in order? Adjust declared? On move? Released? Claim timing? |
+| `touch-move` | Touched piece not moved (Article 4) | Decision Tree (DT-007, ADR-014; implemented in J1b-6, fact-model §3.8) | Pieces touched in order? Adjust declared? On move? Released? Claim timing? |
 | `illegal-en-passant` | En passant captured when not allowed | Decision Tree | Same as general |
 | `piece-knocked-over` | Piece accidentally knocked during move | LLM+RAG | Intentional? Game affected? |
 
@@ -87,7 +87,7 @@ interface IllegalMoveInput {
   clockPressed: boolean;             // 時計を押したか
   opponentMoved: boolean;            // 相手が次の手を指したか
   arbiterObserved: boolean;          // アービター自身が目撃したか
-  gameEnded: boolean;                // 対局がすでに終了していないか
+  endEvent?: GameEndEvent;           // 対局を終わらせた出来事（ADR-014 §3。旧 gameEnded: boolean）
   playerColor: 'white' | 'black';    // 違反したプレーヤー
   playerIncidentCount: number;       // この選手の今回の対局での違法手回数
   competitionType: 'standard' | 'rapid';  // 競技形式
@@ -210,39 +210,25 @@ function hasMatingMaterial(pieces: ChessPiece[]): boolean {
 
 ### 8.1 Subtypes
 
+The subtype values are `DrawSubtype` in `lib/domain/entities/incident.ts` and the `dr.kind` values of the fact catalogue. They were aligned with ADR-014 §1 in J1b-5 (2026-10-08).
+
 | Subtype | Description | Handler | Key Questions |
 |---------|-------------|---------|---------------|
-| `draw-agreement` | Players agree to draw | LLM+RAG | Both agreed? Proper procedure? |
-| `draw-offer` | Draw offer made | LLM+RAG | Proper procedure? Recorded? Excessive? |
-| `threefold-repetition-claim` | Player claims threefold repetition | Decision Tree | Position repeated 3 times? Player's turn? Move recorded? Clock stopped? |
-| `fivefold-repetition` | Arbiter declares draw (5-fold) | Decision Tree | Position repeated 5 times? |
-| `50-move-claim` | Player claims 50-move rule | Decision Tree (DT-005 Draw Claim, `claimBasis: fifty-move`, ADR-014) | From the verified game history: 50 moves without capture or pawn move? Player's turn? Move written? |
-| `75-move-rule` | Arbiter declares draw (75-move) | Decision Tree | 75 moves without capture/pawn move? |
-| `stalemate` | Stalemate position | Decision Tree | Position verified? |
-| `dead-position` | No possible checkmate | Decision Tree | Material verified? |
-| `insufficient-material` | Dead position: neither side can checkmate by any series of legal moves (6.9 / 9.6) | Mate-possibility service (ADR-014 §5): material-only only for the proven cases, otherwise position and helpmate search, else CA | Position? |
+| `threefold-repetition-claim` | Player claims threefold repetition (9.2) | DT-005 Draw Claim (`claimBasis: threefold`) | Position repeated 3 times? Player's turn (from the last mover or the confirmed history, never the clock)? Move written (9.2.1)? Piece touched (9.4)? |
+| `fifty-move-claim` | Player claims the 50-move rule (9.3) | DT-005 Draw Claim (`claimBasis: fifty-move`) | 50 moves each without capture or pawn move (100 plies, from the verified game history or a board reconstruction)? Player's turn? Move written (9.3.1)? Piece touched? |
+| `fivefold-repetition` | Arbiter declares a draw (9.6.1) | DT-006 Automatic Draw | Position repeated 5 times? |
+| `75-move-rule` | Arbiter declares a draw (9.6.2) | DT-006 Automatic Draw | 75 moves each without capture or pawn move? Did the move reaching 75 checkmate (checkmate takes precedence)? |
+| `agreement` | Players agree to a draw | Fact plan (no tree) | Observed offer, acceptance, handshake, result written (`dr.agreement-observed`) |
+| `stalemate` | Stalemate position | Fact plan (no tree) | Situation note |
+| `dead-position` | No possible checkmate | Fact plan (no tree). The mate-possibility service (ADR-014 §5) is used only inside DT-001…004 | Situation note |
+| `other` | Anything else (e.g. a draw offer at the wrong time) | Fact plan (no tree) | Situation note |
 
-**Decision Tree Coverage** (High):
-- `threefold-repetition-claim`
-- `fivefold-repetition`
-- `50-move-claim`
-- `75-move-rule`
-- `stalemate`
-- `dead-position`
-- `insufficient-material`
+**Decision Tree Coverage**:
+- DT-005 Draw Claim: `threefold-repetition-claim`, `fifty-move-claim`
+- DT-006 Automatic Draw: `fivefold-repetition`, `75-move-rule`
+- No tree (ADR-014 §1): `agreement`, `stalemate`, `dead-position`, `other`. A dead position as its own incident type is not implemented.
 
-**Threefold Repetition Decision Tree**:
-```typescript
-interface ThreefoldRepetitionInput {
-  claimingPlayer: 'white' | 'black';
-  isClaimingPlayerTurn: boolean;      // クレームしたプレーヤーの手番か
-  moveRecorded: boolean;              // 次の手を棋譜に記入したか
-  clockStopped: boolean;              // 時計を止めたか
-  positionHistory: FENPosition[];     // 局面履歴（FEN形式）
-}
-
-// Same position = same player to move + same piece positions + same castling rights + same en passant rights
-```
+**Draw Claim Decision Tree** (implemented): see `lib/domain/decision-trees/dt-005-draw-claim.ts` and `dt-006-automatic-draw.ts`, and fact-model §3.5 "Implementation (J1b-5)". The side to move comes from the last mover on the board or the confirmed game history, never from the clock (ADR-014 §2). Positions are the same as in 9.2.3: same player to move, same pieces on the same squares, same castling rights and same en passant possibilities.
 
 ---
 

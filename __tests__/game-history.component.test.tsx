@@ -50,7 +50,7 @@ describe("game.history confirmation in the UI (ADR-014 §4)", () => {
     const incident = applyIncidentAnswers(INCIDENT, {
       drawSubtype: "threefold-repetition-claim",
       claimant: "white",
-      claimantHasMove: "true",
+      lastMover: "black",
       claimMode: "just-appeared",
       touchedPiece: "false",
       repetitionCheck: "auto",

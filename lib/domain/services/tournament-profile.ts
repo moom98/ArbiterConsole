@@ -13,6 +13,12 @@ import {
 } from "@/lib/domain/entities";
 import type { DomainProviders } from "@/lib/domain/providers";
 import { isValidTimePenaltyOverride } from "@/lib/domain/rules/time-penalty";
+import {
+  buildTimeControl,
+  normalizeTimeControl,
+  validateTimeControl,
+  type TimeControlInput,
+} from "./time-control";
 
 /**
  * Tournament Profile（要件 §7）の入力・検証・生成。
@@ -29,7 +35,7 @@ export interface TournamentProfileInput {
   competitionType?: CompetitionType;
   supervisionRegime?: SupervisionRegime;
   rulesVersion?: RulesVersion;
-  timeControl?: Partial<TimeControl>;
+  timeControl?: TimeControlInput;
   totalRounds?: number;
   /** Blitz B.2 の加算時間（秒）と出典。両方そろった場合のみ上書きとして保存する */
   blitzCompetitionTimePenalty?: {
@@ -40,10 +46,6 @@ export interface TournamentProfileInput {
 
 function isPositiveInteger(n: unknown): n is number {
   return typeof n === "number" && Number.isInteger(n) && n >= 1;
-}
-
-function isNonNegativeInteger(n: unknown): n is number {
-  return typeof n === "number" && Number.isInteger(n) && n >= 0;
 }
 
 function isValidDate(d: unknown): d is Date {
@@ -96,13 +98,7 @@ export function validateTournamentProfile(
   else if (!SUPPORTED_RULES_VERSIONS.includes(input.rulesVersion))
     errors.push("未対応の規則バージョンです");
 
-  const tc = input.timeControl;
-  if (!tc || !isPositiveInteger(tc.initialMinutes))
-    errors.push("持ち時間（分）は1以上の整数で入力してください");
-  if (!tc || !isNonNegativeInteger(tc.incrementSeconds))
-    errors.push("加算（秒/手）は0以上の整数で入力してください");
-  if (tc?.delaySeconds !== undefined && !isNonNegativeInteger(tc.delaySeconds))
-    errors.push("遅延（秒）は0以上の整数で入力してください");
+  errors.push(...validateTimeControl(input.timeControl));
   if (input.totalRounds !== undefined && !isPositiveInteger(input.totalRounds))
     errors.push("ラウンド数は1以上の整数で入力してください");
 
@@ -176,16 +172,7 @@ export function buildTournament(
         ? undefined
         : input.supervisionRegime,
     rulesVersion: input.rulesVersion!,
-    timeControl: {
-      initialMinutes: tc.initialMinutes!,
-      incrementSeconds: tc.incrementSeconds!,
-      ...(tc.delaySeconds !== undefined
-        ? { delaySeconds: tc.delaySeconds }
-        : {}),
-      ...(tc.additionalTimeAfterMove !== undefined
-        ? { additionalTimeAfterMove: tc.additionalTimeAfterMove }
-        : {}),
-    },
+    timeControl: buildTimeControl(tc),
     startDate: input.startDate!,
     endDate: input.endDate,
     venue: optionalText(input.venue),
@@ -210,7 +197,7 @@ export function toProfileInput(t: Tournament): TournamentProfileInput {
     competitionType: t.competitionType,
     supervisionRegime: t.supervisionRegime,
     rulesVersion: t.rulesVersion,
-    timeControl: t.timeControl ? { ...t.timeControl } : undefined,
+    timeControl: toTimeControlInput(t.timeControl),
     totalRounds: t.totalRounds,
     blitzCompetitionTimePenalty: o
       ? { seconds: o.value, source: { ...o.source } }
@@ -218,12 +205,32 @@ export function toProfileInput(t: Tournament): TournamentProfileInput {
   };
 }
 
-/** 例: "Blitz · B.2 · 3分+2秒 · FIDE-2023" */
-export function formatTimeControl(tc: TimeControl | undefined): string {
+/**
+ * 編集用の入力へ戻す（旧形式の値も変換する）。ピリオドが不完全な旧形式の値は、
+ * 保存し直すまで periodsIncomplete と additionalTimeAfterMove を引き継ぐ。
+ */
+function toTimeControlInput(
+  raw: TimeControl | undefined
+): TimeControlInput | undefined {
+  const tc = normalizeTimeControl(raw);
+  if (!tc) return undefined;
+  return { ...tc, periods: tc.periods.map((p) => ({ ...p })) };
+}
+
+/** 例: "3分+2秒"、"40手90分+30秒 → 30分+30秒" */
+export function formatTimeControl(raw: TimeControl | undefined): string {
+  const tc = normalizeTimeControl(raw);
   if (!tc) return "持ち時間未設定";
-  const parts = [`${tc.initialMinutes}分`];
-  if (tc.incrementSeconds > 0) parts.push(`+${tc.incrementSeconds}秒`);
+  const periods = tc.periods
+    .map(
+      (p) =>
+        `${p.moves !== undefined ? `${p.moves}手` : ""}${p.minutes}分` +
+        (p.incrementSeconds > 0 ? `+${p.incrementSeconds}秒` : "")
+    )
+    .join(" → ");
+  const parts = [periods];
   if (tc.delaySeconds) parts.push(`（遅延${tc.delaySeconds}秒）`);
+  if (tc.periodsIncomplete) parts.push("（ピリオド未確認）");
   return parts.join("");
 }
 

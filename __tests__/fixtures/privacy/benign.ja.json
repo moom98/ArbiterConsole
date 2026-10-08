@@ -1,0 +1,309 @@
+{
+ "description": "Synthetic non-sensitive reports for the Sensitive Gate false-positive rate (external-ai-data-protection §8.1, secondary metric). Tracked, target <= 15% per category.",
+ "cases": [
+  {
+   "category": "illegal-move",
+   "text": "白が違法手を指して時計を押した"
+  },
+  {
+   "category": "illegal-move",
+   "text": "黒のキングがチェックのまま指して時計を押した"
+  },
+  {
+   "category": "illegal-move",
+   "text": "2回目の違法手。黒が指摘した"
+  },
+  {
+   "category": "illegal-move",
+   "text": "手を指さずに時計を押した"
+  },
+  {
+   "category": "illegal-move",
+   "text": "両手でキャスリングして時計を押した"
+  },
+  {
+   "category": "illegal-move",
+   "text": "昇格したポーンをクイーンに置き換えずに時計を押した"
+  },
+  {
+   "category": "illegal-move",
+   "text": "白が触れた駒と違う駒を動かした"
+  },
+  {
+   "category": "illegal-move",
+   "text": "タッチムーブを相手が主張"
+  },
+  {
+   "category": "illegal-move",
+   "text": "違法なキャスリングに相手が気付いた"
+  },
+  {
+   "category": "illegal-move",
+   "text": "黒がアンパッサンを誤って指した"
+  },
+  {
+   "category": "board-piece",
+   "text": "初期配置でキングとクイーンが逆だった"
+  },
+  {
+   "category": "board-piece",
+   "text": "駒が倒れたので時計を止めた"
+  },
+  {
+   "category": "board-piece",
+   "text": "盤の向きが間違っていた"
+  },
+  {
+   "category": "board-piece",
+   "text": "ナイトとビショップの置き間違い"
+  },
+  {
+   "category": "board-piece",
+   "text": "駒がマスからずれていた"
+  },
+  {
+   "category": "board-piece",
+   "text": "時計を止めて駒を整えた"
+  },
+  {
+   "category": "board-piece",
+   "text": "黒が駒を落とした"
+  },
+  {
+   "category": "board-piece",
+   "text": "相手の駒を倒したまま時計を押した"
+  },
+  {
+   "category": "clock-time",
+   "text": "白のフラッグが落ちた"
+  },
+  {
+   "category": "clock-time",
+   "text": "両方の時計が0になった"
+  },
+  {
+   "category": "clock-time",
+   "text": "時計の表示が消えた"
+  },
+  {
+   "category": "clock-time",
+   "text": "時計の設定が間違っていた"
+  },
+  {
+   "category": "clock-time",
+   "text": "増加時間が入っていない"
+  },
+  {
+   "category": "clock-time",
+   "text": "時計を押し忘れた"
+  },
+  {
+   "category": "clock-time",
+   "text": "残り1:05で黒が時間切れを主張"
+  },
+  {
+   "category": "clock-time",
+   "text": "時計の電池が切れた"
+  },
+  {
+   "category": "clock-time",
+   "text": "白が時計を強く叩いた"
+  },
+  {
+   "category": "clock-time",
+   "text": "時計の具合が悪い"
+  },
+  {
+   "category": "game-result",
+   "text": "結果の記入が食い違っている"
+  },
+  {
+   "category": "game-result",
+   "text": "サイン漏れがあった"
+  },
+  {
+   "category": "game-result",
+   "text": "両者のサインがない"
+  },
+  {
+   "category": "game-result",
+   "text": "黒が投了したのに結果用紙に白負けと書いた"
+  },
+  {
+   "category": "game-result",
+   "text": "結果に異議を申し立てた"
+  },
+  {
+   "category": "game-result",
+   "text": "キングを倒して投了"
+  },
+  {
+   "category": "game-result",
+   "text": "投了したかどうかで揉めた"
+  },
+  {
+   "category": "game-result",
+   "text": "結果用紙に記入していない"
+  },
+  {
+   "category": "draw",
+   "text": "三回同一局面のクレーム"
+  },
+  {
+   "category": "draw",
+   "text": "50手ルールでドローを主張"
+  },
+  {
+   "category": "draw",
+   "text": "ドローの提案を受けた"
+  },
+  {
+   "category": "draw",
+   "text": "ステイルメイトになった"
+  },
+  {
+   "category": "draw",
+   "text": "五回同一局面になった"
+  },
+  {
+   "category": "draw",
+   "text": "75手ルール"
+  },
+  {
+   "category": "draw",
+   "text": "同一局面の疑いでクレーム"
+  },
+  {
+   "category": "draw",
+   "text": "ドローの合意後に記入"
+  },
+  {
+   "category": "scoresheet",
+   "text": "棋譜を書いていない"
+  },
+  {
+   "category": "scoresheet",
+   "text": "記録が3手遅れている"
+  },
+  {
+   "category": "scoresheet",
+   "text": "スコアシートを書かずに指している"
+  },
+  {
+   "category": "scoresheet",
+   "text": "棋譜の記入が追いつかない"
+  },
+  {
+   "category": "scoresheet",
+   "text": "棋譜を相手に借りたい"
+  },
+  {
+   "category": "scoresheet",
+   "text": "記録用紙が足りない"
+  },
+  {
+   "category": "scoresheet",
+   "text": "残り4分で記録をやめた"
+  },
+  {
+   "category": "scoresheet",
+   "text": "棋譜の書き間違い"
+  },
+  {
+   "category": "player-behavior",
+   "text": "黒のスマホが鳴った"
+  },
+  {
+   "category": "player-behavior",
+   "text": "対局中に話しかけてきた"
+  },
+  {
+   "category": "player-behavior",
+   "text": "ドローの提案を何度も繰り返した"
+  },
+  {
+   "category": "player-behavior",
+   "text": "騒音で集中できないと苦情"
+  },
+  {
+   "category": "player-behavior",
+   "text": "白が離席中に時計が0になった"
+  },
+  {
+   "category": "player-behavior",
+   "text": "外部からの騒音で集中できない"
+  },
+  {
+   "category": "player-behavior",
+   "text": "スマホをバッグに入れていた"
+  },
+  {
+   "category": "player-behavior",
+   "text": "観戦者がうるさい"
+  },
+  {
+   "category": "team",
+   "text": "ボード順が間違っている"
+  },
+  {
+   "category": "team",
+   "text": "キャプテンがドローを指示した"
+  },
+  {
+   "category": "team",
+   "text": "チームの登録メンバーが違う"
+  },
+  {
+   "category": "team",
+   "text": "団体戦で選手が遅刻"
+  },
+  {
+   "category": "team",
+   "text": "キャプテンが結果を記入した"
+  },
+  {
+   "category": "team",
+   "text": "ボード順の提出が遅れた"
+  },
+  {
+   "category": "team",
+   "text": "チームの予備選手が出場"
+  },
+  {
+   "category": "team",
+   "text": "団体戦の結果記入"
+  },
+  {
+   "category": "tournament-admin",
+   "text": "ペアリングに苦情"
+  },
+  {
+   "category": "tournament-admin",
+   "text": "遅刻して到着した"
+  },
+  {
+   "category": "tournament-admin",
+   "text": "不戦勝の扱い"
+  },
+  {
+   "category": "tournament-admin",
+   "text": "棄権の申し出"
+  },
+  {
+   "category": "tournament-admin",
+   "text": "対局開始が遅れた"
+  },
+  {
+   "category": "tournament-admin",
+   "text": "ペアリングが間違っている"
+  },
+  {
+   "category": "tournament-admin",
+   "text": "バイの扱い"
+  },
+  {
+   "category": "tournament-admin",
+   "text": "欠席の連絡があった"
+  }
+ ]
+}

@@ -3,24 +3,33 @@ import {
   FlagFallTree,
   type FlagFallInput,
 } from "@/lib/domain/decision-trees/dt-004-flag-fall";
-import { EMPTY_SIDE } from "@/lib/domain/services/mate-material";
-import type { SideMaterial } from "@/lib/domain/entities";
+import type { MatePossibility } from "@/lib/domain/services/mate-possibility";
 import { fixedProviders } from "./helpers";
 
-const side = (m: Partial<SideMaterial>): SideMaterial => ({
-  ...EMPTY_SIDE,
-  ...m,
-});
+const CAN: MatePossibility = {
+  verdict: "can-mate",
+  reason: "黒がメイトする手順があります: 60. Kh1 Qg2#",
+  line: "60. Kh1 Qg2#",
+};
+const CANNOT: MatePossibility = {
+  verdict: "cannot-mate",
+  reason: "キングのみではチェックメイトできません",
+};
+const NOT_FOUND: MatePossibility = {
+  verdict: "unknown",
+  cause: "not-found",
+  reason: "局面からメイトの手順を見つけられませんでした",
+};
 
 const BASE: Partial<FlagFallInput> = {
   competitionType: "standard",
   flagFallen: "white",
-  gameEndedBeforeFlag: false,
+  endedBeforeFlag: "none",
   movesNotCompleted: true,
 };
 
-function withMaterial(white: SideMaterial, black: SideMaterial) {
-  return { ...BASE, material: { white, black }, materialConfirmed: true };
+function withMate(mate: MatePossibility): Partial<FlagFallInput> {
+  return { ...BASE, matePosition: "fen", fen: "fen", mate };
 }
 
 function run(input: Partial<FlagFallInput>) {
@@ -37,33 +46,42 @@ describe("DT-004 Flag fall", () => {
   it("asks who flagged and whether the game had ended first", () => {
     expect(ids(run({ competitionType: "standard" }))).toEqual([
       "flagFallen",
-      "gameEndedBeforeFlag",
+      "endedBeforeFlag",
     ]);
   });
 
-  it("R6: asks the move count together with material once the flagged player is known", () => {
+  it("R6: asks the move count together with the position once the flagged player is known", () => {
     const r = run({
       competitionType: "standard",
       flagFallen: "black",
-      gameEndedBeforeFlag: false,
+      endedBeforeFlag: "none",
     });
-    expect(ids(r)[0]).toBe("movesNotCompleted");
-    expect(ids(r)).toContain("whiteQueens");
-    // 駒数は「規定手数を完了していない」場合のみ表示（完了していた場合は不要）
+    expect(ids(r)).toEqual([
+      "movesNotCompleted",
+      "matePosition",
+      "positionFen",
+    ]);
+    // 局面は「規定手数を完了していない」場合のみ表示（完了していた場合は不要）。
+    // FEN 欄は「FEN を入力する」を選んだ場合のみ
     if (r.status !== "needs-input") throw new Error("expected questions");
-    const material = r.questions.filter((q) => q.id !== "movesNotCompleted");
+    const [, method, fen] = r.questions;
+    expect(method.showWhen).toEqual({
+      questionId: "movesNotCompleted",
+      values: ["true"],
+    });
+    expect(fen.showWhen).toEqual({
+      questionId: "matePosition",
+      values: ["fen"],
+    });
+    // 駒数・閉塞局面の質問は廃止（ADR-014 §5）
     expect(
-      material.every(
-        (q) =>
-          q.showWhen?.questionId === "movesNotCompleted" &&
-          q.showWhen.values.join() === "true"
-      )
-    ).toBe(true);
-    // 完了していた → 駒数なしで結論
+      ids(r).some((id) => /Queens|materialConfirmed|positionBlocked/.test(id))
+    ).toBe(false);
+    // 完了していた → 局面なしで結論
     const done = run({
       competitionType: "standard",
       flagFallen: "black",
-      gameEndedBeforeFlag: false,
+      endedBeforeFlag: "none",
       movesNotCompleted: false,
     });
     expect(done.status).toBe("decided");
@@ -74,13 +92,13 @@ describe("DT-004 Flag fall", () => {
     const r = run({
       competitionType: "standard",
       flagFallen: "both",
-      gameEndedBeforeFlag: false,
+      endedBeforeFlag: "none",
     });
     expect(ids(r)).toEqual(["bothFlagsOrder"]);
   });
 
   it("result reached before the flag was noticed stands", () => {
-    const r = run({ ...BASE, gameEndedBeforeFlag: true });
+    const r = run({ ...BASE, endedBeforeFlag: "checkmate" });
     expect(r.decision.intervention).toBe("no-intervention");
     expect(articles(r)).toContain("FIDE 6.8");
   });
@@ -96,70 +114,76 @@ describe("DT-004 Flag fall", () => {
     expect(r.decision.kind).toBe("manual-review");
   });
 
-  it("asks for material (12 steppers + optional FEN + confirmation)", () => {
-    const r = run(BASE);
-    const q = ids(r);
-    expect(q).toHaveLength(14);
-    expect(q).toContain("whiteQueens");
-    expect(q).toContain("blackLightBishops");
-    expect(q).toContain("positionFen");
-    expect(q).toContain("materialConfirmed");
+  it("asks for the position (input method + FEN)", () => {
+    expect(ids(run(BASE))).toEqual(["matePosition", "positionFen"]);
   });
 
-  it("unconfirmed default material is not used", () => {
-    const r = run({ ...BASE, material: { white: K(), black: K() } });
-    expect(r.status).toBe("needs-input");
-  });
-
-  it("opponent has a rook → flagged player loses", () => {
-    const r = run(withMaterial(side({}), side({ rooks: 1 })));
+  it("can-mate (a verified helpmate line) → flagged player loses, line shown", () => {
+    const r = run(withMate(CAN));
     expect(r.status).toBe("decided");
     expect(r.decision.penalties[0]).toEqual(
       expect.objectContaining({ type: "game-loss", playerColor: "white" })
     );
+    expect(r.decision.conclusion).toContain("60. Kh1 Qg2#");
+    expect(r.decision.actions.join()).toContain("盤上と一致");
     expect(articles(r)).toEqual(
       expect.arrayContaining(["FIDE 6.8", "FIDE 6.9"])
     );
   });
 
-  it("opponent has only K+N and flagged side a bare king → draw", () => {
-    const r = run(withMaterial(K(), side({ knights: 1 })));
+  it("cannot-mate (material) → draw", () => {
+    const r = run(withMate(CANNOT));
     expect(r.decision.penalties[0].type).toBe("draw");
     expect(r.decision.confidence).toBe("high");
+    expect(r.decision.conclusion).toContain("キングのみ");
   });
 
-  it("opponent K+N vs flagged K+Q → unknown (helpmate is position-dependent)", () => {
-    const r = run(withMaterial(side({ queens: 1 }), side({ knights: 1 })));
+  it("no helpmate found → consult CA, no penalty (never a loss from counts)", () => {
+    const r = run(withMate(NOT_FOUND));
     expect(r.decision.kind).toBe("manual-review");
+    expect(r.decision.penalties).toHaveLength(0);
+    expect(r.decision.conclusion).toContain("局面を確認");
   });
 
-  it("opponent has only K+B and flagged side has a pawn → unknown → consult CA", () => {
-    const r = run(withMaterial(side({ pawns: 1 }), side({ lightBishops: 1 })));
+  it("position unavailable → consult CA", () => {
+    const r = run({ ...BASE, matePosition: "unknown" });
     expect(r.decision.kind).toBe("manual-review");
     expect(r.decision.penalties).toHaveLength(0);
   });
 
-  it("pawns on board → asks about a blocked position before declaring a loss", () => {
-    const input = withMaterial(side({ pawns: 3 }), side({ pawns: 2 }));
-    expect(ids(run(input))).toEqual(["positionBlocked"]);
-    expect(
-      run({ ...input, positionBlocked: false }).decision.penalties[0].type
-    ).toBe("game-loss");
-    expect(run({ ...input, positionBlocked: "unknown" }).decision.kind).toBe(
-      "manual-review"
-    );
+  it("fen chosen but missing or invalid → asks again with the error", () => {
+    const missing = run({
+      ...BASE,
+      matePosition: "fen",
+      mate: { verdict: "unknown", cause: "no-position", reason: "x" },
+    });
+    expect(ids(missing)).toEqual(["matePosition", "positionFen"]);
+    const invalid = run({
+      ...BASE,
+      matePosition: "fen",
+      mate: {
+        verdict: "unknown",
+        cause: "invalid-position",
+        reason: "FEN を解釈できません（bad）",
+      },
+    });
+    expect(invalid.status).toBe("needs-input");
+    expect(invalid.decision.conclusion).toContain("FEN を解釈できません");
   });
 
-  it("uses a valid FEN instead of the counts", () => {
-    const r = run({ ...BASE, fen: "8/8/8/4k3/8/8/4K3/7N w - - 0 1" });
-    // 黒: キングのみ → 白がフラッグ、黒はメイト不可能 → ドロー
-    expect(r.decision.penalties[0].type).toBe("draw");
-  });
-
-  it("invalid FEN → asks again with an error", () => {
-    const r = run({ ...BASE, fen: "nonsense" });
-    expect(r.status).toBe("needs-input");
-    expect(r.decision.conclusion).toContain("FEN");
+  it("an invalid FEN in the move-count round is reported with the questions", () => {
+    const r = run({
+      ...BASE,
+      movesNotCompleted: undefined,
+      matePosition: "fen",
+      mate: { verdict: "unknown", cause: "invalid-position", reason: "bad" },
+    });
+    expect(ids(r)).toEqual([
+      "movesNotCompleted",
+      "matePosition",
+      "positionFen",
+    ]);
+    expect(r.decision.conclusion).toContain("bad");
   });
 
   describe("both flags", () => {
@@ -173,8 +197,8 @@ describe("DT-004 Flag fall", () => {
       const r = run({
         ...both,
         bothFlagsOrder: "black-first",
-        material: { white: side({ queens: 1 }), black: K() },
-        materialConfirmed: true,
+        matePosition: "fen",
+        mate: CAN,
       });
       expect(r.decision.penalties[0]).toEqual(
         expect.objectContaining({ type: "game-loss", playerColor: "black" })
@@ -187,8 +211,8 @@ describe("DT-004 Flag fall", () => {
         competitionType: "rapid",
         supervisionRegime: "basic-rules",
         bothFlagsOrder: "white-first",
-        material: { white: K(), black: side({ rooks: 1 }) },
-        materialConfirmed: true,
+        matePosition: "fen",
+        mate: CAN,
       });
       expect(articles(r)).toEqual(
         expect.arrayContaining(["FIDE A.5.3", "FIDE A.5.5"])
@@ -251,7 +275,7 @@ describe("DT-004 Flag fall", () => {
     "%s / %s cites %s",
     (competitionType, supervisionRegime, article) => {
       const r = run({
-        ...withMaterial(K(), side({ queens: 1 })),
+        ...withMate(CAN),
         competitionType,
         supervisionRegime,
       });
@@ -260,7 +284,3 @@ describe("DT-004 Flag fall", () => {
     }
   );
 });
-
-function K(): SideMaterial {
-  return { ...EMPTY_SIDE };
-}

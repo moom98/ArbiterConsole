@@ -419,6 +419,13 @@ The pure package exists and is tested; nothing calls it yet (J1a-2 wires it into
   - near 白/黒/フラッグ, a time followed by に/から/頃… is a time of day at any hour;
   - usefulness: only specific particle pairs are blocked (はは, かね, もも, かか, ねね, よよ) instead of every pair; する-verbs after a noun (提案をした), なっていた, 落とした, 付けた, 続けた, かけた, かも; vocabulary 旗, 手元, 経過, 合法, 反応, 否定, 代わり.
 - **Results after the fourth review:** 0 false negatives through the gate and the pipeline on all five sensitive sets (192 own; 108, 269, 208 and 252 from the four reviews; all now regression sets). Usefulness: 12 of 140 realistic non-sensitive reports from reviewers 3 and 4 held back (8.6%), enforced at ≤ 20%.
+- **Targeted re-review of the review-4 fixes (2026-10-08): FIX REQUIRED.** The usefulness widening had opened holes: する/された/つけ/かけ as function words (白の後をつけた, 白にあれをされた, 手をかけた), 付け/続け/落とし as whole words (付け回された, 見続けた, 黒を落とした) and the particle-pair blocklist (はか, でか, はが). Fixes:
+  - the particle pairs are an **allow-list** again (のは, のが, のも, には, にも, とは, とも, では, でも, へは, へも);
+  - する-forms after a noun are allowed only as 「を＋する」 after a kanji or katakana noun of two or more characters (提案をした), never された; やった, つけ*, かけ* removed;
+  - 付け, 続け, 落とし replaced by collocations (駒を落とし, 見落とし, 書き続け, 指し続け, 時計に付け, 記録を付け, 棋譜をつけ, 取り消);
+  - terms 後を(つけ|付け), (つけ|付け)回, 手を(かけ|掛け), (こと|あれ|それ|これ)をされ, ようにされ, にされ, 見続け, とやっ; 負けろ, 投了しろ, (引き分け|ドロー)でいい; someone else's phone also with 「の、」 or 「の 」;
+  - false positives removed: 結果に同意 alone, 対局前に…話した, 指し手 in the contact rule.
+  - Results: 0 false negatives on all regression sets through gate and pipeline (the 36 re-review phrases were added to `sensitive-review4.ja.json`); usefulness 15 of 144 held back (10.4%).
 - **Held-out false-negative rates so far** (each measured before the fixes that followed): list-based gate ~76% (115/151); known vocabulary ~43% (117/270); after review-2 fixes 10.1% gate / 16.8% pipeline (208); after review-3 fixes 0.47% on natural phrasing (1/211), but 29/41 on phrases deliberately composed from vocabulary words. The arbiter's confirmation (D13) remains the final defense.
 - **Tests:** `__tests__/privacy/{sensitive-gate,gate-evaluation,pii-redaction,protect}.test.ts`. `gate-evaluation` also runs every sensitive set through `protectIncidentText`.
 

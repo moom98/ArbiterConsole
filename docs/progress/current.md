@@ -142,7 +142,7 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 
 - tsc is clean; eslint 0 errors; all tests pass (70 files); `npm run build` succeeds.
 - 155 privacy tests, including evaluation of every synthetic fixture set through the gate and the whole pipeline.
-- Four independent reviews, each FIX REQUIRED → fixed. Held-out false-negative rate went ~76% → ~43% → 10–17% → 0.47% (natural phrasing, 1/211). Usefulness: 8.6% of realistic benign reports held back. See `milestones/j1a-1-privacy-package.md`.
+- Four independent reviews, each FIX REQUIRED → fixed. Held-out false-negative rate went ~76% → ~43% → 10–17% → 0.47% (natural phrasing, 1/211). Usefulness: 10.4% of realistic benign reports held back. See `milestones/j1a-1-privacy-package.md`.
 
 **J1b-8 game end (2026-10-08, `feature/fact-catalog`):**
 

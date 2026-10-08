@@ -1,5 +1,5 @@
 {
- "description": "Regression set: sensitive reports written independently by the fourth J1a-1 reviewer (2026-10-08): 211 natural phrases (held-out miss 1/211 before the fixes) and 41 phrases composed only from known-vocabulary words (29 missed). Used during the fixes, so no longer held out.",
+ "description": "Regression set: sensitive reports written independently by the fourth J1a-1 reviewer (2026-10-08): 211 natural phrases (held-out miss 1/211 before the fixes) and 41 phrases composed only from known-vocabulary words (29 missed). Used during the fixes, so no longer held out. Plus 36 phrases from the targeted re-review of the review-4 fixes.",
  "cases": [
   {
    "class": "fair-play",
@@ -1008,6 +1008,150 @@
   {
    "class": "family-minors",
    "text": "白の親が来て白を連れて帰った"
+  },
+  {
+   "class": "review4-final",
+   "text": "白が黒の後をつけた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白は黒をつけ回した"
+  },
+  {
+   "class": "review4-final",
+   "text": "白に付け回された"
+  },
+  {
+   "class": "review4-final",
+   "text": "白が黒に手をかけた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白は黒に手をかけようとした"
+  },
+  {
+   "class": "review4-final",
+   "text": "白が黒の手にかけた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白にあれをされた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白にそれをされた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白にこれをされた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白にそういうことをされた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白に黒のことをされた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白にとものをされた"
+  },
+  {
+   "class": "review4-final",
+   "text": "黒は白に二度もした"
+  },
+  {
+   "class": "review4-final",
+   "text": "白は黒の手をした"
+  },
+  {
+   "class": "review4-final",
+   "text": "白が黒に何をした"
+  },
+  {
+   "class": "review4-final",
+   "text": "白にいいようにされた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白にものにされた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白にかもにされた"
+  },
+  {
+   "class": "review4-final",
+   "text": "黒は白とやった"
+  },
+  {
+   "class": "review4-final",
+   "text": "黒は白とした"
+  },
+  {
+   "class": "review4-final",
+   "text": "白は黒にもうやった"
+  },
+  {
+   "class": "review4-final",
+   "text": "白が黒の後を付けた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白は黒に付けられた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白が黒の手を付けた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白に見続けられた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白が黒を見続けた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白が黒に声をかけ続けた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白が黒を落とした"
+  },
+  {
+   "class": "review4-final",
+   "text": "黒が白を落とした"
+  },
+  {
+   "class": "review4-final",
+   "text": "白のはかに行った"
+  },
+  {
+   "class": "review4-final",
+   "text": "白はでかと話した"
+  },
+  {
+   "class": "review4-final",
+   "text": "白のはがかけた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白は黒の、スマホをバッグに入れた"
+  },
+  {
+   "class": "review4-final",
+   "text": "黒の スマホをバッグに入れた"
+  },
+  {
+   "class": "review4-final",
+   "text": "白は黒に負けろと言った"
+  },
+  {
+   "class": "review4-final",
+   "text": "白は黒に引き分けでいいと言った"
   }
  ]
 }

@@ -2520,6 +2520,246 @@
    "entry": "term:状態ではな",
    "expected": "blocked",
    "text": "指せる状態ではない。体調が悪いと言った"
+  },
+  {
+   "entry": "term:後を(つけ|付け)",
+   "expected": "uncertain",
+   "text": "黒の後をつけた"
+  },
+  {
+   "entry": "term:後を(つけ|付け)",
+   "expected": "blocked",
+   "text": "黒の後をつけた。暴言もあった"
+  },
+  {
+   "entry": "term:後を(つけ|付け)",
+   "expected": "uncertain",
+   "text": "後を付けてきた"
+  },
+  {
+   "entry": "term:後を(つけ|付け)",
+   "expected": "blocked",
+   "text": "後を付けてきた。警察を呼んだ"
+  },
+  {
+   "entry": "term:後を(つけ|付け)",
+   "expected": "uncertain",
+   "text": "白の後をつけていた"
+  },
+  {
+   "entry": "term:後を(つけ|付け)",
+   "expected": "blocked",
+   "text": "白の後をつけていた。体調が悪いと言った"
+  },
+  {
+   "entry": "term:(つけ|付け)回",
+   "expected": "uncertain",
+   "text": "つけ回した"
+  },
+  {
+   "entry": "term:(つけ|付け)回",
+   "expected": "blocked",
+   "text": "つけ回した。暴言もあった"
+  },
+  {
+   "entry": "term:(つけ|付け)回",
+   "expected": "uncertain",
+   "text": "付け回された"
+  },
+  {
+   "entry": "term:(つけ|付け)回",
+   "expected": "blocked",
+   "text": "付け回された。警察を呼んだ"
+  },
+  {
+   "entry": "term:(つけ|付け)回",
+   "expected": "uncertain",
+   "text": "つけ回していた"
+  },
+  {
+   "entry": "term:(つけ|付け)回",
+   "expected": "blocked",
+   "text": "つけ回していた。体調が悪いと言った"
+  },
+  {
+   "entry": "term:手を(かけ|掛け)",
+   "expected": "uncertain",
+   "text": "黒に手をかけた"
+  },
+  {
+   "entry": "term:手を(かけ|掛け)",
+   "expected": "blocked",
+   "text": "黒に手をかけた。暴言もあった"
+  },
+  {
+   "entry": "term:手を(かけ|掛け)",
+   "expected": "uncertain",
+   "text": "手を掛けた"
+  },
+  {
+   "entry": "term:手を(かけ|掛け)",
+   "expected": "blocked",
+   "text": "手を掛けた。警察を呼んだ"
+  },
+  {
+   "entry": "term:手を(かけ|掛け)",
+   "expected": "uncertain",
+   "text": "手をかけようとした"
+  },
+  {
+   "entry": "term:手を(かけ|掛け)",
+   "expected": "blocked",
+   "text": "手をかけようとした。体調が悪いと言った"
+  },
+  {
+   "entry": "term:(こと|あれ|それ|これ)をされ",
+   "expected": "uncertain",
+   "text": "あれをされた"
+  },
+  {
+   "entry": "term:(こと|あれ|それ|これ)をされ",
+   "expected": "blocked",
+   "text": "あれをされた。暴言もあった"
+  },
+  {
+   "entry": "term:(こと|あれ|それ|これ)をされ",
+   "expected": "uncertain",
+   "text": "そういうことをされた"
+  },
+  {
+   "entry": "term:(こと|あれ|それ|これ)をされ",
+   "expected": "blocked",
+   "text": "そういうことをされた。警察を呼んだ"
+  },
+  {
+   "entry": "term:(こと|あれ|それ|これ)をされ",
+   "expected": "uncertain",
+   "text": "それをされた"
+  },
+  {
+   "entry": "term:(こと|あれ|それ|これ)をされ",
+   "expected": "blocked",
+   "text": "それをされた。体調が悪いと言った"
+  },
+  {
+   "entry": "term:ようにされ",
+   "expected": "uncertain",
+   "text": "いいようにされた"
+  },
+  {
+   "entry": "term:ようにされ",
+   "expected": "blocked",
+   "text": "いいようにされた。暴言もあった"
+  },
+  {
+   "entry": "term:ようにされ",
+   "expected": "uncertain",
+   "text": "好きなようにされた"
+  },
+  {
+   "entry": "term:ようにされ",
+   "expected": "blocked",
+   "text": "好きなようにされた。警察を呼んだ"
+  },
+  {
+   "entry": "term:ようにされ",
+   "expected": "uncertain",
+   "text": "思うようにされた"
+  },
+  {
+   "entry": "term:ようにされ",
+   "expected": "blocked",
+   "text": "思うようにされた。体調が悪いと言った"
+  },
+  {
+   "entry": "term:にされ",
+   "expected": "uncertain",
+   "text": "ものにされた"
+  },
+  {
+   "entry": "term:にされ",
+   "expected": "blocked",
+   "text": "ものにされた。暴言もあった"
+  },
+  {
+   "entry": "term:にされ",
+   "expected": "uncertain",
+   "text": "かもにされた"
+  },
+  {
+   "entry": "term:にされ",
+   "expected": "blocked",
+   "text": "かもにされた。警察を呼んだ"
+  },
+  {
+   "entry": "term:にされ",
+   "expected": "uncertain",
+   "text": "いいかもにされた"
+  },
+  {
+   "entry": "term:にされ",
+   "expected": "blocked",
+   "text": "ばかにされた。体調が悪いと言った"
+  },
+  {
+   "entry": "term:見続け",
+   "expected": "uncertain",
+   "text": "黒を見続けた"
+  },
+  {
+   "entry": "term:見続け",
+   "expected": "blocked",
+   "text": "黒を見続けた。暴言もあった"
+  },
+  {
+   "entry": "term:見続け",
+   "expected": "uncertain",
+   "text": "見続けられた"
+  },
+  {
+   "entry": "term:見続け",
+   "expected": "blocked",
+   "text": "見続けられた。警察を呼んだ"
+  },
+  {
+   "entry": "term:見続け",
+   "expected": "uncertain",
+   "text": "ずっと見続けていた"
+  },
+  {
+   "entry": "term:見続け",
+   "expected": "blocked",
+   "text": "ずっと見続けていた。体調が悪いと言った"
+  },
+  {
+   "entry": "term:とやっ",
+   "expected": "uncertain",
+   "text": "白とやった"
+  },
+  {
+   "entry": "term:とやっ",
+   "expected": "blocked",
+   "text": "白とやった。暴言もあった"
+  },
+  {
+   "entry": "term:とやっ",
+   "expected": "uncertain",
+   "text": "黒とやっていた"
+  },
+  {
+   "entry": "term:とやっ",
+   "expected": "blocked",
+   "text": "黒とやっていた。警察を呼んだ"
+  },
+  {
+   "entry": "term:とやっ",
+   "expected": "uncertain",
+   "text": "相手とやった"
+  },
+  {
+   "entry": "term:とやっ",
+   "expected": "blocked",
+   "text": "相手とやった。体調が悪いと言った"
   }
  ]
 }

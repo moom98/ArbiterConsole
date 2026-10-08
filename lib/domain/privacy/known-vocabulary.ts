@@ -71,7 +71,7 @@ const HIRAGANA_FUNCTION = `
 なる なった なり なって なりました
 そう よう こと もの とき あと まえ まま ところ
 この その あの どの これ それ あれ どれ ここ そこ どこ
-すぐ まだ もう また さらに すでに ちょうど ほぼ ふたたび ない なかった なく なくて だ だが かも やった かけ かけた かけて かける つけ つけた つけて つけていない なっていた なっている なっています した して する しない しなかった します しました された される させ ずれ ずれた ずれて ずれていた ずれている
+すぐ まだ もう また さらに すでに ちょうど ほぼ ふたたび ない なかった なく なくて だ だが かも なっていた なっている なっています ずれ ずれた ずれて ずれていた ずれている
 いう いった いって
 よい いい よく
 かどうか どうか はい いいえ
@@ -104,10 +104,16 @@ const MIXED_WORDS = [
   "表示が消え",
   "画面が消え",
   // 「悪い」は具合・調子の後だけ（「白は対局中に悪くなった」を既知にしない。具合・調子は L3 が判定する）
-  "落とし",
+  // 「付け」「続け」「落とし」は語として許さない（後を付けた・見続けた・黒を落とした）。決まった言い方だけ
+  "駒を落とし",
   "見落とし",
-  "付け",
-  "続け",
+  "書き続け",
+  "指し続け",
+  "時計に付け",
+  "記録を付け",
+  "棋譜をつけ",
+  "記録をつけ",
+  "取り消",
   "代わり",
   "具合が悪い",
   "具合が悪く",
@@ -132,15 +138,30 @@ const MIXED_WORDS = [
 ];
 const MIXED = new RegExp(MIXED_WORDS.join("|"), "g");
 
-/** 1文字の助詞2つで作れる、内容を持つ語（はは＝母、かね＝金、もも、かか） */
-const BLOCKED_PARTICLE_PAIRS = new Set([
-  "はは",
-  "かね",
-  "もも",
-  "かか",
-  "ねね",
-  "よよ",
+/**
+ * 続けてよい1文字の助詞の組（許可リスト）。それ以外の組は語を作りうる
+ * （はは＝母、かね＝金、はか＝墓、でか、はが）ため許さない
+ */
+const ALLOWED_PARTICLE_PAIRS = new Set([
+  "のは",
+  "のが",
+  "のも",
+  "には",
+  "にも",
+  "とは",
+  "とも",
+  "では",
+  "でも",
+  "へは",
+  "へも",
 ]);
+
+/**
+ * 2文字以上の漢字・カタカナの名詞の後の「を＋する」（提案をした・クレームをして）。
+ * 1文字（手をした・何をした）や指示語（あれをされた）の後は許さない。「された」は含めない
+ */
+const NOUN_SURU =
+  /(?<=[\u4e00-\u9fff々ァ-ヺー]{2})を(?:して|した|する|しない|しなかった|します|しました)/g;
 
 /** 1文字の送り仮名の直後にだけ置ける語尾（止めた・落ちた） */
 const AFTER_OKURIGANA = new Set(["た", "て", "だ", "で"]);
@@ -215,7 +236,7 @@ function segmentHiragana(run: string, afterStem: boolean): boolean {
         // 1文字の助詞の組で語を作らせない（は＋は「はは」、か＋ね「かね」）。
         // 「のは」「にも」「とも」など普通の組は許す
         if (len === 1) {
-          if (st & (N | V) || !BLOCKED_PARTICLE_PAIRS.has(run[i - 1] + w))
+          if (st & (N | V) || ALLOWED_PARTICLE_PAIRS.has(run[i - 1] + w))
             reach[i + 1] |= S;
         } else reach[i + len] |= N;
       }
@@ -259,6 +280,9 @@ export function unknownVocabulary(
   while ((m = SAN.exec(text)) !== null) mark(m.index, m.index + m[0].length);
   MIXED.lastIndex = 0;
   while ((m = MIXED.exec(text)) !== null) mark(m.index, m.index + m[0].length);
+  NOUN_SURU.lastIndex = 0;
+  while ((m = NOUN_SURU.exec(text)) !== null)
+    mark(m.index, m.index + m[0].length);
 
   let unknownRuns = 0;
   let i = 0;

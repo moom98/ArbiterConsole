@@ -31,8 +31,12 @@
 
 - `npx tsc --noEmit` clean; ESLint 0 errors; `npx vitest run` all pass (see current.md for the count); `npm run build` succeeds.
 - Held-out FN history: ~76% (list gate) → ~43% (vocabulary) → 10.1% gate / 16.8% pipeline → 0.47% natural (1/211), 29/41 on deliberately composed phrases → those holes fixed. 0 FN on all five regression sets through gate and pipeline.
-- Usefulness: 12/140 realistic benign reports held back (8.6%).
+- Usefulness: 15/144 realistic benign reports held back (10.4%).
 - PII: 0 covered identifiers in sent payloads on 117 fixture reports and the reviewers' probes; known residual risks (unregistered names without honorific, kana readings) are stopped by L3v.
+
+## Final targeted re-review
+
+- **FIX REQUIRED:** the usefulness additions after review 4 opened holes (つけた, あれをされた, 手をかけた, 付け回された, はか/でか). Reverted to an allow-list of particle pairs and narrow collocations, added terms; see design §10. 0 false negatives on all regression sets afterwards; 15/144 benign reports held back (10.4%).
 
 ## Known issues
 

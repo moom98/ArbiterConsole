@@ -82,13 +82,11 @@ export function validateTimeControl(
 
 /** 検証済みの入力から TimeControl を作る（不要なフィールドを落とし、複製する） */
 export function buildTimeControl(tc: TimeControlInput): TimeControl {
-  const periods = (tc.periods ?? []).map(
-    (p, i, all): TimeControlPeriod => ({
-      ...(i < all.length - 1 ? { moves: p.moves! } : {}),
-      minutes: p.minutes!,
-      incrementSeconds: p.incrementSeconds!,
-    })
-  );
+  const periods = (tc.periods ?? []).map((p, i, all): TimeControlPeriod => ({
+    ...(i < all.length - 1 ? { moves: p.moves! } : {}),
+    minutes: p.minutes!,
+    incrementSeconds: p.incrementSeconds!,
+  }));
   return {
     periods,
     ...(tc.delaySeconds !== undefined ? { delaySeconds: tc.delaySeconds } : {}),
@@ -165,8 +163,7 @@ export function currentPeriod(
 ): CurrentPeriod | undefined {
   if (!tc || tc.periodsIncomplete || tc.periods.length === 0) return undefined;
   const last = tc.periods.length;
-  if (last === 1)
-    return { number: 1, period: tc.periods[0], isLast: true };
+  if (last === 1) return { number: 1, period: tc.periods[0], isLast: true };
   if (!isPositiveInteger(moveNumber)) return undefined;
   let end = 0;
   for (let i = 0; i < last; i++) {
@@ -219,9 +216,7 @@ export interface RecordingObligationInput {
 }
 
 export type RecordingObligationMissing =
-  | "remainingTime"
-  | "belowFiveInPeriod"
-  | "increment";
+  "remainingTime" | "belowFiveInPeriod" | "increment";
 
 export type RecordingObligation =
   /** 8.4 により、このピリオドの残りは 8.1.1 の記録義務がない */
@@ -277,9 +272,7 @@ export function assessRecordingObligation(
     };
   }
   const lowNow =
-    rem === undefined
-      ? undefined
-      : rem < RECORDING_EXEMPTION_THRESHOLD_SECONDS;
+    rem === undefined ? undefined : rem < RECORDING_EXEMPTION_THRESHOLD_SECONDS;
   // ピリオド中に5分未満になったか: 今5分未満、または「下回った」の回答なら成り立つ。
   // 「下回っていない」の回答なら成り立たない（今も5分以上）。それ以外は不明
   const lowInPeriod =

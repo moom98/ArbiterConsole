@@ -6,6 +6,7 @@ import type {
   PlayerColor,
   RuleCitation,
   SupervisionRegime,
+  TimeControl,
   TournamentOverrides,
 } from "@/lib/domain/entities";
 import {
@@ -56,6 +57,7 @@ import {
   type MatePossibility,
 } from "@/lib/domain/services/mate-possibility";
 import { touchObligation } from "@/lib/domain/services/touch-move";
+import { lastPeriodFromTimeControl } from "@/lib/domain/services/time-control";
 import type { LlmAssistOutcome, LlmAssistPort } from "@/lib/domain/llm/ports";
 import { buildLlmDecision } from "@/lib/domain/llm/llm-decision";
 import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
@@ -108,6 +110,11 @@ export interface RulesetContext {
    * 現在は Blitz B.2 の加算時間のみ参照する（ADR-005 / ADR-006）。
    */
   tournamentOverrides?: TournamentOverrides;
+  /**
+   * 報告時の持ち時間（ADR-014 §7）。最終ピリオドかどうか（DT-004 lastPeriod）を設定から
+   * 求めるために使う。未指定なら質問する。
+   */
+  timeControl?: TimeControl;
 }
 
 export interface DecisionEngineContext {
@@ -423,6 +430,11 @@ export class DecisionEngine {
           incident,
           tree.evaluate({
             ...incident.flagFallFacts,
+            // 最終ピリオドは設定から求められれば設定を優先する（ピリオドが1つなら常に最終。
+            // 複数ピリオドでは手数が分からないため質問する。ADR-014 §7）
+            lastPeriod:
+              lastPeriodFromTimeControl(ruleset.timeControl) ??
+              incident.flagFallFacts?.lastPeriod,
             competitionType,
             supervisionRegime: regime,
             mate: this.mateFor(incident),

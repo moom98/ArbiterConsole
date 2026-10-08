@@ -173,6 +173,7 @@ describe("deriveRulesetFromTournament (explicit ruleset)", () => {
         tournamentOverrides: {
           blitzCompetitionTimePenaltySeconds: B2_OVERRIDE,
         },
+        timeControl: { periods: [{ minutes: 90, incrementSeconds: 30 }] },
       },
     });
   });

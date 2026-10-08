@@ -43,7 +43,11 @@ interface PeriodFields {
   incrementSeconds: string;
 }
 
-const EMPTY_PERIOD: PeriodFields = { moves: "", minutes: "", incrementSeconds: "" };
+const EMPTY_PERIOD: PeriodFields = {
+  moves: "",
+  minutes: "",
+  incrementSeconds: "",
+};
 
 interface FormFields {
   name: string;
@@ -334,7 +338,9 @@ export function TournamentProfileForm(props: TournamentProfileFormProps) {
                   </button>
                 </div>
               )}
-              <div className={`grid gap-3 ${multi && !isLast ? "grid-cols-3" : "grid-cols-2"}`}>
+              <div
+                className={`grid gap-3 ${multi && !isLast ? "grid-cols-3" : "grid-cols-2"}`}
+              >
                 {multi && !isLast && (
                   <label className="block font-semibold">
                     {prefix}手数
@@ -388,7 +394,8 @@ export function TournamentProfileForm(props: TournamentProfileFormProps) {
           </button>
         )}
         <p className="text-xs text-gray-600">
-          複数のピリオドがある場合、最後のピリオドは残りの全ての手を指すため、手数を入力しません。最終ピリオドかどうか（両フラッグの判断など）と 8.4 の加算はこの設定から求めます。
+          複数のピリオドがある場合、最後のピリオドは残りの全ての手を指すため、手数を入力しません。最終ピリオドかどうか（両フラッグの判断など）と
+          8.4 の加算はこの設定から求めます。
         </p>
         {f.legacyIncomplete && (
           <div

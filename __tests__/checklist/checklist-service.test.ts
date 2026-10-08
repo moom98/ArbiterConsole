@@ -343,7 +343,7 @@ describe("Schema v7 migration", () => {
 
     const db = new ArbiterDatabase(name);
     await db.open();
-    expect(db.verno).toBe(7);
+    expect(db.verno).toBe(8);
     expect((await db.rounds.get("T1:r1"))?.status).toBe("active");
     expect(await db.incidents.count()).toBe(1);
     const repo = new DexieChecklistRepository(db);

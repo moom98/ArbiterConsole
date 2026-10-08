@@ -154,6 +154,7 @@ describe("Incident store with tournament games (ADR-006)", () => {
           source: { document: "要項", article: "第7条", quote: undefined },
         },
       },
+      timeControl: { periods: [{ minutes: 3, incrementSeconds: 2 }] },
     });
 
     // 追加質問の回答前に大会設定を変更（Standard へ）

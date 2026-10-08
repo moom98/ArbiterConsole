@@ -1,8 +1,8 @@
 # Current Progress
 
 **Last updated:** 2026-10-08
-**Working branch:** `feature/m4-and-review-fixes`, pushed to `origin`. PR #1 to `main` is open, and the user merges it.
-- The deployment config (ADR-009) was built on `feature/cloudflare-deploy` and then merged into `feature/m4-and-review-fixes`, so it is part of PR #1.
+**Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
+- The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
 
 This file is the handoff for a fresh Claude session. Do not rely on conversation history.
 `docs/IMPLEMENTATION_STATUS.md` is a stale 2024 snapshot. Use this file and `docs/progress/milestones/` instead.
@@ -39,7 +39,11 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
     2. `npx wrangler secret put GEMINI_API_KEY` and `npx wrangler secret put LLM_ACCESS_TOKEN`. The user enters the values.
     3. `ALLOW_MISSING_MODEL=1 npm run cf:deploy`.
   - Deploying is outward-facing. **Get the user's go-ahead before running `cf:deploy`.**
-  - **Status:** config built and verified locally with `wrangler dev`; not deployed yet.
+  - **Status: deployed 2026-10-08** to https://arbiter-console.arbiterconsole.workers.dev.
+    - Cloudflare account `ArbiterConsole` (`account_id` in `wrangler.jsonc`), deployed from `main` at `274284e`.
+    - The first version was `481a6ba0-…`.
+    - The secrets `GEMINI_API_KEY` and `LLM_ACCESS_TOKEN` were set by the user.
+    - The workers.dev subdomain `arbiterconsole` is created automatically the first time the account opens the Workers & Pages dashboard.
   - **Build-time safety (ADR-009):**
     - `cf:build` aborts if any `.env*` file other than `.env.example` exists.
     - Local Workers values go in `.dev.vars`; production values are set with `wrangler secret put`.
@@ -148,10 +152,18 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 ## Next steps
 
-1. **Deployment (Milestone 10.1).**
-   - The config is ready.
-   - Once the user has logged in to Cloudflare, set the secrets and given the go-ahead, run `ALLOW_MISSING_MODEL=1 npm run cf:deploy`.
-   - Then check HTTPS, PWA install, the AI routes (token entered in Settings → AI設定) and keyword search in production.
+1. **Deployment (Milestone 10.1): done 2026-10-08.**
+   - Production checks run by Claude:
+     - all pages, including dynamic tournament routes, return 200 over HTTPS;
+     - all 51 service-worker precache URLs return 200;
+     - `/models/*` returns 404, as expected without the model;
+     - `/api/llm/*` returns 401 without the token or with a wrong one.
+   - The user still needs to check on a real device:
+     - AI reference information with the real token (Settings → AI設定);
+     - rule PDF import and keyword search;
+     - PWA install.
+   - **To redeploy**, run from `main` with no `.env*` files: `ALLOW_MISSING_MODEL=1 npm run cf:deploy`.
+   - Plain `http://` is also served on workers.dev. Share the `https://` URL, since the PWA needs HTTPS.
 2. **Follow-ups found during deployment prep:**
    - Host the embedding model so semantic search works again.
    - Upgrade to Next.js 15.5+/16 and the current OpenNext adapter. Next 14 is EOL.

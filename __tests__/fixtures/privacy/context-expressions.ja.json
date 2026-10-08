@@ -2760,6 +2760,36 @@
    "entry": "term:とやっ",
    "expected": "blocked",
    "text": "相手とやった。体調が悪いと言った"
+  },
+  {
+   "entry": "term:の代わりに(出場|対局|指|来|出)",
+   "expected": "uncertain",
+   "text": "黒の代わりに出場した"
+  },
+  {
+   "entry": "term:の代わりに(出場|対局|指|来|出)",
+   "expected": "blocked",
+   "text": "黒の代わりに出場した。暴言もあった"
+  },
+  {
+   "entry": "term:の代わりに(出場|対局|指|来|出)",
+   "expected": "uncertain",
+   "text": "白の代わりに対局した"
+  },
+  {
+   "entry": "term:の代わりに(出場|対局|指|来|出)",
+   "expected": "blocked",
+   "text": "白の代わりに対局した。警察を呼んだ"
+  },
+  {
+   "entry": "term:の代わりに(出場|対局|指|来|出)",
+   "expected": "uncertain",
+   "text": "相手の代わりに来た"
+  },
+  {
+   "entry": "term:の代わりに(出場|対局|指|来|出)",
+   "expected": "blocked",
+   "text": "相手の代わりに来た。体調が悪いと言った"
   }
  ]
 }

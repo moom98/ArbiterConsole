@@ -37,6 +37,7 @@
 ## Final targeted re-review
 
 - **FIX REQUIRED:** the usefulness additions after review 4 opened holes (つけた, あれをされた, 手をかけた, 付け回された, はか/でか). Reverted to an allow-list of particle pairs and narrow collocations, added terms; see design §10. 0 false negatives on all regression sets afterwards; 15/144 benign reports held back (10.4%).
+- **Second pass:** earlier holes confirmed closed; two more found (手元/指先 in the contact rule, の代わりに出場) and fixed with regression cases.
 
 ## Known issues
 

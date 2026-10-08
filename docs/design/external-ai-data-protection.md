@@ -426,6 +426,7 @@ The pure package exists and is tested; nothing calls it yet (J1a-2 wires it into
   - terms 後を(つけ|付け), (つけ|付け)回, 手を(かけ|掛け), (こと|あれ|それ|これ)をされ, ようにされ, にされ, 見続け, とやっ; 負けろ, 投了しろ, (引き分け|ドロー)でいい; someone else's phone also with 「の、」 or 「の 」;
   - false positives removed: 結果に同意 alone, 対局前に…話した, 指し手 in the contact rule.
   - Results: 0 false negatives on all regression sets through gate and pipeline (the 36 re-review phrases were added to `sensitive-review4.ja.json`); usefulness 15 of 144 held back (10.4%).
+  - A second pass of the same reviewer confirmed those holes closed and found two more, fixed: a body-part compound in the contact rule (手元, 指先) and playing in another player's place (の代わりに出場); 代わり is now allowed only as 代わりの時計 / 電池 / 駒.
 - **Held-out false-negative rates so far** (each measured before the fixes that followed): list-based gate ~76% (115/151); known vocabulary ~43% (117/270); after review-2 fixes 10.1% gate / 16.8% pipeline (208); after review-3 fixes 0.47% on natural phrasing (1/211), but 29/41 on phrases deliberately composed from vocabulary words. The arbiter's confirmation (D13) remains the final defense.
 - **Tests:** `__tests__/privacy/{sensitive-gate,gate-evaluation,pii-redaction,protect}.test.ts`. `gate-evaluation` also runs every sensitive set through `protectIncidentText`.
 

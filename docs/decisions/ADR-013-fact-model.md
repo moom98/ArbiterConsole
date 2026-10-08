@@ -57,7 +57,9 @@ The first Jev design showed "the top 5 missing items of the category by probabil
    - Presence **only changes how questions are grouped**. It never fills an answer and never skips a question.
    - It is not used with Gemini, offline, for fair-play, or when the gate does not return `clear`. Then every required fact is missing.
 6. **Calibrated thresholds.**
-   - There are per-model calibration files with per-fact presence thresholds and the category thresholds. They are chosen by the evaluation script: lowest `t` with precision ≥ 0.97 and a Wilson lower bound ≥ 0.90, then confirmed on a held-out set.
+   - There are per-model calibration files with per-fact presence thresholds and the category thresholds.
+   - **The main metric is the present precision** (Q-F2): ≥ 0.995 for blocking facts and ≥ 0.99 for the others, with Wilson 95% lower bounds of 0.98 and 0.97.
+   - The thresholds are chosen per fact on a tuning set and confirmed on a held-out set. Recall loss is accepted. Borderline answers count as missing.
    - A missing calibration or a missing fact entry means everything is missing (uncalibrated mode).
 
 ## Consequences

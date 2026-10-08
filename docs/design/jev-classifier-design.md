@@ -300,7 +300,7 @@ Japanese support is not documented, so production switches only after a measured
    - on the held-out set, category accuracy is at least Gemini's minus 2 points;
    - no category below 80% on the held-out set (with only 15 or more reports per category, treat this as a smoke check);
    - the calibration can be built ([fact-model.md](./fact-model.md) §5.2): `T_medium` reaches held-out accuracy ≥ 0.90, and `T_prefill` reaches ≥ 0.80;
-   - **presence:** for each fact, the threshold meets precision ≥ 0.97 with a Wilson lower bound ≥ 0.90, or the fact stays "always missing";
+   - **presence:** for each fact, the present precision is ≥ 0.995 (blocking facts) or ≥ 0.99 (others), with the Wilson bounds in [fact-model.md](./fact-model.md) §5.2. Otherwise the fact stays "always missing";
    - p95 latency is under 1 s.
 4. **Privacy check.** It runs before any accuracy run and must pass first. The full metrics are in [external-ai-data-protection.md](./external-ai-data-protection.md) §8, where Sensitive Gate **false negatives must be 0** and are a severity-1 defect.
    - It runs the PII fixtures (at least 100 reports) and the sensitive fixtures (at least 30 per class) from external-ai-data-protection §8 through `external-ai-guard`, with no API calls.

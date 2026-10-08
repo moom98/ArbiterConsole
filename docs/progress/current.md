@@ -1,20 +1,20 @@
 # Current Progress
 
-**Last updated:** 2026-10-09 (incident log AI retry)
+**Last updated:** 2026-10-09 (PR #7 merged and deployed)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
 
 This file is the handoff for a fresh Claude session. Do not rely on conversation history.
 
-**Current state in one paragraph (2026-10-09):** all work since PR #3 is on `feature/fact-catalog` (pushed, not merged into `main`, not deployed). It holds:
+**Current state in one paragraph (2026-10-09):** all work up to the incident-log AI retry was merged into `main` via **PR #7** (`392cd61`) and **deployed** (version `c85907c7-…`). PR #7 holds:
 - the fact catalogue and ADR-014 (J1b-1…J1b-8, all done);
 - the pure privacy package (J1a-1, done);
 - the external-AI guard on every client route with the arbiter's mandatory confirmation (J1a-2, done, review MERGE);
 - the server re-check L5 and minimized shapes only (J1a-3, done; see `milestones/j1a-3-server-recheck.md`);
 - retrying and confirming the AI reference from the incident log detail (done, review MERGE; see `milestones/log-ai-retry.md`).
 
-J1a is complete, so the earlier block on deploying is lifted. **Next:** with the user's go-ahead, open a PR from `feature/fact-catalog` to `main`, merge it, then deploy (`npm run cf:deploy` from `main`; deploying is outward-facing).
+**Next:** J1c (see Next steps). New work branches from `main`.
 - After the first deploy, 「意味検索用データを作成」 rebuilds every vector once (key `+deid1`).
 - Then: J1c. (The AI-send retry from the incident log detail is done.)
 `docs/IMPLEMENTATION_STATUS.md` is a stale 2024 snapshot. Use this file and `docs/progress/milestones/` instead.
@@ -63,7 +63,10 @@ J1a is complete, so the earlier block on deploying is lifted. **Next:** with the
   - **Status: deployed 2026-10-08** to https://arbiter-console.arbiterconsole.workers.dev.
     - Cloudflare account `ArbiterConsole` (`account_id` in `wrangler.jsonc`), deployed from `main` at `274284e`.
     - The first version was `481a6ba0-…`.
-    - **Latest deploy:** version `7221140b-…`, from `main` at `d943ae9` (PR #3, Gemini embeddings), on 2026-10-08.
+    - **Latest deploy:** version `c85907c7-2de8-4096-9fc5-49f54efc9e9e`, from `main` at `392cd61` (PR #7: ADR-014 J1b-4…8, ADR-012 J1a-1…3, log AI retry), on 2026-10-09.
+      - Production checks: all pages, including dynamic tournament routes, return 200. All 51 precache URLs return 200, and `sw.js` has the new build id. `/api/llm/{reason,classify,embed}` return 401 without a token or with a wrong one. `/models/*` returns 404.
+      - The user still has to do on a real device: run 「意味検索用データを作成」 once (key `+deid1`), and check that Dexie v8 opens with existing data.
+    - Previous deploy: version `7221140b-…`, from `main` at `d943ae9` (PR #3), on 2026-10-08.
       - Production checks: all pages return 200; all 48 precache URLs return 200; `/ort/` is gone; `/api/llm/{reason,classify,embed}` return 401 without the token.
       - Right after a deploy, Cloudflare can briefly serve the previous `sw.js`. Re-check after about 1 minute.
     - The secrets `GEMINI_API_KEY` and `LLM_ACCESS_TOKEN` were set by the user.

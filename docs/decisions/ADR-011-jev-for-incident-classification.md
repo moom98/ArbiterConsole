@@ -1,6 +1,6 @@
 # ADR-011: TypeSafe AI Jev for Incident Classification (provider-switchable)
 
-**Status:** Accepted (the direction). The user answered Q1–Q3 and Q5, and reviewed the catalogue, on 2026-10-08. The revised catalogue is under re-review. Not implemented.
+**Status:** Accepted. The user answered Q1–Q3 and Q5, and reviewed the catalogue, on 2026-10-08. The server side (port, Jev client, calibrated parser, `/api/llm/facts`) is implemented in J1c (2026-10-09, design §14). The default provider stays `gemini` until the evaluation (J3).
 
 **Date:** 2026-10-08
 

@@ -1,6 +1,6 @@
 # Design: TypeSafe AI Jev for Incident Classification
 
-**Status:** Direction accepted. The user answered Q1–Q3 and Q5, and reviewed the catalogue, on 2026-10-08. The revised catalogue is under re-review. Not implemented yet. Decision record: [ADR-011](../decisions/ADR-011-jev-for-incident-classification.md).
+**Status:** Direction accepted (user answers Q1–Q3, Q5 and the catalogue reviews, 2026-10-08). J0, J1a and J1b are done. **J1c (server port, Jev client, calibrated parser, `/api/llm/facts`) is implemented (2026-10-09, §14).** J2 (UI) and J3 (evaluation, production switch) are next. The default provider is still `gemini`. Decision record: [ADR-011](../decisions/ADR-011-jev-for-incident-classification.md).
 
 **Date:** 2026-10-08
 
@@ -400,3 +400,46 @@ Japanese support is not documented, so production switches only after a measured
   - Points 9–12 are in [external-ai-data-protection.md](./external-ai-data-protection.md).
 - **Q5 (answered 2026-10-08):** Yes, de-identify Gemini too. All Gemini routes are now covered by [external-ai-data-protection.md](./external-ai-data-protection.md).
 - Open questions that remain: Q-DP1 and Q-DP2 (data protection), Q-F1 and Q-F2 (fact model).
+
+## 14. Implementation (J1c, 2026-10-09)
+
+The default stays `gemini`. With the default environment, the classify route, its prompt and its response are unchanged, so deploying J1c changes nothing.
+
+### 14.1 Files
+
+| File | Content |
+| --- | --- |
+| `lib/infrastructure/llm/server/classify-port.ts` | `ClassifyIncidentFn`, `geminiClassifyIncident(generate)` (today's prompt and schema), `jevClassifyIncident(evaluate)`, `selectClassifier(config, impl)`. |
+| `lib/infrastructure/llm/server/jev-client.ts` | `createJevEvaluate(fetch)`: `POST https://api.typesafe.ai/v1/systemone` with the Bearer key. Non-2xx → `UpstreamError("status")`, and the error body is cancelled, never read. A body that is not `{ model, answers }` (or a model id outside `MODEL_ID`) → `InvalidProviderOutput`. |
+| `lib/infrastructure/llm/server/jev-questions.ts` | `buildJevState`, `buildJevClassificationQuestions` (from `INCIDENT_CATEGORY_DESCRIPTIONS`, `CLOCK_TIME_SUBTYPE_LABELS`, `DRAW_SUBTYPE_LABELS`), `jevAnswersToRawClassification`. |
+| `lib/infrastructure/llm/server/jev-presence.ts` | `isPresenceCheckableFact`, `buildJevPresenceQuestions` (catalogue only), `jevAnswersToRawPresence`. |
+| `lib/infrastructure/llm/server/provider.ts` | `classifierProvider(config)` and `jevEvaluateProvider`: the binding points. |
+| `lib/infrastructure/llm/server/handler.ts` | Reason and classify handlers split; `routeKeyConfigured`; Jev deadline; `createFactsRouteHandler`. |
+| `lib/infrastructure/llm/server/request-validation.ts` | `validateFactPresenceRequest`. |
+| `app/api/llm/facts/route.ts` | The new route (`maxDuration` 15 s). |
+| `lib/domain/llm/classification.ts` | `INCIDENT_CATEGORY_DESCRIPTIONS` (shared with the Gemini prompt; a hash test keeps the prompt byte-identical) and the probabilistic branch of `parseLlmClassification(raw, { model })`. |
+| `lib/domain/llm/calibration/index.ts` | `JevCalibration`, `JEV_CALIBRATIONS` (**empty until J3**), `findJevCalibration`, `isValidJevCalibration`. |
+| `lib/domain/llm/presence.ts` | `parseFactPresence(raw, { model, requestedFactIds })`. |
+
+### 14.2 Decisions made while implementing
+
+- **Request bodies.** Classify keeps `{ narrative }` from J1a (not `{ state: { v, narrative } }` of §4.4). Facts is `{ narrative, factIds }`, with exact keys. The Jev `state` is `{ deidentified_incident: narrative }` for both.
+- **Port result.** A port throws only for transport errors, which the handler retries (408, 429, 5xx, network, timeout). An empty, blocked or unparsable answer is returned as `{ ok: false, code }`, so it is never retried.
+- **Key check per route** (`routeKeyConfigured`): reason and embed need `GEMINI_API_KEY`; classify needs the selected provider's key; facts needs `LLM_CLASSIFIER_PROVIDER=jev` **and** `TYPESAFE_API_KEY`. Otherwise 503 `not-configured` before the body is read.
+- **Jev deadline:** 3 s per attempt, 10 s in total, and no retry with less than 1 s left (`jevRetry`). Gemini classify is unchanged (8 s, 30 s).
+- **Raw shape.** The adapter takes Jev's `choice` as `category`. The domain requires all 10 labels in `categoryProbabilities`, and accepts `category` only if its probability equals the maximum (a tie is accepted). It rejects unknown keys, values outside [0, 1] or non-finite, a sum outside 1 ± 0.02, and invalid `subtypeProbability` or `needsTournamentRulesProbability`.
+- **Calibration.** `JevCalibration` gets optional `subtype` and `needsTournamentRules` thresholds (§5.4). Thresholds must be in (0, 1], or the calibration is ignored. The registry is a TS constant. J3 adds the entry from the evaluation output, with a test that compares it with the JSON.
+- **`alternatives`** are the next 2 categories by probability (category order breaks ties). They are given when `confidence` is low **or** `prefill` is false, so the UI can show the top 3. With medium confidence and prefill, they are absent.
+- **Uncalibrated mode** (now, for every Jev model): `confidence: "low"`, `prefill: false`, alternatives given, no subtype, `needsTournamentRules` from the domain rule only; every fact `missing`.
+- **Presence questions.** The catalogue has the interrogative question only. The `noul` instructions and the `true` criterion quote it: "The text explicitly states the observation that answers: 「…」". The J3 presence evaluation measures this wording. If it is weak, add declarative forms to the catalogue.
+- **Facts limits:** at most 32 fact ids per request (`LLM_LIMITS.maxFactIds`); duplicates, unknown, local-only and derived facts get 400. Rate limit `LLM_RATE_LIMIT_FACTS_PER_MINUTE` (10); the daily cap is shared with reason and classify.
+- **Logs.** Errors as before. A successful Jev call logs `{ route, code: "ok", provider/model, attempts, inputTokens }`. Never the narrative, keys or upstream bodies.
+
+### 14.3 Not done in J1c (for J2 and J3)
+
+- **The client does not call `/api/llm/facts` yet.** J2 adds a guard function in `external-ai-guard.ts` (the only `callLlmApi` user), its confirmation (D13) and the grouping in `FollowUpQuestions`.
+- **The preview names Gemini.** `external-ai-guard.ts` labels the classification destination 「カテゴリの提案（Gemini（Google））」. **Before production switches to `jev`, the preview must name the provider actually used** (for example, the server tells the client its classify provider). This blocks the J3 switch.
+- The UI of §7 (percentage, candidate chips, `onPickCategory`).
+- `scripts/eval-classifier.mjs`, the datasets and the first calibration (J3).
+- **Check in J3 (review note):** the sum tolerance of ±0.02. If Jev rounds each of the 10 probabilities separately, the sum can drift by up to ±0.05, and valid answers would fall back to keywords. Record the observed sums in the evaluation and widen the tolerance (with a test) if needed.
+- **Daily cap (review note):** `/api/llm/facts` shares `LLM_DAILY_REQUEST_LIMIT` with reason and classify. When J2 calls it on every DT round, decide whether it needs its own cap.

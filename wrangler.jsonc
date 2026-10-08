@@ -1,5 +1,5 @@
 // Cloudflare Workers デプロイ設定（OpenNext。docs/decisions/ADR-009-cloudflare-workers-deployment.md）
-// シークレット（GEMINI_API_KEY, LLM_ACCESS_TOKEN）はここに書かず `npx wrangler secret put` で設定する。
+// シークレット（GEMINI_API_KEY, LLM_ACCESS_TOKEN, 分類を jev にする場合の TYPESAFE_API_KEY）はここに書かず `npx wrangler secret put` で設定する。
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "main": ".open-next/worker.js",

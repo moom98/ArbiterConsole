@@ -140,6 +140,10 @@ npm ci
 | `LLM_DAILY_EMBED_REQUEST_LIMIT`                                           | `1000`                     | 埋め込みの1日（UTC）の上限（推論・分類とは別。`0` は無制限）                                                                      |
 | `LLM_ALLOW_UNAUTHENTICATED`                                               | （なし）                   | `1` のときのみ、本番でトークン未設定でも AI ルートを有効にする（デプロイ先の認証で保護している場合のみ） |
 | `GEMINI_THINKING_BUDGET`                                                  | （なし）                   | 思考トークン数（予算方式のモデル向け。設定時はレベルより優先） |
+| `LLM_CLASSIFIER_PROVIDER`                                                | `gemini`                   | 分類のプロバイダー（`gemini` / `jev`。ADR-011）。`jev` への切り替えは日本語の評価（jev-classifier-design §9）に合格してから |
+| `TYPESAFE_API_KEY`                                                        | （なし）                   | TypeSafe Jev のキー（サーバー専用）。`LLM_CLASSIFIER_PROVIDER=jev` のときのみ必要。`/api/llm/facts` も jev のときのみ有効 |
+| `JEV_MODEL`                                                               | `jev-1.13.0`               | Jev のモデル（バージョン固定。変えた場合は評価をやり直す） |
+| `LLM_RATE_LIMIT_FACTS_PER_MINUTE`                                         | `10`                       | fact の記載判定（`/api/llm/facts`）のレート制限。1日の上限は推論・分類と共有 |
 | `TRUST_PROXY`                                                             | （なし）                   | `1` のときのみ `X-Forwarded-For` を IP として使う（信頼できるプロキシの背後のみ）                                                 |
 
 - キー未設定の場合、`/api/llm/*` は 503（`not-configured`）を返し、アプリは手動確認（CAへ確認）とキーワード分類で動作します。
@@ -186,6 +190,7 @@ npx wrangler login
 # 2. シークレットを設定（初回・変更時のみ。値は入力プロンプトで渡し、リポジトリには書かない）
 npx wrangler secret put GEMINI_API_KEY
 npx wrangler secret put LLM_ACCESS_TOKEN   # アービターに配布するトークン（設定画面の「AI設定」で入力）
+# （分類を Jev にする場合のみ。評価に合格してから）npx wrangler secret put TYPESAFE_API_KEY と LLM_CLASSIFIER_PROVIDER=jev
 
 # 3. ビルドしてデプロイ
 npm run cf:deploy

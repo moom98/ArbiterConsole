@@ -1,6 +1,6 @@
 # Current Progress
 
-**Last updated:** 2026-10-09 (PR #7 merged and deployed)
+**Last updated:** 2026-10-09 (J1c implemented on `feature/j1c-jev-port`, review MERGE; not merged or deployed)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
@@ -14,9 +14,11 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
 - the server re-check L5 and minimized shapes only (J1a-3, done; see `milestones/j1a-3-server-recheck.md`);
 - retrying and confirming the AI reference from the incident log detail (done, review MERGE; see `milestones/log-ai-retry.md`).
 
-**Next:** J1c (see Next steps). New work branches from `main`.
+**J1c (2026-10-09): done** on branch `feature/j1c-jev-port`, which is stacked on `docs/deploy-after-pr7` (PR #8, open). See `milestones/j1c-jev-port.md` and jev-classifier-design §14. It holds the classify port, the Jev client, the calibrated parser and `/api/llm/facts`. The default provider stays `gemini`, so deploying it changes nothing.
+- It is not pushed, has no PR yet and is not deployed. Pushing or opening a PR needs the user's go-ahead.
+
+**Next:** J2 (UI and the client call of `/api/llm/facts`), then J3 (evaluation, calibration, production switch). See Next steps.
 - After the first deploy, 「意味検索用データを作成」 rebuilds every vector once (key `+deid1`).
-- Then: J1c. (The AI-send retry from the incident log detail is done.)
 `docs/IMPLEMENTATION_STATUS.md` is a stale 2024 snapshot. Use this file and `docs/progress/milestones/` instead.
 
 ## Completed work
@@ -175,6 +177,14 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `scripts/check-cf-env.mjs` (`cf:build` env-file guard)
 
 ## Tests and verification performed
+
+**J1c (2026-10-09, `feature/j1c-jev-port`):**
+
+- tsc is clean.
+- eslint reports 0 problems.
+- 78 files / 1547 tests pass.
+- `next build` and `npm run cf:build` succeed.
+- Review: MERGE. The minor findings were fixed (deadline test, timeout and 408 tests, docs). Details are in `milestones/j1c-jev-port.md`.
 
 **Incident log AI retry (2026-10-09, `feature/fact-catalog`):**
 
@@ -443,10 +453,18 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
        - Quick report "タッチムーブ（触れた駒）" and the 7.5 `subtype` option 「触れた駒の規則（タッチムーブ）」 (not enumerated on unknown).
        - Catalogue: `tch.touched` and `tch.claimed-by-opponent` became conditional; new `tch.changed-after`.
      - J1b-7: `TimeControl` periods. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-7-time-control-periods.md`.
-   - J1c: the Jev port, adapter, calibrated parser and `/api/llm/facts`, with the default provider kept on `gemini`;
-     - The new `/api/llm/facts` route must use exact key sets and `recheckIncidentText(…, "facts")`, like the other routes (design §12).
-   - J2: UI;
-   - J3: Japanese evaluation, then the production switch by env.
+   - J1c: **done 2026-10-09** on `feature/j1c-jev-port`. See `milestones/j1c-jev-port.md` and jev-classifier-design §14.
+   - **J2 (next):**
+     - the UI of design §7 (percentage, candidate chips, `onPickCategory`);
+     - a guard function for `/api/llm/facts` in `external-ai-guard.ts`, with its confirmation (D13), and the grouping in `FollowUpQuestions` (fact-model §4.3);
+     - **the classification preview must name the provider actually used** (it says Gemini today);
+     - wire `deriveTimeControlFacts` and `assessRecordingObligation`;
+     - treat `game.record-state` as a non-blocking record fact;
+     - decide whether facts needs its own daily cap.
+   - J3:
+     - the Japanese evaluation (`scripts/eval-classifier.mjs`, datasets) and the first calibration in `lib/domain/llm/calibration/`;
+     - check the ±0.02 probability-sum tolerance against real responses;
+     - then switch production by env: `LLM_CLASSIFIER_PROVIDER=jev` and `wrangler secret put TYPESAFE_API_KEY`.
 4. Later, if the user wants:
    - **Milestone 8 without voice input:** clock guide, player Q&A mode, UX polish.
    - **Milestone 9:** Playwright E2E, performance.
@@ -456,7 +474,9 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 
 1. Read `CLAUDE.md`, this file, `docs/progress/milestones/*`, then the design docs and ADRs for the next task.
 2. The current work branch is `feature/fact-catalog` (pushed to `origin`, latest J1a-1 at `52d7ebb` or later; `main` has the deployed app). Check `git log --oneline -15` on it, and `git worktree list`.
-   - **Next task:** with the user's go-ahead, PR `feature/fact-catalog` to `main`, then deploy. (The incident-log AI retry is done: `milestones/log-ai-retry.md`.) Then J1c (Jev port, adapter, `/api/llm/facts`; also wire `deriveTimeControlFacts` and `assessRecordingObligation`, and treat `game.record-state` as a non-blocking record fact).
+   - PR #7 (`feature/fact-catalog`) is merged and deployed.
+   - J1c is on `feature/j1c-jev-port`. Worktree: `.claude/worktrees/j1c`.
+   - **Next task:** with the user's go-ahead, push and open a PR for `feature/j1c-jev-port` (after PR #8), then J2 (see Next steps).
    - The privacy package's reviews used independent reviewer agents that wrote their own synthetic sensitive phrases; keep doing that for any change to `lib/domain/privacy/` (the author's own fixtures say little).
    - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/<slice>-*.md` and update this file.
    - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (73 files / 1444 tests at J1a-3; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.

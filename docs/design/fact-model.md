@@ -1,6 +1,6 @@
 # Design: Fact Model — Required Facts from Decision Trees, Presence Check, Unknown Answers
 
-**Status:** Accepted. The user reviewed it twice on 2026-10-08 and approved implementing the catalogue. Being implemented in slices: J1b-1 (catalogue, `requiredFacts`) and J1b-2 (`unknown`, `resolveUnknown`, §3.3) are done. Decision record: [ADR-013](../decisions/ADR-013-fact-model.md).
+**Status:** Accepted. The user reviewed it twice on 2026-10-08 and approved implementing the catalogue. Being implemented in slices: J1b-1…J1b-8 are done. The presence check (§4, §5) has its server route `/api/llm/facts` and the domain parser `parseFactPresence` since J1c (2026-10-09, jev-classifier-design §14); the client call and grouping come in J2, the thresholds in J3. Decision record: [ADR-013](../decisions/ADR-013-fact-model.md).
 
 **Date:** 2026-10-08
 

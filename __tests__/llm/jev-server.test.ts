@@ -340,6 +340,8 @@ describe("jev-client (mocked fetch)", () => {
         status,
       });
       res.text = text;
+      res.json = text;
+      res.arrayBuffer = text;
       const error = await call(vi.fn(async () => res)).catch((e) => e);
       expect(error).toBeInstanceOf(UpstreamError);
       expect(error.status).toBe(status);
@@ -527,8 +529,13 @@ describe("classify handler – provider switch (ADR-011)", () => {
   it("jev: per-call deadline (3 s per attempt, 10 s total, 1 s minimum for a retry)", async () => {
     let t = 0;
     const timeouts: number[] = [];
+    const remainingAtStart: number[] = [];
+    let deadline = 0;
+    // 各試行は 4 秒かかって 503 で失敗する（時計は試行の中で進める）
     const failing: ClassifyIncidentFn = async ({ timeoutMs }) => {
       timeouts.push(timeoutMs);
+      remainingAtStart.push(deadline - t);
+      t += 4_000;
       throw new UpstreamError("status", 503);
     };
     const retry = fastRetry({
@@ -536,30 +543,75 @@ describe("classify handler – provider switch (ADR-011)", () => {
       totalDeadlineMs: 30_000,
       minRemainingForRetryMs: 3_000,
       now: () => t,
-      sleep: async () => {
-        t += 4_000;
+      // 実際の sleep と同じく、待つのは delay の分だけ
+      sleep: async (ms) => {
+        t += ms;
       },
     });
-    const run = async (env: Record<string, string>) => {
+    const run = async (env: Record<string, string>, total: number) => {
       t = 0;
+      deadline = total;
       timeouts.length = 0;
+      remainingAtStart.length = 0;
       const res = await classifyHandler(env, {
         retry,
         classifierFor: () => failing,
       }).handler(request({ narrative: NARRATIVE }));
       expect(res.status).toBe(503);
-      return [...timeouts];
+      return { timeouts: [...timeouts], remaining: [...remainingAtStart] };
     };
-    const jev = await run(JEV_ENV);
-    expect(jev[0]).toBe(JEV_ATTEMPT_TIMEOUT_MS);
-    expect(jev.every((ms) => ms <= JEV_ATTEMPT_TIMEOUT_MS)).toBe(true);
-    // 0 / 4 / 8 / 12 秒に試行し、10 秒の締め切りを過ぎた後は再試行しない
-    expect(jev).toHaveLength(4);
+    const jev = await run(JEV_ENV, 10_000);
+    // 0 / 4 / 8 秒に試行（残り 10 / 6 / 2 秒）。12 秒の時点では締め切りを過ぎているため再試行しない
+    expect(jev.timeouts).toEqual([
+      JEV_ATTEMPT_TIMEOUT_MS,
+      JEV_ATTEMPT_TIMEOUT_MS,
+      2_000,
+    ]);
+    expect(jev.remaining.every((ms) => ms >= 1_000)).toBe(true);
 
-    // gemini は従来どおり（1回 8 秒・全体 30 秒）
-    const gemini = await run({ GEMINI_API_KEY: GEMINI_KEY });
-    expect(gemini[0]).toBe(8_000);
-    expect(gemini.length).toBeGreaterThan(jev.length);
+    // gemini は従来どおり（1回 8 秒・全体 30 秒・残り 3 秒未満なら再試行しない）
+    const gemini = await run({ GEMINI_API_KEY: GEMINI_KEY }, 30_000);
+    expect(gemini.timeouts[0]).toBe(8_000);
+    expect(gemini.timeouts).toHaveLength(7);
+    expect(gemini.remaining.every((ms) => ms >= 3_000)).toBe(true);
+  });
+
+  it("jev: a hanging upstream is aborted per attempt → 504 upstream-timeout after the retries", async () => {
+    const signals: AbortSignal[] = [];
+    const hanging = vi.fn<typeof fetch>(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          const signal = init?.signal as AbortSignal;
+          signals.push(signal);
+          signal.addEventListener("abort", () =>
+            reject(Object.assign(new Error("aborted"), { name: "AbortError" }))
+          );
+        })
+    );
+    // 1回の試行は min(timeoutMs.classify, 3 秒)。テストでは 20 ms にする
+    const { handler } = classifyHandler(JEV_ENV, {
+      fetch: hanging,
+      timeoutMs: { reason: 20, classify: 20 },
+    });
+    const res = await handler(request({ narrative: NARRATIVE }));
+    expect(res.status).toBe(504);
+    expect((await errorOf(res)).code).toBe("upstream-timeout");
+    expect(hanging).toHaveBeenCalledTimes(3);
+    expect(signals.every((s) => s.aborted)).toBe(true);
+  });
+
+  it("jev: 408 is retried at handler level", async () => {
+    let n = 0;
+    const flaky = vi.fn<typeof fetch>(async () =>
+      ++n === 1
+        ? new Response("{}", { status: 408 })
+        : jsonResponse({ model: "jev-1.13.0", answers: jevClassifyAnswers() })
+    );
+    const res = await classifyHandler(JEV_ENV, { fetch: flaky }).handler(
+      request({ narrative: NARRATIVE })
+    );
+    expect(res.status).toBe(200);
+    expect(flaky).toHaveBeenCalledTimes(2);
   });
 
   it("logs codes only: never the narrative, the keys or upstream bodies", async () => {

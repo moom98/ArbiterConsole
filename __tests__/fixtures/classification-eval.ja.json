@@ -1,0 +1,1957 @@
+{
+  "id": "classification-eval-ja",
+  "version": "1",
+  "description": "Synthetic labelled Japanese incident reports for the incident classifier evaluation (jev-classifier-design §9). Written for evaluation only; never real tournament reports. fair-play is excluded (never sent to external AI).",
+  "items": [
+    {
+      "id": "im-01",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "3番盤 白が両手でキャスリングして時計を押した",
+      "note": "FIDE 7.5.1 両手"
+    },
+    {
+      "id": "im-02",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "スタンダード戦。黒がチェックを放置したまま指して時計を押した。白が時計を止めてアービターを呼び、黒の違法手を指摘した。この対局で黒の違法手は初めて",
+      "note": "FIDE 7.5.1"
+    },
+    {
+      "id": "im-03",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "白番、ポーンを最終段に進めたが駒を置き換えずに時計を押した",
+      "note": "FIDE 7.5.1 昇格"
+    },
+    {
+      "id": "im-04",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "手を指さずに時計を押した。黒が申告",
+      "note": "FIDE 7.5.1 時計のみ"
+    },
+    {
+      "id": "im-05",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "キングが動いた後のキャスリングを白が指した。相手が気付いて時計を止めた",
+      "note": "FIDE 3.8.2"
+    },
+    {
+      "id": "im-06",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "5番盤で黒が違法手。この対局で2回目",
+      "note": "FIDE 7.5.5 2回目"
+    },
+    {
+      "id": "im-07",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "ラピッドで黒が違法手をして時計を押した。白がクレーム",
+      "note": "Rapid A.4.2"
+    },
+    {
+      "id": "im-08",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "ブリッツ、白がキングをチェックのマスに動かして時計を押した。黒が申し立て",
+      "note": "Blitz B.4"
+    },
+    {
+      "id": "im-09",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "白の違法手を黒が指摘。何手前かは不明",
+      "note": "FIDE 7.5.1 局面の復元"
+    },
+    {
+      "id": "im-10",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "黒のビショップがルークのように動いて時計を押した",
+      "note": "FIDE 3.2"
+    },
+    {
+      "id": "im-11",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "アンパッサンを1手遅れで指した。相手が指摘して時計を止めた",
+      "note": "FIDE 3.7.3.2"
+    },
+    {
+      "id": "im-12",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "両手で駒を取って時計を押した。相手から申告あり",
+      "note": "FIDE 7.5.1 両手"
+    },
+    {
+      "id": "im-13",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "黒番 ナイトの違法な動き 白が時計を止めてアービターを呼んだ",
+      "note": "FIDE 7.5.1"
+    },
+    {
+      "id": "im-14",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "結果用紙に両者がサインした後、最終局面の前に違法手があったと申し出",
+      "note": "FIDE 7.5.1 終了後"
+    },
+    {
+      "id": "im-15",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "ポーンを最終段に進めたまま時計を押した。相手が指摘",
+      "note": "FIDE 7.5.1 昇格"
+    },
+    {
+      "id": "im-16",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "白が指した後、黒がキングを取った。ブリッツ",
+      "note": "Blitz B.4"
+    },
+    {
+      "id": "im-17",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "スタンダード戦 白が2回目の違法手。相手が申告",
+      "note": "FIDE 7.5.5"
+    },
+    {
+      "id": "im-18",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "違法なキャスリング。白のルークは前に一度動いていたと黒が主張し、白も認めた。記録用紙の手順でも確認できる",
+      "note": "FIDE 3.8.2"
+    },
+    {
+      "id": "im-19",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "白が昇格の駒を置かずに時計を押した。盤上にはポーンが残る",
+      "note": "FIDE 7.5.1 昇格"
+    },
+    {
+      "id": "im-20",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "黒が時計を押した後に手を指していないと白が申し立て",
+      "note": "FIDE 7.5.1 時計のみ"
+    },
+    {
+      "id": "im-21",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "7番盤 白のナイトがビショップのように斜めに動いた",
+      "note": "FIDE 3.4"
+    },
+    {
+      "id": "im-22",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "黒のキングがチェックされたまま他の駒を動かして時計を押した。白はすぐに時計を止めて申告。ラピッドで、黒の違法手は2回目",
+      "note": "FIDE 7.5.1"
+    },
+    {
+      "id": "im-23",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "ラピッド、黒の違法手に白が気付かないまま数手進んだ",
+      "note": "Rapid A.4.2"
+    },
+    {
+      "id": "im-24",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "ポーンが2マス進んだ。初期配置の位置ではなかった",
+      "note": "FIDE 3.7.2"
+    },
+    {
+      "id": "im-25",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "白が片手でキングを持ち、もう片方の手でルークを動かした",
+      "note": "FIDE 7.5.1 両手"
+    },
+    {
+      "id": "im-26",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "チェックを受けた状態でのキャスリングを黒が指した",
+      "note": "FIDE 3.8.2"
+    },
+    {
+      "id": "im-27",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "白が手を指さずに時計を押した。2回目の違法手になる",
+      "note": "FIDE 7.5.5"
+    },
+    {
+      "id": "im-28",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "違法手の後、黒がメイトを指したと白が主張",
+      "note": "FIDE 7.5.1 / 5.1.1"
+    },
+    {
+      "id": "im-29",
+      "category": "illegal-move",
+      "split": "tuning",
+      "text": "ブリッツで黒が違法手、白は指摘せずに次の手を指した",
+      "note": "Blitz B.4"
+    },
+    {
+      "id": "im-30",
+      "category": "illegal-move",
+      "split": "heldout",
+      "text": "昇格したポーンをキングに置き換えて時計を押した",
+      "note": "FIDE 3.7.3.3"
+    },
+    {
+      "id": "bp-01",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "初期配置でキングとクイーンの位置が逆だった",
+      "note": "FIDE 7.2"
+    },
+    {
+      "id": "bp-02",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "盤の向きが間違っていた。数手進んでいる",
+      "note": "FIDE 7.3"
+    },
+    {
+      "id": "bp-03",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "黒の駒が盤の外に落ちた。時計は動いたまま",
+      "note": "FIDE 7.4"
+    },
+    {
+      "id": "bp-04",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "白が駒を落とした後、時計を押した",
+      "note": "FIDE 7.4"
+    },
+    {
+      "id": "bp-05",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "白のナイトがマスからずれていた",
+      "note": "FIDE 4.2"
+    },
+    {
+      "id": "bp-06",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "4番盤 ナイトとビショップの初期配置が逆",
+      "note": "FIDE 7.2"
+    },
+    {
+      "id": "bp-07",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "駒のセットにクイーンが一つしかなく、昇格の駒がない",
+      "note": "FIDE 7.4 / 6.11.2 昇格の駒"
+    },
+    {
+      "id": "bp-08",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "盤上の駒が足りない。初期配置からルークがない",
+      "note": "FIDE 7.2"
+    },
+    {
+      "id": "bp-09",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "白が駒を倒した。白は自分の時計ではなく相手の時計を動かしたまま駒を直したと黒が主張。白は時計を押した後に直したと言う",
+      "note": "FIDE 7.4.1"
+    },
+    {
+      "id": "bp-10",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "黒が駒を落としたまま次の手を指した",
+      "note": "FIDE 7.4"
+    },
+    {
+      "id": "bp-11",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "盤の向きが90度違う。数手進んでから気付いた",
+      "note": "FIDE 2.1"
+    },
+    {
+      "id": "bp-12",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "駒が倒れたので時計を止めた",
+      "note": "FIDE 7.4"
+    },
+    {
+      "id": "bp-13",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "盤が一つ足りない。予備の盤を用意した",
+      "note": "大会の用具"
+    },
+    {
+      "id": "bp-14",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "初期配置で白と黒のクイーンの位置が逆になっていた",
+      "note": "FIDE 2.3"
+    },
+    {
+      "id": "bp-15",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "白のルークが2マスの間に置いてあり、位置が不明",
+      "note": "FIDE 7.4"
+    },
+    {
+      "id": "bp-16",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "対局中に盤上の駒の位置がずれていることに両者が気付いた",
+      "note": "FIDE 7.4"
+    },
+    {
+      "id": "bp-17",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "黒が手を指した時、盤上の駒が倒れた",
+      "note": "FIDE 7.4.1"
+    },
+    {
+      "id": "bp-18",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "白のポーンが一つ足りず、代わりの駒として黒のポーンが置いてある",
+      "note": "FIDE 7.2"
+    },
+    {
+      "id": "bp-19",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "対局の途中で、駒の位置が前の局面と違うと黒が申し出",
+      "note": "FIDE 7.4"
+    },
+    {
+      "id": "bp-20",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "初期配置の誤りが10手目で見つかった。白のナイトとビショップが逆に置いてあった。両者とも気付かずに対局を開始していた",
+      "note": "FIDE 7.2"
+    },
+    {
+      "id": "bp-21",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "盤上の駒が全てずれて、マスの位置が不明",
+      "note": "FIDE 7.4"
+    },
+    {
+      "id": "bp-22",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "盤上のキングの位置が逆",
+      "note": "FIDE 7.2"
+    },
+    {
+      "id": "bp-23",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "盤の外に落ちたポーンを相手が拾って置いた",
+      "note": "FIDE 7.4"
+    },
+    {
+      "id": "bp-24",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "駒が足りないので、代わりの駒を用意した",
+      "note": "FIDE 7.4"
+    },
+    {
+      "id": "bp-25",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "盤上の駒の位置が移動していて、前の局面が不明。両者の記録用紙の手順も一致しないので、局面を確認したい",
+      "note": "FIDE 7.4"
+    },
+    {
+      "id": "bp-26",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "白が駒を落とした。黒が時計を止めた",
+      "note": "FIDE 7.4.2"
+    },
+    {
+      "id": "bp-27",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "盤の向きが逆で、右の手前が黒のマスになっている",
+      "note": "FIDE 7.3"
+    },
+    {
+      "id": "bp-28",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "駒のセットのナイトが一つ足りない",
+      "note": "大会の用具"
+    },
+    {
+      "id": "bp-29",
+      "category": "board-piece",
+      "split": "tuning",
+      "text": "ルークとナイトの初期配置が逆のまま対局が始まった",
+      "note": "FIDE 7.2"
+    },
+    {
+      "id": "bp-30",
+      "category": "board-piece",
+      "split": "heldout",
+      "text": "駒が倒れて、どのマスにあったか両者の主張が食い違う",
+      "note": "FIDE 7.4"
+    },
+    {
+      "id": "ct-01",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "tuning",
+      "text": "3番盤 黒フラッグ。白はまだ駒が十分ある",
+      "note": "FIDE 6.9"
+    },
+    {
+      "id": "ct-02",
+      "category": "clock-time",
+      "subtype": "other",
+      "split": "heldout",
+      "text": "時計の電池が切れて表示が消えた",
+      "note": "FIDE 6.10"
+    },
+    {
+      "id": "ct-03",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "tuning",
+      "text": "白の時間切れ。黒のクレームあり",
+      "note": "FIDE 6.9"
+    },
+    {
+      "id": "ct-04",
+      "category": "clock-time",
+      "subtype": "other",
+      "split": "heldout",
+      "text": "時計の設定が間違っていて、加算がない",
+      "note": "FIDE 6.10.2"
+    },
+    {
+      "id": "ct-05",
+      "category": "clock-time",
+      "subtype": "other",
+      "split": "tuning",
+      "text": "黒が時計を押し忘れた。白は気付いているが何も言わない",
+      "note": "FIDE 6.2"
+    },
+    {
+      "id": "ct-06",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "heldout",
+      "text": "ラピッド、白のフラッグが落ちた。黒はキングだけ",
+      "note": "FIDE 6.9"
+    },
+    {
+      "id": "ct-07",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "tuning",
+      "text": "時計の表示が両方0:00",
+      "note": "FIDE 6.9 / 6.11"
+    },
+    {
+      "id": "ct-08",
+      "category": "clock-time",
+      "subtype": "other",
+      "split": "heldout",
+      "text": "時計が動かなくなった。故障",
+      "note": "FIDE 6.10"
+    },
+    {
+      "id": "ct-09",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "tuning",
+      "text": "ブリッツで黒が時間切れ。白は時計を止めてクレーム",
+      "note": "FIDE 6.9 / B"
+    },
+    {
+      "id": "ct-10",
+      "category": "clock-time",
+      "subtype": "other",
+      "split": "heldout",
+      "text": "白が時計を強く押して時計が止まった",
+      "note": "FIDE 6.2.4"
+    },
+    {
+      "id": "ct-11",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "tuning",
+      "text": "残り2分で黒のフラッグ",
+      "note": "FIDE 6.9"
+    },
+    {
+      "id": "ct-12",
+      "category": "clock-time",
+      "subtype": "other",
+      "split": "heldout",
+      "text": "相手が時計を押していないと白が申し出",
+      "note": "FIDE 6.2"
+    },
+    {
+      "id": "ct-13",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "tuning",
+      "text": "時間切れでフラッグ。白番の選手は残り10秒",
+      "note": "FIDE 6.9"
+    },
+    {
+      "id": "ct-14",
+      "category": "clock-time",
+      "subtype": "other",
+      "split": "heldout",
+      "text": "時計の時間がずれている。設定を確認したい",
+      "note": "FIDE 6.10.2"
+    },
+    {
+      "id": "ct-15",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "tuning",
+      "text": "黒のフラッグが落ちた後、白も時間切れになった。先に落ちたのは白か黒か両者とも確認していない。デジタル時計の表示は両方0:00",
+      "note": "FIDE 6.9 / 6.11"
+    },
+    {
+      "id": "ct-16",
+      "category": "clock-time",
+      "subtype": "other",
+      "split": "heldout",
+      "text": "時計の加算が30秒ではなく10秒で設定されていた。40手目の後に黒が気付いて時計を止めた。設定の間違いを直したい",
+      "note": "FIDE 6.10.2"
+    },
+    {
+      "id": "ct-17",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "tuning",
+      "text": "白が時計を止めて、黒の時間が0になったと主張",
+      "note": "FIDE 6.9"
+    },
+    {
+      "id": "ct-18",
+      "category": "clock-time",
+      "subtype": "other",
+      "split": "heldout",
+      "text": "予備の時計に交換したい。表示が消えた",
+      "note": "FIDE 6.10"
+    },
+    {
+      "id": "ct-19",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "tuning",
+      "text": "黒の時間が0になった。白はポーンが一つ",
+      "note": "FIDE 6.9"
+    },
+    {
+      "id": "ct-20",
+      "category": "clock-time",
+      "subtype": "other",
+      "split": "heldout",
+      "text": "相手の時計を押したまま手を離さない",
+      "note": "FIDE 6.2"
+    },
+    {
+      "id": "ct-21",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "tuning",
+      "text": "5番盤 白 時間切れ。最終局面はキングとナイト",
+      "note": "FIDE 6.9"
+    },
+    {
+      "id": "ct-22",
+      "category": "clock-time",
+      "subtype": "other",
+      "split": "heldout",
+      "text": "時計の秒読みが作動しない",
+      "note": "FIDE 6.10"
+    },
+    {
+      "id": "ct-23",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "tuning",
+      "text": "ラピッド。白のフラッグに黒が気付かず、そのまま両者が指し続けた。アービターが時計の表示を確認した",
+      "note": "Rapid A.5"
+    },
+    {
+      "id": "ct-24",
+      "category": "clock-time",
+      "subtype": "other",
+      "split": "heldout",
+      "text": "時計の時間を直したいと両者から申し出",
+      "note": "FIDE 6.10.2"
+    },
+    {
+      "id": "ct-25",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "tuning",
+      "text": "黒のフラッグを白がクレーム。白も残り1秒",
+      "note": "FIDE 6.9"
+    },
+    {
+      "id": "ct-26",
+      "category": "clock-time",
+      "subtype": "other",
+      "split": "heldout",
+      "text": "時計のボタンが押しても反応しない",
+      "note": "FIDE 6.10"
+    },
+    {
+      "id": "ct-27",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "tuning",
+      "text": "ブリッツ、白の時計が0。黒は時計を止めた",
+      "note": "FIDE 6.9"
+    },
+    {
+      "id": "ct-28",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "heldout",
+      "text": "白がドローを提案した直後に白のフラッグが落ちた。黒は時計を止めた",
+      "note": "FIDE 6.9 / 9.1.2 提案中の時間切れ"
+    },
+    {
+      "id": "ct-29",
+      "category": "clock-time",
+      "subtype": "flag-fall",
+      "split": "tuning",
+      "text": "白が時計を押した直後に黒の時計が0",
+      "note": "FIDE 6.9"
+    },
+    {
+      "id": "ct-30",
+      "category": "clock-time",
+      "subtype": "other",
+      "split": "heldout",
+      "text": "時計の表示が白と黒で逆になっている",
+      "note": "FIDE 6.10.2"
+    },
+    {
+      "id": "gr-01",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "結果用紙の結果が両者で食い違う。白は勝ちと記入し、黒は引き分けと記入した。対局の最後の局面は両者とも盤上に残っている",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-02",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "結果用紙に白の勝ちと書いたが、黒は引き分けと主張",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-03",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "結果を逆に記入して両者がサインした",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-04",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "投了したかどうかで両者の主張が違う",
+      "note": "FIDE 5.1.2"
+    },
+    {
+      "id": "gr-05",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "黒が投了した後、白が結果用紙に記入していない",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-06",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "結果の記入が間違っていたと後から申し出があった",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-07",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "白はチェックメイトと主張、黒はメイトではないと言う",
+      "note": "FIDE 5.1.1"
+    },
+    {
+      "id": "gr-08",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "2番盤 結果用紙の勝者が逆",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-09",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "両者がサインしていない結果用紙が提出された",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-10",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "対局が終わった後で黒が投了ではなかったと言っている",
+      "note": "FIDE 5.1.2"
+    },
+    {
+      "id": "gr-11",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "結果用紙の結果と盤上の局面が一致しない",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-12",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "白がキングを倒して投了。黒は結果用紙に記入した",
+      "note": "FIDE 5.1.2"
+    },
+    {
+      "id": "gr-13",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "結果を記入した後、黒が結果を取り消したいと申し出。結果用紙には両者がサインしていて、すでに提出されている",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-14",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "両者とも自分の勝ちを主張している。白は黒が投了したと言って、黒は白が時間切れと言う",
+      "note": "FIDE 5"
+    },
+    {
+      "id": "gr-15",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "結果用紙のサイン漏れ。結果は白の勝ち",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-16",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "投了の後で、白が結果に同意しないと言った",
+      "note": "FIDE 5.1.2"
+    },
+    {
+      "id": "gr-17",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "結果の記入が逆だったことに順位の確認で気付いた",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-18",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "黒が投了と言ったか、白に確認できない",
+      "note": "FIDE 5.1.2"
+    },
+    {
+      "id": "gr-19",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "結果用紙が提出されていない対局がある",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-20",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "結果用紙の記入の後で、白が引き分けを勝ちに直した",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-21",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "結果用紙の記入が引き分けだが、両者とも勝ちを主張",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-22",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "投了したと言われたが、黒は投了していないと主張",
+      "note": "FIDE 5.1.2"
+    },
+    {
+      "id": "gr-23",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "黒の結果用紙のサインがない。白の勝ちと記入済み",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-24",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "白がメイトと言って時計を止めたが、メイトではなかった",
+      "note": "FIDE 5.1.1"
+    },
+    {
+      "id": "gr-25",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "対局の結果を両者が違う内容で申告した",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-26",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "結果用紙の結果を書き間違いしたまま両者がサイン済み",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-27",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "黒の投了の後、白が結果用紙にサインしていない",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-28",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "結果を記入した結果用紙に、間違いがあったと白が申し出",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "gr-29",
+      "category": "game-result",
+      "split": "tuning",
+      "text": "盤上はチェックメイトだが、結果用紙は引き分けになっている",
+      "note": "FIDE 5.1.1 / 8.7"
+    },
+    {
+      "id": "gr-30",
+      "category": "game-result",
+      "split": "heldout",
+      "text": "対局が終わった後に結果用紙を見ると、黒の勝ちと記入されていた",
+      "note": "FIDE 8.7"
+    },
+    {
+      "id": "dr-01",
+      "category": "draw",
+      "subtype": "threefold-repetition-claim",
+      "split": "tuning",
+      "text": "白が三回同一局面でドローをクレーム。白は次の手を記録用紙に書いて時計を止めた。黒はクレームに同意していない",
+      "note": "FIDE 9.2"
+    },
+    {
+      "id": "dr-02",
+      "category": "draw",
+      "subtype": "fifty-move-claim",
+      "split": "heldout",
+      "text": "50手ルールでドローのクレーム。黒が主張",
+      "note": "FIDE 9.3"
+    },
+    {
+      "id": "dr-03",
+      "category": "draw",
+      "subtype": "fivefold-repetition",
+      "split": "tuning",
+      "text": "同一局面が5回目になった。両者とも何も言わない",
+      "note": "FIDE 9.6.1"
+    },
+    {
+      "id": "dr-04",
+      "category": "draw",
+      "subtype": "75-move-rule",
+      "split": "heldout",
+      "text": "75手の間、ポーンも動かず駒も取っていない",
+      "note": "FIDE 9.6.2"
+    },
+    {
+      "id": "dr-05",
+      "category": "draw",
+      "subtype": "agreement",
+      "split": "tuning",
+      "text": "両者がドローに合意して結果用紙にサインした",
+      "note": "FIDE 9.1.2"
+    },
+    {
+      "id": "dr-06",
+      "category": "draw",
+      "subtype": "stalemate",
+      "split": "heldout",
+      "text": "黒のキングはチェックではないが、黒に合法な手が一つもない",
+      "note": "FIDE 5.2.1"
+    },
+    {
+      "id": "dr-07",
+      "category": "draw",
+      "subtype": "dead-position",
+      "split": "tuning",
+      "text": "白はキングだけ、黒はキングとビショップ",
+      "note": "FIDE 5.2.2"
+    },
+    {
+      "id": "dr-08",
+      "category": "draw",
+      "subtype": "threefold-repetition-claim",
+      "split": "heldout",
+      "text": "白がドローをクレーム。同一局面になると主張して手を書いた",
+      "note": "FIDE 9.2.1.1"
+    },
+    {
+      "id": "dr-09",
+      "category": "draw",
+      "subtype": "fifty-move-claim",
+      "split": "tuning",
+      "text": "黒が50手ルールでクレームしたが、記録用紙の手数が足りない。白の記録用紙も確認したい",
+      "note": "FIDE 9.3"
+    },
+    {
+      "id": "dr-10",
+      "category": "draw",
+      "subtype": "agreement",
+      "split": "heldout",
+      "text": "白がドローを提案したが、時計を押さずに次の手を指していない",
+      "note": "FIDE 9.1.2"
+    },
+    {
+      "id": "dr-11",
+      "category": "draw",
+      "subtype": "stalemate",
+      "split": "tuning",
+      "text": "ステイルメイトかどうかで両者の主張が違う",
+      "note": "FIDE 5.2.1"
+    },
+    {
+      "id": "dr-12",
+      "category": "draw",
+      "subtype": "dead-position",
+      "split": "heldout",
+      "text": "黒のナイト以外は両者ともキングだけになった",
+      "note": "FIDE 5.2.2"
+    },
+    {
+      "id": "dr-13",
+      "category": "draw",
+      "subtype": "threefold-repetition-claim",
+      "split": "tuning",
+      "text": "三回同一局面のクレーム。黒はまだ手を指していない",
+      "note": "FIDE 9.2"
+    },
+    {
+      "id": "dr-14",
+      "category": "draw",
+      "subtype": "75-move-rule",
+      "split": "heldout",
+      "text": "75手ルールの局面になったが、両者が指し続けた",
+      "note": "FIDE 9.6.2"
+    },
+    {
+      "id": "dr-15",
+      "category": "draw",
+      "subtype": "agreement",
+      "split": "tuning",
+      "text": "相手の手番中にドローのオファーをした",
+      "note": "FIDE 9.1.2.2"
+    },
+    {
+      "id": "dr-16",
+      "category": "draw",
+      "subtype": "fifty-move-claim",
+      "split": "heldout",
+      "text": "50手ルールのクレーム。白は残り2分",
+      "note": "FIDE 9.3"
+    },
+    {
+      "id": "dr-17",
+      "category": "draw",
+      "subtype": "fivefold-repetition",
+      "split": "tuning",
+      "text": "同一局面が5回目になったことにアービターが気付いた。両者ともクレームしていない。対局はまだ続いている",
+      "note": "FIDE 9.6.1"
+    },
+    {
+      "id": "dr-18",
+      "category": "draw",
+      "subtype": "stalemate",
+      "split": "heldout",
+      "text": "黒の手の後、白に合法な手がない",
+      "note": "FIDE 5.2.1"
+    },
+    {
+      "id": "dr-19",
+      "category": "draw",
+      "subtype": "dead-position",
+      "split": "tuning",
+      "text": "白はキングだけ、黒はキングとナイト。メイトできない局面と白が主張",
+      "note": "FIDE 5.2.2"
+    },
+    {
+      "id": "dr-20",
+      "category": "draw",
+      "subtype": "threefold-repetition-claim",
+      "split": "heldout",
+      "text": "白が同一局面のクレームをしたが、局面が一致しない",
+      "note": "FIDE 9.2"
+    },
+    {
+      "id": "dr-21",
+      "category": "draw",
+      "subtype": "agreement",
+      "split": "tuning",
+      "text": "ドローの提案を受けたかどうかで両者の主張が違う",
+      "note": "FIDE 9.1.2"
+    },
+    {
+      "id": "dr-22",
+      "category": "draw",
+      "subtype": "other",
+      "split": "heldout",
+      "text": "クイックプレイ・フィニッシュで白がドローをクレーム",
+      "note": "Guidelines III"
+    },
+    {
+      "id": "dr-23",
+      "category": "draw",
+      "subtype": "75-move-rule",
+      "split": "tuning",
+      "text": "75手ルールの局面。黒が時計を止めた",
+      "note": "FIDE 9.6.2"
+    },
+    {
+      "id": "dr-24",
+      "category": "draw",
+      "subtype": "agreement",
+      "split": "heldout",
+      "text": "黒がドローを提案、白は何も言わずに次の手を指した",
+      "note": "FIDE 9.1.2.3"
+    },
+    {
+      "id": "dr-25",
+      "category": "draw",
+      "subtype": "fifty-move-claim",
+      "split": "tuning",
+      "text": "白の50手ルールのクレームに、黒は同意しない",
+      "note": "FIDE 9.3"
+    },
+    {
+      "id": "dr-26",
+      "category": "draw",
+      "subtype": "stalemate",
+      "split": "heldout",
+      "text": "ブリッツでステイルメイト。白が時計を止めた",
+      "note": "FIDE 5.2.1"
+    },
+    {
+      "id": "dr-27",
+      "category": "draw",
+      "subtype": "fivefold-repetition",
+      "split": "tuning",
+      "text": "同一局面が5回になった後も両者が指し続けた",
+      "note": "FIDE 9.6.1"
+    },
+    {
+      "id": "dr-28",
+      "category": "draw",
+      "subtype": "dead-position",
+      "split": "heldout",
+      "text": "黒はキングだけ、白はキングと二つのナイト。白が時間を使っている",
+      "note": "FIDE 5.2.2"
+    },
+    {
+      "id": "dr-29",
+      "category": "draw",
+      "subtype": "other",
+      "split": "tuning",
+      "text": "ドローのクレームで、どの規則のクレームか白が言わない",
+      "note": "FIDE 9.2 / 9.3 クレームの根拠が不明"
+    },
+    {
+      "id": "dr-30",
+      "category": "draw",
+      "subtype": "threefold-repetition-claim",
+      "split": "heldout",
+      "text": "三回同一局面と黒が主張、白はキャスリングできる状態が違うと言う",
+      "note": "FIDE 9.2.3"
+    },
+    {
+      "id": "ss-01",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "黒が棋譜を記入していない。残り10分以上ある",
+      "note": "FIDE 8.1 / 8.4"
+    },
+    {
+      "id": "ss-02",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "白が指す前に手を記録用紙に書いた",
+      "note": "FIDE 8.1.2"
+    },
+    {
+      "id": "ss-03",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "黒の記録用紙の記入が5手遅れている。黒の残り時間は30分以上ある。白が指摘した",
+      "note": "FIDE 8.1"
+    },
+    {
+      "id": "ss-04",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "黒の記録用紙が読めない",
+      "note": "FIDE 8.1"
+    },
+    {
+      "id": "ss-05",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "棋譜の手順が両者で一致しない",
+      "note": "FIDE 8.5"
+    },
+    {
+      "id": "ss-06",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "白の記録用紙の記入に誤りが三つ以上ある",
+      "note": "FIDE 8.1"
+    },
+    {
+      "id": "ss-07",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "残り5分未満なので記録をつけていないと白が言う",
+      "note": "FIDE 8.4"
+    },
+    {
+      "id": "ss-08",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "黒が相手の記録用紙を見たいと申し出",
+      "note": "FIDE 8.3 / 8.5"
+    },
+    {
+      "id": "ss-09",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "記録用紙に何手か書いていない。秒読みではない",
+      "note": "FIDE 8.4"
+    },
+    {
+      "id": "ss-10",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "白が記録用紙に手を記入する前に時計を押した",
+      "note": "FIDE 8.1"
+    },
+    {
+      "id": "ss-11",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "棋譜の表記がSANではない",
+      "note": "FIDE C"
+    },
+    {
+      "id": "ss-12",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "白は記入が追いつかないまま指し続けた",
+      "note": "FIDE 8.4"
+    },
+    {
+      "id": "ss-13",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "黒が記録用紙を提出せずに帰った",
+      "note": "FIDE 8.3"
+    },
+    {
+      "id": "ss-14",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "記録用紙の手数が足りない。どこで抜けたか不明",
+      "note": "FIDE 8.5"
+    },
+    {
+      "id": "ss-15",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "記録用紙に手以外の記号を書いている",
+      "note": "FIDE 8.1"
+    },
+    {
+      "id": "ss-16",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "白が記録用紙の手を書き直した",
+      "note": "FIDE 8.1"
+    },
+    {
+      "id": "ss-17",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "棋譜をつけずに時計だけ押している",
+      "note": "FIDE 8.1"
+    },
+    {
+      "id": "ss-18",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "記録用紙の手順と盤上の局面が一致しない。白と黒の記録用紙も途中から手順が違う。どの手で間違いがあったか不明",
+      "note": "FIDE 8.5"
+    },
+    {
+      "id": "ss-19",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "黒の記録用紙が途中から白の手だけになっている",
+      "note": "FIDE 8.1"
+    },
+    {
+      "id": "ss-20",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "白の記録用紙がない。どこにあるか不明",
+      "note": "FIDE 8.3"
+    },
+    {
+      "id": "ss-21",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "記録用紙の記入が両者とも途中で止まっている",
+      "note": "FIDE 8.5"
+    },
+    {
+      "id": "ss-22",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "相手の記録用紙を借りて書き直したいと黒が申し出",
+      "note": "FIDE 8.4"
+    },
+    {
+      "id": "ss-23",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "記録用紙の手の書き間違いに白が気付いた",
+      "note": "FIDE 8.1"
+    },
+    {
+      "id": "ss-24",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "黒が記録用紙に指す前に手を書いて、後で直した",
+      "note": "FIDE 8.1.2"
+    },
+    {
+      "id": "ss-25",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "黒の記入が10手以上遅れていると白が指摘。黒の残り時間は5分以上ある。ラピッドではなくスタンダード",
+      "note": "FIDE 8.1"
+    },
+    {
+      "id": "ss-26",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "白の記録用紙の記入が読めないと黒が言う",
+      "note": "FIDE 8.1"
+    },
+    {
+      "id": "ss-27",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "秒読みに入ったので白は記録をつけていない",
+      "note": "FIDE 8.4"
+    },
+    {
+      "id": "ss-28",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "記録用紙が一つしかなく、両者で使っている",
+      "note": "FIDE 8.1"
+    },
+    {
+      "id": "ss-29",
+      "category": "scoresheet",
+      "split": "tuning",
+      "text": "黒が記録用紙に何も書いていない",
+      "note": "FIDE 8.1"
+    },
+    {
+      "id": "ss-30",
+      "category": "scoresheet",
+      "split": "heldout",
+      "text": "記録用紙の記入の遅れを相手の時間で追いつきたいと白",
+      "note": "FIDE 8.4"
+    },
+    {
+      "id": "pb-01",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "対局中に黒の電話が鳴った。黒はすぐに電源を切ったが、白が申告した",
+      "note": "FIDE 11.3.2.1"
+    },
+    {
+      "id": "pb-02",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "白が対局中に相手に話しかけた。黒が静粛を求めたが、白はその後も相手の手番に話しかけた",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-03",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "白が対局中に音を鳴らして、黒が静粛を求めた",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-04",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "白番の選手の話す声が騒音になっている",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-05",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "黒の電話が二度鳴った",
+      "note": "FIDE 11.3.2.1"
+    },
+    {
+      "id": "pb-06",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "対局中に白が隣の盤を見ている",
+      "note": "FIDE 11.2"
+    },
+    {
+      "id": "pb-07",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "白が手を指した後、毎回時計を強く押す。黒が注意を求めた",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-08",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "相手の手番に黒が二度話しかけた",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-09",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "スマホの電源を切っていなかったが鳴ってはいない",
+      "note": "FIDE 11.3.2"
+    },
+    {
+      "id": "pb-10",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "対局が終わった選手が会場で話していて騒音になっている",
+      "note": "FIDE 11.2"
+    },
+    {
+      "id": "pb-11",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "白が相手の手番に話しかけて、静粛を求められた",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-12",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "黒が終了した対局を他の盤の隣で話している",
+      "note": "FIDE 11.2"
+    },
+    {
+      "id": "pb-13",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "8番盤 白の電話が鳴った。ラピッド",
+      "note": "FIDE 11.3.2.1 / A"
+    },
+    {
+      "id": "pb-14",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "対局が終了した選手が、対局中の盤の隣で話している",
+      "note": "FIDE 11.2"
+    },
+    {
+      "id": "pb-15",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "黒が相手の手番に駒で音を鳴らしている",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-16",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "白が対局中に時計の前で手を動かして、黒が集中できないと申し出",
+      "note": "FIDE 11.2.3"
+    },
+    {
+      "id": "pb-17",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "黒が警告の後も話しかけた",
+      "note": "FIDE 12.9"
+    },
+    {
+      "id": "pb-18",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "白番の選手の電話が鳴った。スタンダード",
+      "note": "FIDE 11.3.2.1"
+    },
+    {
+      "id": "pb-19",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "相手の手番に白がドローの提案を繰り返す",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-20",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "黒が時計を強く押して駒が動いた",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-21",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "白に退場を求めたが、白は席に戻った",
+      "note": "FIDE 12.9"
+    },
+    {
+      "id": "pb-22",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "対局中の白と黒が話している。両者とも注意を受けた",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-23",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "黒が盤上の駒で音を鳴らしている",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-24",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "白の電話が鳴った。ブリッツ",
+      "note": "FIDE 11.3.2.1 / B"
+    },
+    {
+      "id": "pb-25",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "白が相手に三度、投了を求めた",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-26",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "騒音で集中できないと黒から申し出。隣の盤の対局が終了した後、その盤の前で話している",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-27",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "対局中に白が別の盤の選手と話した",
+      "note": "FIDE 11.3"
+    },
+    {
+      "id": "pb-28",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "黒が手を指した後、相手の前で手を動かしている",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-29",
+      "category": "player-behavior",
+      "split": "tuning",
+      "text": "相手の時間に白が相手の後ろで盤を見ている",
+      "note": "FIDE 11.5"
+    },
+    {
+      "id": "pb-30",
+      "category": "player-behavior",
+      "split": "heldout",
+      "text": "電話が鳴ったと相手が申告。黒は自分ではないと主張",
+      "note": "FIDE 11.3.2.1"
+    },
+    {
+      "id": "tm-01",
+      "category": "team",
+      "split": "tuning",
+      "text": "団体戦で提出されたボード順を間違えていた。2番と3番が逆",
+      "note": "団体戦規定 ボード順"
+    },
+    {
+      "id": "tm-02",
+      "category": "team",
+      "split": "heldout",
+      "text": "団体戦で、登録していない選手が出場した",
+      "note": "団体戦規定 登録"
+    },
+    {
+      "id": "tm-03",
+      "category": "team",
+      "split": "tuning",
+      "text": "ボード順が登録と違う。登録の順位と盤の順が一致しない",
+      "note": "団体戦規定 ボード順"
+    },
+    {
+      "id": "tm-04",
+      "category": "team",
+      "split": "heldout",
+      "text": "団体戦の交代の登録が開始の後だった。交代した選手はすでに対局を開始していて、相手の組が申し出",
+      "note": "団体戦規定 交代"
+    },
+    {
+      "id": "tm-05",
+      "category": "team",
+      "split": "tuning",
+      "text": "団体戦の白番と黒番が、1番の盤から逆になっている",
+      "note": "団体戦規定 先後"
+    },
+    {
+      "id": "tm-06",
+      "category": "team",
+      "split": "heldout",
+      "text": "団体戦の組の選手が規定の数に足りない",
+      "note": "団体戦規定 不足"
+    },
+    {
+      "id": "tm-07",
+      "category": "team",
+      "split": "tuning",
+      "text": "団体戦の得点が両方の組で違う。各盤の結果は一致しているが、組の得点の記入が違う",
+      "note": "団体戦規定 得点"
+    },
+    {
+      "id": "tm-08",
+      "category": "team",
+      "split": "heldout",
+      "text": "団体戦の順位の決定方法が大会規定にない",
+      "note": "団体戦規定 順位"
+    },
+    {
+      "id": "tm-09",
+      "category": "team",
+      "split": "tuning",
+      "text": "団体戦で、ボード順の提出が開始に遅れた",
+      "note": "団体戦規定 ボード順"
+    },
+    {
+      "id": "tm-10",
+      "category": "team",
+      "split": "heldout",
+      "text": "団体戦の交代で、登録の順ではない選手が出場した",
+      "note": "団体戦規定 交代"
+    },
+    {
+      "id": "tm-11",
+      "category": "team",
+      "split": "tuning",
+      "text": "団体戦の結果用紙に、組の得点の記入がない",
+      "note": "団体戦規定 結果"
+    },
+    {
+      "id": "tm-12",
+      "category": "team",
+      "split": "heldout",
+      "text": "団体戦で、1番の盤の選手が2番の盤で対局していた",
+      "note": "団体戦規定 ボード順"
+    },
+    {
+      "id": "tm-13",
+      "category": "team",
+      "split": "tuning",
+      "text": "団体戦の組の得点が同じ場合の順位の決定方法を確認したい",
+      "note": "団体戦規定 順位"
+    },
+    {
+      "id": "tm-14",
+      "category": "team",
+      "split": "heldout",
+      "text": "団体戦の組が一つ不戦。組の得点の扱いを確認したい",
+      "note": "団体戦規定 不戦"
+    },
+    {
+      "id": "tm-15",
+      "category": "team",
+      "split": "tuning",
+      "text": "団体戦で、交代した選手の結果の記録がない",
+      "note": "団体戦規定 結果"
+    },
+    {
+      "id": "tm-16",
+      "category": "team",
+      "split": "heldout",
+      "text": "団体戦で選手が登録の順ではない盤に入っている",
+      "note": "団体戦規定 ボード順"
+    },
+    {
+      "id": "tm-17",
+      "category": "team",
+      "split": "tuning",
+      "text": "団体戦の登録で、同じ選手が二つの組に入っている",
+      "note": "団体戦規定 登録"
+    },
+    {
+      "id": "tm-18",
+      "category": "team",
+      "split": "heldout",
+      "text": "団体戦の各盤の白番と黒番が規定と違う",
+      "note": "団体戦規定 先後"
+    },
+    {
+      "id": "tm-19",
+      "category": "team",
+      "split": "tuning",
+      "text": "団体戦のボード順の提出の後に、選手の順を直したいと申し出",
+      "note": "団体戦規定 ボード順"
+    },
+    {
+      "id": "tm-20",
+      "category": "team",
+      "split": "heldout",
+      "text": "団体戦の結果で、両方の組の申告が一致しない",
+      "note": "団体戦規定 結果"
+    },
+    {
+      "id": "tm-21",
+      "category": "team",
+      "split": "tuning",
+      "text": "団体戦で、4番の盤の選手が来ない。交代の選手を出場させたい",
+      "note": "団体戦規定 交代"
+    },
+    {
+      "id": "tm-22",
+      "category": "team",
+      "split": "heldout",
+      "text": "ボード順の提出がない組の扱いを確認したい。登録の順でよいか",
+      "note": "団体戦規定 ボード順"
+    },
+    {
+      "id": "tm-23",
+      "category": "team",
+      "split": "tuning",
+      "text": "団体戦の組の得点で、不戦勝の扱いが規定と違う",
+      "note": "団体戦規定 得点"
+    },
+    {
+      "id": "tm-24",
+      "category": "team",
+      "split": "heldout",
+      "text": "団体戦の交代の選手が、登録にない",
+      "note": "団体戦規定 交代"
+    },
+    {
+      "id": "tm-25",
+      "category": "team",
+      "split": "tuning",
+      "text": "団体戦の順位の決定は組の得点か、各盤の得点か確認したい。大会規定に記載がない",
+      "note": "団体戦規定 順位"
+    },
+    {
+      "id": "tm-26",
+      "category": "team",
+      "split": "heldout",
+      "text": "団体戦で、ボード順の1番と4番の選手の盤が逆",
+      "note": "団体戦規定 ボード順"
+    },
+    {
+      "id": "tm-27",
+      "category": "team",
+      "split": "tuning",
+      "text": "団体戦の各盤の結果の記入が、組の結果と一致しない",
+      "note": "団体戦規定 結果"
+    },
+    {
+      "id": "tm-28",
+      "category": "team",
+      "split": "heldout",
+      "text": "団体戦で、一つの盤が不戦。組の結果の扱いを確認したい",
+      "note": "団体戦規定 不戦"
+    },
+    {
+      "id": "tm-29",
+      "category": "team",
+      "split": "tuning",
+      "text": "団体戦の組の登録の選手が規定より少ない",
+      "note": "団体戦規定 登録"
+    },
+    {
+      "id": "tm-30",
+      "category": "team",
+      "split": "heldout",
+      "text": "団体戦で、組の先後の決定方法を確認したい",
+      "note": "団体戦規定 先後"
+    },
+    {
+      "id": "ta-01",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "白が遅刻。対局開始から20分経過。黒の時計は開始していて、白の時計も動いている。不戦の時間の規定を確認したい",
+      "note": "FIDE 6.7"
+    },
+    {
+      "id": "ta-02",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "黒が来ない。不戦勝の扱いを確認したい",
+      "note": "FIDE 6.7.1"
+    },
+    {
+      "id": "ta-03",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "ペアリングの間違いで、同じ相手と2回目の対局になった。両者とも対局を開始していて、数手進んでいる",
+      "note": "大会規定 ペアリング"
+    },
+    {
+      "id": "ta-04",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "前回の結果が間違って登録されていて、今回のペアリングが違う",
+      "note": "大会規定 ペアリング"
+    },
+    {
+      "id": "ta-05",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "選手が棄権を申し出。次回から出場しない",
+      "note": "大会規定 棄権"
+    },
+    {
+      "id": "ta-06",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "白番と黒番が逆のペアリング",
+      "note": "大会規定 ペアリング"
+    },
+    {
+      "id": "ta-07",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "遅刻した選手が開始の後に会場に到着",
+      "note": "FIDE 6.7"
+    },
+    {
+      "id": "ta-08",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "バイの選手の得点が登録されていない",
+      "note": "大会規定 バイ"
+    },
+    {
+      "id": "ta-09",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "両者とも遅刻している。時計は開始した",
+      "note": "FIDE 6.7"
+    },
+    {
+      "id": "ta-10",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "ペアリングの後に前回の結果が直された",
+      "note": "大会規定 ペアリング"
+    },
+    {
+      "id": "ta-11",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "欠席の連絡があった選手のペアリング",
+      "note": "大会規定 ペアリング"
+    },
+    {
+      "id": "ta-12",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "順位の得点に間違いがある",
+      "note": "大会規定 順位"
+    },
+    {
+      "id": "ta-13",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "黒が遅刻。黒の時計は開始から動いていたか確認したい",
+      "note": "FIDE 6.7"
+    },
+    {
+      "id": "ta-14",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "不戦敗の選手が到着して、対局したいと言っている。相手はすでに帰った。大会規定の遅刻の時間を確認したい",
+      "note": "FIDE 6.7.1"
+    },
+    {
+      "id": "ta-15",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "登録していない選手がペアリングに入っている",
+      "note": "大会規定 登録"
+    },
+    {
+      "id": "ta-16",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "前回、不戦の選手が今回も来ない",
+      "note": "大会規定 不戦"
+    },
+    {
+      "id": "ta-17",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "ペアリングで同じ選手が二つの盤に入っている",
+      "note": "大会規定 ペアリング"
+    },
+    {
+      "id": "ta-18",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "白が違う盤で対局を開始していた",
+      "note": "大会規定"
+    },
+    {
+      "id": "ta-19",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "棄権した選手の得点の扱いを確認したい",
+      "note": "大会規定 棄権"
+    },
+    {
+      "id": "ta-20",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "白が遅刻で不戦敗になったが、ペアリングが遅れたと主張",
+      "note": "FIDE 6.7 / 大会規定"
+    },
+    {
+      "id": "ta-21",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "同じ選手のバイが2回目になっている",
+      "note": "大会規定 バイ"
+    },
+    {
+      "id": "ta-22",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "会場の照明の故障で、全ての対局を中断",
+      "note": "大会規定 中断"
+    },
+    {
+      "id": "ta-23",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "ペアリングに異議。前回の結果が違う",
+      "note": "大会規定 ペアリング"
+    },
+    {
+      "id": "ta-24",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "遅刻した黒の時計を誰が開始したか不明",
+      "note": "FIDE 6.7"
+    },
+    {
+      "id": "ta-25",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "対局の開始が遅れたので、次回の開始も遅れるか確認したい",
+      "note": "大会規定"
+    },
+    {
+      "id": "ta-26",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "欠席した選手の不戦勝の扱いが規定にない",
+      "note": "大会規定 不戦"
+    },
+    {
+      "id": "ta-27",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "選手の出場の登録が二つある",
+      "note": "大会規定 登録"
+    },
+    {
+      "id": "ta-28",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "10番盤 両者とも来ない。開始から時間が経過",
+      "note": "FIDE 6.7 / 大会規定"
+    },
+    {
+      "id": "ta-29",
+      "category": "tournament-admin",
+      "split": "tuning",
+      "text": "順位が同じ選手の決定方法を確認したい",
+      "note": "大会規定 タイブレーク"
+    },
+    {
+      "id": "ta-30",
+      "category": "tournament-admin",
+      "split": "heldout",
+      "text": "遅刻の規定は大会で違う。今回は何分か確認したい",
+      "note": "FIDE 6.7.1"
+    }
+  ]
+}

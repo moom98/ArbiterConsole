@@ -1,6 +1,6 @@
 # Current Progress
 
-**Last updated:** 2026-10-09 (J2 merged via PR #10; J2-3 review fixes in a follow-up PR; not deployed)
+**Last updated:** 2026-10-09 (J2 and the J2-3 review fixes merged via PRs #10/#11; J3-1 evaluation tooling on `feature/fact-catalog`; not deployed)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
@@ -23,7 +23,14 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
 - J2-3: **DT-011** (FIDE 8.4 recording obligation for scoresheet "記入していない／遅れている" in Standard), `game.record-state` as record-only, and facts keeping the shared daily cap.
 - **Merged via PR #10** (`1fc8f5b`). The J2-3 review (FIX FIRST: "遅れている" ignored FIDE 8.1.3) is fixed in a follow-up PR from `feature/fact-catalog`. The user asked to deploy after merging; deploy once the follow-up is merged.
 
-**Next:** J3 (evaluation, calibration, production switch). See Next steps.
+- **Merged via PR #10** and **PR #11** (`466ae58`, the J2-3 review fixes). Not deployed yet: the user asked to deploy after merging, and deploying needs the user's `wrangler login` (not available in a cloud session).
+
+**J3-1 (2026-10-09): done** on `feature/fact-catalog` (restarted from `main` at `466ae58`). See `milestones/j3-1-eval-tooling.md` and jev-classifier-design §18.
+- It adds the evaluation tooling, which runs without keys: `scripts/eval-classifier.mjs` (check / run / fit), the pure fitting in `lib/domain/llm/calibration/fit.ts`, the runner in `lib/application/classifier-evaluation.ts`, 180 synthetic classification reports and a presence seed set.
+- App behaviour is unchanged.
+- Pushed, no PR yet.
+
+**Next:** J3-2 (presence dataset) and J3-3 (the user runs the evaluation with real keys; then the calibration is registered and production switched). See Next steps.
 - After the first deploy, 「意味検索用データを作成」 rebuilds every vector once (key `+deid1`).
 `docs/IMPLEMENTATION_STATUS.md` is a stale 2024 snapshot. Use this file and `docs/progress/milestones/` instead.
 
@@ -183,6 +190,15 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
   - `scripts/check-cf-env.mjs` (`cf:build` env-file guard)
 
 ## Tests and verification performed
+
+**J3-1 (2026-10-09, `feature/fact-catalog`):**
+
+- tsc is clean.
+- eslint (`app components lib __tests__ scripts`) reports 0 problems.
+- 85 files / 1671 tests pass.
+- `npm run build` succeeds.
+- `node scripts/eval-classifier.mjs check` reports no errors and no held-back reports.
+- There were no live calls (no keys).
 
 **J1c (2026-10-09, `feature/j1c-jev-port`):**
 
@@ -406,6 +422,10 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
     - J1b-4: `lib/domain/services/mate-possibility.ts`, `lib/infrastructure/chess/helpmate/` (ADR-015).
   - The key must never go into `.env*` (`cf:deploy` refuses to run). Keep it in `~/.config/arbiter-console/typesafe.key` for J0 and J3.
 
+- **Sensitive Gate vs core classification wording (J3-1, design §18.3).**
+  - チーム / キャプテン and 「席を離れて会場の外に出た」 are always held back at gate-raw. スマートウォッチ and 「黒が駒に触れた」 are held back at gate-redacted.
+  - So captain incidents, leaving the playing area and plain touch-move notes never reach AI classification (keywords only), and the evaluation cannot measure them.
+  - Ask the user whether these words may be sent once de-identified (a change to the J1a gate, D12/D13), or whether keyword-only is acceptable for them.
 - Whether the user's federation applies 1 or 2 minutes for Blitz B.2 (adequate supervision).
 - **Custom domain:** whether to use one, or the default `*.workers.dev` URL.
 
@@ -467,10 +487,16 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
      - wire `deriveTimeControlFacts` and `assessRecordingObligation`;
      - treat `game.record-state` as a non-blocking record fact;
      - decide whether facts needs its own daily cap.
-   - **J3 (next):**
-     - the Japanese evaluation (`scripts/eval-classifier.mjs`, datasets) and the first calibration in `lib/domain/llm/calibration/`;
-     - check the ±0.02 probability-sum tolerance against real responses;
-     - then switch production by env: `LLM_CLASSIFIER_PROVIDER=jev` and `wrangler secret put TYPESAFE_API_KEY`.
+   - **J3:**
+     - **J3-1: done 2026-10-09** (`milestones/j3-1-eval-tooling.md`): evaluation script, datasets, fitting, acceptance gate.
+     - **J3-2 (next, no key needed):** the presence dataset `__tests__/fixtures/presence-eval.ja.json`.
+       - At least 250 explicit reports per blocking fact (160 for the others), and as many inferred / near-miss / absent ones.
+       - Split about 80 % tuning / 20 % held-out. Blocking facts first.
+       - Every report must pass the guard (`node scripts/eval-classifier.mjs check`).
+     - **J3-3 (user's machine, real keys):** follow "How to run J3-3" in the J3-1 milestone.
+       - Then check the ±0.02 probability-sum tolerance in the report;
+       - register the calibration JSON in `JEV_CALIBRATIONS` with an equality test, only if the gate passes;
+       - switch production by env: `LLM_CLASSIFIER_PROVIDER=jev` and `wrangler secret put TYPESAFE_API_KEY` (ask first).
 4. Later, if the user wants:
    - **Milestone 8 without voice input:** clock guide, player Q&A mode, UX polish.
    - **Milestone 9:** Playwright E2E, performance.
@@ -483,10 +509,11 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
    - PR #7 (`feature/fact-catalog`) is merged and deployed.
    - J1c is on `feature/j1c-jev-port`. Worktree: `.claude/worktrees/j1c`.
    - PR #8, #9 and #10 (J2) are merged. The J2-3 review fixes are in a follow-up PR from `feature/fact-catalog`.
-   - **Next task:** J3 (see Next steps). Before that, the user may want a PR for J2 and a deploy (ask first).
+   - **Next task:** J3-2, then J3-3 (see Next steps). Deploying `main` (PRs #10/#11) needs the user's `wrangler login`; ask first.
+   - The evaluation script needs `npm ci` (esbuild is a devDependency). It writes into `docs/progress/eval/` and `lib/domain/llm/calibration/`.
    - The privacy package's reviews used independent reviewer agents that wrote their own synthetic sensitive phrases; keep doing that for any change to `lib/domain/privacy/` (the author's own fixtures say little).
    - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/<slice>-*.md` and update this file.
-   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (83 files / 1634 tests after the J2-3 review fixes; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
+   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (85 files / 1671 tests after J3-1; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
    - The project tsconfig has no `target` (tsc treats it as ES5): avoid regex-literal flags such as `/u` or `/s` and `matchAll`; use `new RegExp(source, flags)` and `exec` loops, as `lib/domain/privacy/` does.
    - In a nested worktree, run eslint as `npx eslint --no-eslintrc -c .eslintrc.json --ext .ts,.tsx app components lib __tests__`.
 3. Do not edit `docs/requirements/product-requirements.md` for implementation convenience.

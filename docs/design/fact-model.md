@@ -478,6 +478,7 @@ interface JevCalibration {
 - at least **250** reports that state the fact explicitly (blocking facts) or **160** (others);
 - at least as many reports that do **not** state it. These must include reports where the fact could only be inferred, and reports that state a near-miss, for example "clock pressed by the opponent" against `im.clock-pressed`.
 - Facts are added to the dataset in priority order (blocking first). A fact without data stays "always missing".
+- **Split and size (J3-1):** step 2 applies the precision target **and** the Wilson bound to held-out too, so each split needs ~190 (blocking) / ~125 (other) clean present predictions: about **400 / 260 explicit reports per fact** in total, more than the 250 / 160 above. Open question for the user (which number to keep). See jev-classifier-design §18.2.
 
 **Category thresholds** (`medium` and `prefill`) are unchanged. They use accuracy, because a wrong category is corrected by the arbiter at the first screen: they tune on the tuning set and confirm on the held-out set.
 

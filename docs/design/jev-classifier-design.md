@@ -1,6 +1,6 @@
 # Design: TypeSafe AI Jev for Incident Classification
 
-**Status:** Direction accepted (user answers Q1–Q3, Q5 and the catalogue reviews, 2026-10-08). J0, J1a and J1b are done. **J1c (server port, Jev client, calibrated parser, `/api/llm/facts`) is implemented (2026-10-09, §14).** J2 (UI) and J3 (evaluation, production switch) are next. The default provider is still `gemini`. Decision record: [ADR-011](../decisions/ADR-011-jev-for-incident-classification.md).
+**Status:** Direction accepted (user answers Q1–Q3, Q5 and the catalogue reviews, 2026-10-08). J0, J1a and J1b are done. **J1c (server port, Jev client, calibrated parser, `/api/llm/facts`) is implemented (2026-10-09, §14).** J2 (UI) is done (§15–§17). **J3-1 (evaluation tooling and datasets) is done (§18)**; J3-2 (presence data) and J3-3 (run with keys, register the calibration, switch production) are next. The default provider is still `gemini`. Decision record: [ADR-011](../decisions/ADR-011-jev-for-incident-classification.md).
 
 **Date:** 2026-10-08
 
@@ -485,3 +485,53 @@ The default stays `gemini`. With the default environment, the classify route, it
 - **`game.record-state`** is a record-only fact (`RequiredFact.recordOnly`, fact-model §3.9).
 - **Daily cap:** facts keeps the shared cap (§14.3).
 - Scoresheet issue codes are now reportable subtypes, so a non-DT scoresheet incident sends its issue code (not "unknown") with the AI reasoning request; the server validates with the same function.
+
+## 18. J3-1 (2026-10-09): evaluation tooling and datasets
+
+J3 is split because this container has no TypeSafe or Gemini key (the keys live only on the user's machine and in Cloudflare secrets):
+
+- **J3-1 (done):** everything that runs without a key: the datasets, the fitting and acceptance logic, and the script;
+- **J3-2:** the presence dataset (≥ 250 explicit reports per blocking fact, ≥ 160 for the others);
+- **J3-3 (user's machine, with keys):** run the evaluation, review the report, register the calibration, then switch production.
+
+### 18.1 Files
+
+| File | Layer | Content |
+| --- | --- | --- |
+| `lib/domain/llm/calibration/fit.ts` | domain (pure) | Wilson lower bound, threshold choice (lowest observed `p` meeting the target, checked at every candidate because precision is not monotone), tuning → held-out confirmation, observations from raw records, summaries (accuracy, top-2, per category, reliability, latency, probability sums), `fitCategory`, `fitPresence`, `buildJevCalibration`, `evaluateAcceptance`. Used only by the script. |
+| `lib/application/classifier-evaluation.ts` | application | Dataset types and validation, `deidentifyEvalText` (the production `protectIncidentText`, no category selected), runners with injected ports (`EvalClassifyFn`, `EvalPresenceFn`). No network. |
+| `scripts/eval/eval-classifier.ts` | script | `check`, `run`, `fit`. Wires the production `jevClassifyIncident` / `geminiClassifyIncident` / `createJevEvaluate` and the presence question builder. |
+| `scripts/eval-classifier.mjs` | script | Bundles the TS entry with esbuild (tsconfig `paths`, packages external) into `node_modules/.cache/arbiter-eval/` and runs it with real `fetch`, the key reader and the privacy check. |
+| `__tests__/fixtures/classification-eval.ja.json` | data | 180 synthetic reports, 20 per category (9 categories, no fair-play), 10 tuning + 10 held-out each. Clock-time and draw cases carry the subtype. Six registered synthetic player names exercise the name replacement. |
+| `__tests__/fixtures/presence-eval.ja.json` | data | Seed only (22 reports for `im.clock-pressed`, kinds explicit / inferred / near-miss / absent). Too small for any threshold; it measures the question wording. |
+
+### 18.2 Decisions
+
+- **Everything goes through the production guard.** The runner sends exactly what production would send (`protectIncidentText`, route `classify` or `facts`). A report the guard holds back is recorded as `notSent` and is not sent. Every committed report passes the guard (a test checks this).
+- **Results files hold no report text**: case id, label, split, model, the provider output reduced to the fields the parser uses (`minimizeRaw` drops Gemini's free-text `missingInformation` / `followUpQuestions`), attempts, latency. They go to `docs/progress/eval/results/`; the report to `docs/progress/eval/classifier-eval-<model>.md`.
+- **Invalid output counts as wrong.** An answer that `parseLlmClassification` rejects would fall back to keywords in production, so it is a miss in the accuracy. The probability sum is recorded **before** validation, so the ±0.02 tolerance (§14.3) can be checked; the report says to widen it if any sum falls outside.
+- **Category thresholds:** the lowest `p` on tuning where the predictions with `p ≥ T` reach accuracy 0.90 (`medium`) / 0.80 (`prefill`) with at least 20 of them; held-out must reach the same accuracy with at least 10. If either is not confirmed, **no calibration is built** (the gate item `calibration` fails).
+- **Subtype threshold:** precision 0.90 among cases whose category was right and whose label has a subtype (min. 10 tuning / 5 held-out). Optional: if not confirmed, the subtype stays hidden.
+- **`needsTournamentRules` is not calibrated**: the dataset has no label for it, so it comes from the domain rule only.
+- **Presence:** the target follows the strictest usage of the fact (blocking if any usage is blocking). **Both tuning and held-out** need the precision target **and** the Wilson lower bound (0.98 / 0.97), as fact-model §5.2 step 2 says ("the same targets"). A missing or failed answer is `p = 0` (missing), so it can never create a false "present". Consequence: each split needs ~190 (blocking) / ~125 (other) clean "present" predictions, so a blocking fact needs **about 400 explicit reports**, not the 250 in fact-model §5.2. Relaxing the held-out bound would weaken a user decision (Q-F2), so it is **not** done; the dataset size is an open question for the user (current.md). The evaluation asks only the case's own fact per request; production asks all required facts of the round in one request (accepted: the questions are independent `noul` questions).
+- **Acceptance items (§9.3):** accuracy vs Gemini (−2 points), per category ≥ 80 %, calibration built, p95 < 1 s, and a single resolved model in all responses. Without a Gemini run, the comparison is "not evaluated" and the gate fails. Presence is not a gate: a fact without a threshold stays "missing", which is safe.
+- **Same timeouts and retries as production.** Jev: 3 s per attempt, 10 s overall (`JEV_ATTEMPT_TIMEOUT_MS`, `jevRetry`); Gemini: 8 s per attempt (`CLASSIFY_ATTEMPT_TIMEOUT_MS`), `DEFAULT_RETRY`. An answer slower than production allows is a miss, as it would be in production. A transport failure that survives the retries is recorded as `errorKind: "transport"` and fails the gate item `transport` (rerun), so a burst of 429s cannot count as misclassification.
+- **The gate also fails when a category is missing or has fewer than 5 evaluated held-out reports** (for example when the guard holds them back), and the report shows the held-back count per category. The runner also applies the server's fair-play check (`mentionsFairPlay`), so the eval never sends what the server would reject.
+- **`fit` refuses mixed inputs**: each file's kind and provider, exactly one Jev model, the presence model equal to the classification model, the same dataset id and version for Gemini and Jev, and a model name that is safe as a file name.
+- **Privacy check first (§9.4):** `run` runs `vitest run __tests__/privacy` (the fixture sets, no API calls) and sends nothing if it fails.
+- **The script writes `lib/domain/llm/calibration/<model>.json` only when the gate passes, and does not register it.** On FAIL the report lists the thresholds for reference but no file is written. Registering it in `JEV_CALIBRATIONS` (with a test that compares the TS entry with the JSON) is a reviewed step in J3-3, and only after the gate passes.
+
+### 18.3 Usefulness finding
+
+When the dataset was written, about 60–75 % of the first drafts were held back by the Sensitive Gate, mostly at stage E (`gate-redacted`: vocabulary not on the known-vocabulary list). The committed reports were reworded until they passed, so **the dataset is biased toward the gate's vocabulary**. The held-back rate on natural arbiter wording is larger than the 10.4 % measured in J1a-1 for short reports. This does not affect safety. It does mean that in production more reports will be classified by keywords than the evaluation suggests. Track it in J3-3, with real wording collected from the user (never sent), and widen the known vocabulary (J1a D12) if needed.
+
+Checked directly (2026-10-09), these core reports are **never sent**:
+
+| Report | Stage |
+| --- | --- |
+| 団体戦でキャプテンが第2ボードの選手に助言した | gate-raw (チーム / キャプテン are third-party words) |
+| Aチームの選手が別のボードで対局していた | gate-raw |
+| 白が対局中に席を離れて会場の外に出た | gate-raw |
+| 黒がスマートウォッチを着けていた | gate-redacted (unknown vocabulary) |
+
+So in production, **captain incidents (team) and leaving the playing area (player-behavior) always use the keyword classifier**, and the dataset cannot measure Jev on them. The team cases in the dataset all use 団体戦 / ボード順 / 交代, which makes the team category easier than real reports. This is a question for the user (whether チーム / キャプテン may be sent once de-identified), not something to change in J3. It is recorded in `docs/progress/current.md` → Unresolved questions.

@@ -17,7 +17,8 @@ import {
  * J3: 分類の評価データセット（jev-classifier-design §9.1）の検証。
  *
  * - 合成の報告だけ（実際の大会の報告は使わない）。不正（fair-play）は外部 AI へ送らないため含めない
- * - カテゴリごとに 30 件（tuning 15・heldout 15）。subtype は clock-time と draw だけ
+ * - カテゴリごとに 45 件。v2: v1 の 30 件はすべて tuning（01〜30）、held-out は v2 で
+ *   新しく独立に書いた 15 件（31〜45）。subtype は clock-time と draw だけ
  * - すべての報告が protectIncidentText を通る（評価が Jev に実際に届く本文を測るため）
  */
 
@@ -31,7 +32,9 @@ interface EvalItem {
 }
 
 const items: EvalItem[] = dataset.items;
-const PER_CATEGORY = 30;
+const PER_CATEGORY = 45;
+const TUNING_PER_CATEGORY = 30;
+const HELDOUT_PER_CATEGORY = 15;
 const SUBTYPED: readonly IncidentCategory[] = ["clock-time", "draw"];
 const EVALUATED = INCIDENT_CATEGORIES.filter((c) => c !== "fair-play");
 
@@ -44,7 +47,7 @@ const byCategory = (category: IncidentCategory) =>
 describe("classification evaluation dataset (jev-classifier-design §9.1)", () => {
   it("has the expected shape and unique ids", () => {
     expect(dataset.id).toBe("classification-eval-ja");
-    expect(typeof dataset.version).toBe("string");
+    expect(dataset.version).toBe("2");
     expect(dataset.description).toMatch(/synthetic/i);
     const ids = new Set<string>();
     for (const item of items) {
@@ -66,11 +69,29 @@ describe("classification evaluation dataset (jev-classifier-design §9.1)", () =
     }
   });
 
-  it.each(EVALUATED)("%s: 30 items, 15 tuning and 15 held-out", (category) => {
+  it.each(EVALUATED)("%s: 45 items, 30 tuning and 15 held-out", (category) => {
     const list = byCategory(category);
     expect(list).toHaveLength(PER_CATEGORY);
-    expect(list.filter((i) => i.split === "tuning")).toHaveLength(15);
-    expect(list.filter((i) => i.split === "heldout")).toHaveLength(15);
+    expect(list.filter((i) => i.split === "tuning")).toHaveLength(
+      TUNING_PER_CATEGORY
+    );
+    expect(list.filter((i) => i.split === "heldout")).toHaveLength(
+      HELDOUT_PER_CATEGORY
+    );
+    // 1 つのカテゴリの id は同じ接頭辞
+    expect(new Set(list.map((i) => i.id.slice(0, 2))).size).toBe(1);
+  });
+
+  // v2: v1 の項目（01〜30）はすべて tuning、held-out は v2 で追加した 31〜45 だけ
+  it("uses the v1 items as tuning and only the new v2 items as held-out", () => {
+    for (const item of items) {
+      const n = Number(item.id.slice(3));
+      expect(item.split, item.id).toBe(
+        n <= TUNING_PER_CATEGORY ? "tuning" : "heldout"
+      );
+      expect(n, item.id).toBeGreaterThanOrEqual(1);
+      expect(n, item.id).toBeLessThanOrEqual(PER_CATEGORY);
+    }
   });
 
   it("has a subtype exactly on clock-time and draw items, and it is known", () => {
@@ -96,6 +117,20 @@ describe("classification evaluation dataset (jev-classifier-design §9.1)", () =
     // draw はすべての subtype を 2 件以上
     for (const subtype of Object.keys(DRAW_SUBTYPE_LABELS))
       expect(count("draw", subtype), subtype).toBeGreaterThanOrEqual(2);
+  });
+
+  it("covers every clock-time and draw subtype in the held-out split", () => {
+    const count = (category: IncidentCategory, subtype: string) =>
+      byCategory(category).filter(
+        (i) => i.split === "heldout" && i.subtype === subtype
+      ).length;
+    // flag-fall と other はおよそ半々（15 件のうち各 6 件以上）
+    for (const subtype of Object.keys(CLOCK_TIME_SUBTYPE_LABELS))
+      expect(count("clock-time", subtype), subtype).toBeGreaterThanOrEqual(6);
+    // draw はすべての subtype を 1 件以上、other は 1 件まで
+    for (const subtype of Object.keys(DRAW_SUBTYPE_LABELS))
+      expect(count("draw", subtype), subtype).toBeGreaterThanOrEqual(1);
+    expect(count("draw", "other")).toBeLessThanOrEqual(1);
   });
 
   // 評価は Jev に実際に届く本文で行う（§9.1: Every report goes through external-ai-guard）。

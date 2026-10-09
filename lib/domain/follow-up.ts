@@ -706,12 +706,12 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
   recordingOnlyLastMoves: {
     id: "recordingOnlyLastMoves",
     scope: "incident",
-    label: "記録していないのは、直前の手だけですか？",
-    help: "相手の手を記録する前に指し返すことはできますが、次の手を指す前に自分の前の手を記録しなければなりません（8.1.3）。",
+    label: "記録していないのは、双方の最新の手だけですか？",
+    help: "相手の手を記録する前に指し返すことはできますが、次の手を指す前に自分の前の手を記録しなければなりません（8.1.3）。そのため、双方の最新の手（1手分の遅れ）が未記入なのは、どちらの手番でも違反ではありません。",
     options: [
       {
         value: "true",
-        label: "直前の手だけ（自分の最後の手と、それに対する相手の手）",
+        label: "双方の最新の手だけ（1手分の遅れ。どちらの手番でも）",
       },
       { value: "false", label: "それより前の手も記録していない" },
       RECORDING_UNKNOWN,

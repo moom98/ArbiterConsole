@@ -74,7 +74,7 @@
 ## Tests and verification
 
 - `npx tsc --noEmit` is clean and `npm run lint` is clean.
-- `npx vitest run`: 83 files / 1616 tests at `c2661c0`, and 1631 after the J2-3 review fixes. New files:
+- `npx vitest run`: 83 files / 1616 tests at `c2661c0`, and 1634 after the J2-3 review fixes. New files:
   - `__tests__/llm/providers.test.ts`;
   - `__tests__/llm/fact-presence.test.ts`;
   - `__tests__/facts/presence-ordering.test.ts`;
@@ -104,6 +104,10 @@
     - added tests: Blitz, 29/30 s, all periods under 30 s, delay plus 30 s, out-of-range period, stored incident without issue, the 8.1.3 cases.
   - New verbatim citations `FIDE_8_1_3`, `FIDE_8_5_1`, `FIDE_8_5_2` (Arbiters' Manual 2025, pp. 29–30), checked against the PDF.
   - Docs: ADR-014 §7 amendment wording, fact-model §3.6 and §3.9.
+  - **Re-review: FIX FIRST**, for one wording problem. The option still read "my last move and the opponent's reply", but 8.1.3 allows a one-move lag in either order. It now reads 「双方の最新の手だけ（1手分の遅れ。どちらの手番でも）」.
+  - The period and increment questions are now asked only when the clock was, or may have been, below 5:00. This needed a second round, or a condition on 「5分を下回ったか」.
+  - The 8.5.1 / 8.5.2 action texts now follow the rules more closely.
+  - New visibility-chain tests (36 DT-011 tests).
 
 ## Known issues
 

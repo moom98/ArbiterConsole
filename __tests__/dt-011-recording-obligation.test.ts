@@ -5,7 +5,11 @@ import {
   type RecordingObligationTreeInput,
 } from "@/lib/domain/decision-trees/dt-011-recording-obligation";
 import { DecisionEngine } from "@/lib/domain/decision-engine";
-import { applyIncidentAnswers } from "@/lib/domain/follow-up";
+import {
+  QUESTIONS,
+  applyIncidentAnswers,
+  isQuestionVisible,
+} from "@/lib/domain/follow-up";
 import {
   assessRecordingObligation,
   recordingIncrement,
@@ -73,26 +77,81 @@ describe("DT-011 questions", () => {
     ]);
   });
 
-  it("mixed periods: asks the period with options built from the time control", () => {
-    const r = run({ facts: {}, timeControl: MIXED });
-    expect(ids(r)).toEqual([
+  it("mixed periods: the clock first; the period only when below five is possible", () => {
+    expect(ids(run({ facts: {}, timeControl: MIXED }))).toEqual([
       "recordingBelowFiveNow",
       "recordingBelowFiveInPeriod",
-      "recordingPeriod",
     ]);
+    const r = run({ facts: { belowFiveNow: true }, timeControl: MIXED });
+    expect(ids(r)).toEqual(["recordingPeriod"]);
     if (r.status !== "needs-input") throw new Error("expected");
-    expect(r.questions[2].options.map((o) => o.label)).toEqual([
+    expect(r.questions[0].options.map((o) => o.label)).toEqual([
       "第1ピリオド（1〜40手目・加算0秒）",
       "第2ピリオド（41手目以降・加算30秒）",
       "わからない・確認できない",
     ]);
   });
 
-  it("no or incomplete time control: asks the increment", () => {
-    expect(ids(run({ facts: {} }))).toContain("recordingIncrement");
-    expect(ids(run({ facts: {}, timeControl: INCOMPLETE }))).toContain(
+  it("no or incomplete time control: asks the increment after the clock", () => {
+    expect(ids(run({ facts: {} }))).not.toContain("recordingIncrement");
+    expect(ids(run({ facts: { belowFiveNow: true } }))).toEqual([
+      "recordingIncrement",
+    ]);
+    expect(
+      ids(run({ facts: { belowFiveNow: true }, timeControl: INCOMPLETE }))
+    ).toEqual(["recordingIncrement"]);
+  });
+
+  it("5:00 or more now: the increment shows only if the clock went below five earlier", () => {
+    const r = run({ facts: { belowFiveNow: false } });
+    expect(ids(r)).toEqual([
+      "recordingBelowFiveInPeriod",
+      "recordingIncrement",
+    ]);
+    if (r.status !== "needs-input") throw new Error("expected");
+    const round = r.questions;
+    const visible = (answers: Record<string, string>) =>
+      round
+        .filter((q) => isQuestionVisible(q, answers, round))
+        .map((q) => q.id);
+    expect(visible({ recordingBelowFiveInPeriod: "false" })).toEqual([
+      "recordingBelowFiveInPeriod",
+    ]);
+    expect(visible({ recordingBelowFiveInPeriod: "true" })).toContain(
       "recordingIncrement"
     );
+  });
+
+  it("behind: 'both latest moves only' hides the whole time chain", () => {
+    const r = run({ issue: "behind", facts: {}, timeControl: SINGLE_0 });
+    if (r.status !== "needs-input") throw new Error("expected");
+    const round = r.questions;
+    const visible = (answers: Record<string, string>) =>
+      round
+        .filter((q) => isQuestionVisible(q, answers, round))
+        .map((q) => q.id);
+    expect(
+      visible({
+        recordingOnlyLastMoves: "true",
+        recordingBelowFiveNow: "false",
+      })
+    ).toEqual(["recordingOnlyLastMoves"]);
+    expect(
+      visible({
+        recordingOnlyLastMoves: "false",
+        recordingBelowFiveNow: "false",
+      })
+    ).toEqual([
+      "recordingOnlyLastMoves",
+      "recordingBelowFiveNow",
+      "recordingBelowFiveInPeriod",
+    ]);
+  });
+
+  it("8.1.3 option covers a one-move lag in either order", () => {
+    const label = QUESTIONS.recordingOnlyLastMoves.options[0].label;
+    expect(label).toMatch(/双方の最新の手/);
+    expect(label).toMatch(/どちらの手番でも/);
   });
 });
 

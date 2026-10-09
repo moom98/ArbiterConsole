@@ -486,7 +486,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
    - **Next task:** J3 (see Next steps). Before that, the user may want a PR for J2 and a deploy (ask first).
    - The privacy package's reviews used independent reviewer agents that wrote their own synthetic sensitive phrases; keep doing that for any change to `lib/domain/privacy/` (the author's own fixtures say little).
    - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/<slice>-*.md` and update this file.
-   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (83 files / 1631 tests after the J2-3 review fixes; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
+   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (83 files / 1634 tests after the J2-3 review fixes; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
    - The project tsconfig has no `target` (tsc treats it as ES5): avoid regex-literal flags such as `/u` or `/s` and `matchAll`; use `new RegExp(source, flags)` and `exec` loops, as `lib/domain/privacy/` does.
    - In a nested worktree, run eslint as `npx eslint --no-eslintrc -c .eslintrc.json --ext .ts,.tsx app components lib __tests__`.
 3. Do not edit `docs/requirements/product-requirements.md` for implementation convenience.

@@ -6,11 +6,13 @@ export const LLM_API_PATHS = {
   reason: "/api/llm/reason",
   classify: "/api/llm/classify",
   embed: "/api/llm/embed",
+  /** 報告文に fact が明示されているか（Jev のみ。fact-model.md §4） */
+  facts: "/api/llm/facts",
 } as const;
 
 export type LlmApiKind = keyof typeof LLM_API_PATHS;
-/** JSON を生成するルート（埋め込み以外） */
-export type LlmGenerateKind = Exclude<LlmApiKind, "embed">;
+/** JSON を返す分類・推論のルート（埋め込み・fact の判定以外） */
+export type LlmGenerateKind = Exclude<LlmApiKind, "embed" | "facts">;
 
 /**
  * 意味検索の埋め込みモデル（ADR-010）。サーバーとクライアントで共有する固定値。
@@ -52,6 +54,8 @@ export const LLM_LIMITS = {
   maxReasonDescriptionChars: 1_000,
   /** classify の narrative（外部AIガードで最小化した記述。external-ai-data-protection.md §5.3） */
   maxClassifyNarrativeChars: 500,
+  /** /api/llm/facts の1回あたりの fact の数（1回の Jev リクエストで並列に判定する） */
+  maxFactIds: 32,
   maxArticles: 8,
   maxArticleContentChars: 4_000,
   maxArticleTitleChars: 300,
@@ -93,7 +97,7 @@ export type LlmApiErrorCode =
   | "unauthorized"
   /** サーバーに API キーが設定されていない */
   | "not-configured"
-  /** 上流（Gemini）のタイムアウト */
+  /** 上流（Gemini / Jev）のタイムアウト */
   | "upstream-timeout"
   /** 上流が混雑・一時的に利用不可 */
   | "upstream-unavailable"

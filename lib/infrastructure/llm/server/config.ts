@@ -1,3 +1,5 @@
+import type { ClassifierProvider } from "@/lib/domain/llm/types";
+
 /**
  * サーバー専用の LLM 設定（環境変数）。ADR-007。
  * API キー・アクセストークンはサーバーの環境変数のみに置き、クライアントへは返さない。
@@ -9,6 +11,17 @@
 export const DEFAULT_REASONING_MODEL = "gemini-flash-latest";
 /** 分類の既定モデル（低コスト） */
 export const DEFAULT_CLASSIFIER_MODEL = "gemini-flash-lite-latest";
+
+/**
+ * 分類のプロバイダー（ADR-011）。評価（jev-classifier-design §9）に合格するまで既定は gemini。
+ * 本番の切り替えは LLM_CLASSIFIER_PROVIDER=jev（と TYPESAFE_API_KEY）の設定だけで行う
+ */
+export const DEFAULT_CLASSIFIER_PROVIDER: ClassifierProvider = "gemini";
+/**
+ * Jev の既定モデル。**バージョンを固定する**（jev-latest は使わない）。しきい値はモデルの較正に
+ * 依存するため、変える場合は評価をやり直す（ADR-011, fact-model.md §5）
+ */
+export const DEFAULT_JEV_MODEL = "jev-1.13.0";
 
 /** 既定のレート制限（1分あたり、ルートごと） */
 export const DEFAULT_RATE_LIMIT_PER_MINUTE = 10;
@@ -29,7 +42,14 @@ export type LlmThinkingLevel = "off" | "minimal" | "low" | "medium";
 export const DEFAULT_THINKING_LEVEL: LlmThinkingLevel = "low";
 
 export interface LlmServerConfig {
+  /** Gemini の API キー（推論・埋め込み、分類が gemini の場合の分類） */
   apiKey?: string;
+  /** 分類（/api/llm/classify）のプロバイダー。/api/llm/facts は jev の場合のみ使える */
+  classifierProvider: ClassifierProvider;
+  /** TypeSafe（Jev）の API キー。サーバー専用（wrangler secret put TYPESAFE_API_KEY） */
+  typesafeApiKey?: string;
+  /** Jev のモデル（固定したバージョン） */
+  jevModel: string;
   reasoningModel: string;
   classifierModel: string;
   /**
@@ -44,7 +64,12 @@ export interface LlmServerConfig {
   requireAccessToken: boolean;
   /** X-Forwarded-For / X-Real-IP を信頼する（信頼できるリバースプロキシの背後のみ） */
   trustProxy: boolean;
-  rateLimitPerMinute: { reason: number; classify: number; embed: number };
+  rateLimitPerMinute: {
+    reason: number;
+    classify: number;
+    embed: number;
+    facts: number;
+  };
   /** プロセス全体の1日あたりの上限（推論・分類。0 は無制限） */
   dailyRequestLimit: number;
   /** プロセス全体の1日あたりの埋め込みリクエストの上限（0 は無制限。ADR-010） */
@@ -91,7 +116,7 @@ export function resolveThinking(
   return { mode: "level", level: config.thinkingLevel };
 }
 
-const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._\-/]{0,99}$/;
+export const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._\-/]{0,99}$/;
 
 function model(value: string | undefined, fallback: string): string {
   const v = value?.trim();
@@ -115,13 +140,37 @@ function thinking(value: string | undefined): LlmThinkingLevel {
     : DEFAULT_THINKING_LEVEL;
 }
 
+let warnedUnknownProvider = false;
+
+/** 未知の値は gemini に戻す（1回だけログに残す。値そのものは残さない） */
+function classifierProvider(value: string | undefined): ClassifierProvider {
+  const v = value?.trim().toLowerCase();
+  if (!v) return DEFAULT_CLASSIFIER_PROVIDER;
+  if (v === "gemini" || v === "jev") return v;
+  if (!warnedUnknownProvider) {
+    warnedUnknownProvider = true;
+    console.warn(
+      "[llm]",
+      JSON.stringify({
+        code: "unknown-classifier-provider",
+        fallback: "gemini",
+      })
+    );
+  }
+  return DEFAULT_CLASSIFIER_PROVIDER;
+}
+
 export function readLlmConfig(
   env: Record<string, string | undefined> = process.env
 ): LlmServerConfig {
   const apiKey = env.GEMINI_API_KEY?.trim();
   const accessToken = env.LLM_ACCESS_TOKEN?.trim();
+  const typesafeApiKey = env.TYPESAFE_API_KEY?.trim();
   return {
     apiKey: apiKey ? apiKey : undefined,
+    classifierProvider: classifierProvider(env.LLM_CLASSIFIER_PROVIDER),
+    typesafeApiKey: typesafeApiKey ? typesafeApiKey : undefined,
+    jevModel: model(env.JEV_MODEL, DEFAULT_JEV_MODEL),
     reasoningModel: model(env.GEMINI_MODEL_REASONING, DEFAULT_REASONING_MODEL),
     classifierModel: model(
       env.GEMINI_MODEL_CLASSIFIER,
@@ -152,6 +201,13 @@ export function readLlmConfig(
         nonNegativeInt(
           env.LLM_RATE_LIMIT_EMBED_PER_MINUTE,
           DEFAULT_EMBED_RATE_LIMIT_PER_MINUTE
+        )
+      ),
+      facts: Math.max(
+        1,
+        nonNegativeInt(
+          env.LLM_RATE_LIMIT_FACTS_PER_MINUTE,
+          DEFAULT_RATE_LIMIT_PER_MINUTE
         )
       ),
     },

@@ -15,9 +15,11 @@ import {
 import type {
   LlmArticle,
   LlmClassificationRequest,
+  LlmFactPresenceRequest,
   LlmReasoningRequest,
 } from "@/lib/domain/llm/types";
 import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
+import { isPresenceCheckableFact } from "./jev-presence";
 import {
   ARTICLE_ID,
   LLM_LIMITS,
@@ -187,6 +189,56 @@ export function validateClassificationRequest(
     c.errors.push(FAIR_PLAY_NOT_SENT);
   c.incidentText(narrative, "classify", "narrative");
   return c.result(() => ({ narrative: narrative as string }));
+}
+
+/**
+ * fact の判定（/api/llm/facts, fact-model.md §4.2）の入力検証。
+ * - 本文は { narrative, factIds } のみ
+ * - narrative は分類と同じ（最大 500 文字・フェアプレーは送らない・L5 の再確認 "facts"）
+ * - factIds はカタログの fact id で、判定してよいもの（presenceCheckable・端末内専用でない）だけ。
+ *   重複・未知の id は 400。質問文はサーバーがカタログから作る（クライアントは文言を送れない）
+ */
+export function validateFactPresenceRequest(
+  body: unknown
+): Validated<LlmFactPresenceRequest> {
+  if (!isObject(body))
+    return {
+      ok: false,
+      errors: ["本文はJSONオブジェクトである必要があります"],
+    };
+  const c = new Checker();
+  c.only(body, "本文", ["narrative", "factIds"]);
+  const narrative = c.str(
+    body,
+    "narrative",
+    "narrative",
+    LLM_LIMITS.maxClassifyNarrativeChars
+  );
+  if (typeof narrative === "string" && mentionsFairPlay(narrative))
+    c.errors.push(FAIR_PLAY_NOT_SENT);
+
+  const ids = body.factIds;
+  let factIds: string[] = [];
+  if (!Array.isArray(ids) || ids.length === 0) {
+    c.errors.push("factIds は1件以上の配列である必要があります");
+  } else if (ids.length > LLM_LIMITS.maxFactIds) {
+    c.errors.push(`factIds は${LLM_LIMITS.maxFactIds}件以内にしてください`);
+  } else {
+    const bad = ids.filter(
+      (id) =>
+        typeof id !== "string" ||
+        id.length > LLM_LIMITS.maxIdChars ||
+        !isPresenceCheckableFact(id)
+    ).length;
+    if (bad > 0)
+      c.errors.push(`factIds に判定できない項目があります（${bad}件）`);
+    else if (new Set(ids).size !== ids.length)
+      c.errors.push("factIds に重複があります");
+    else factIds = ids as string[];
+  }
+  // 形が正しい場合だけ再確認する（L5。止めた場合は not-sendable）
+  if (c.errors.length === 0) c.incidentText(narrative, "facts", "narrative");
+  return c.result(() => ({ narrative: narrative as string, factIds }));
 }
 
 /**

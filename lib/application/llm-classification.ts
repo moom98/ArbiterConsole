@@ -111,7 +111,7 @@ export async function prepareIncidentClassification(
             : `AI分類を利用できないため、キーワード分類を表示しています（${res.error.message}）`
         );
       }
-      const parsed = parseLlmClassification(res.result);
+      const parsed = parseLlmClassification(res.result, { model: res.model });
       if (!parsed) {
         return keyword(
           "AIの分類結果を解釈できないため、キーワード分類を表示しています"

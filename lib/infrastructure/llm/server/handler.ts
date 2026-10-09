@@ -20,13 +20,25 @@ import {
   type RetryOptions,
 } from "./generate";
 import {
-  buildClassificationUserContent,
   buildReasoningUserContent,
-  CLASSIFICATION_RESPONSE_SCHEMA,
-  CLASSIFIER_SYSTEM_PROMPT,
   REASONING_SYSTEM_PROMPT,
   reasoningResponseSchema,
 } from "./prompts";
+import {
+  selectClassifier,
+  type ClassifyIncidentFn,
+  type ClassifyOutcome,
+} from "./classify-port";
+import {
+  createJevEvaluate,
+  InvalidProviderOutput,
+  type JevEvaluateFn,
+} from "./jev-client";
+import { buildJevState } from "./jev-questions";
+import {
+  buildJevPresenceQuestions,
+  jevAnswersToRawPresence,
+} from "./jev-presence";
 import {
   clientKey,
   DailyRequestCounter,
@@ -37,17 +49,18 @@ import {
   NOT_SENDABLE_MESSAGE,
   validateClassificationRequest,
   validateEmbedRequest,
+  validateFactPresenceRequest,
   validateReasoningRequest,
   type Validated,
 } from "./request-validation";
 
 /**
- * /api/llm/{reason,classify} の処理本体（Route Handler から呼ぶ）。ADR-007。
+ * /api/llm/{reason,classify,embed,facts} の処理本体（Route Handler から呼ぶ）。ADR-007, ADR-011。
  *
  * - Content-Type: application/json 必須（クロスオリジンのブラウザからはプリフライトが必要になる）
- * - レート制限（ルートごと、インメモリ）→ アクセストークン（LLM_ACCESS_TOKEN 設定時）
- *   → API キー確認 → 本文サイズ（ストリーム読み込み中に打ち切り）・入力検証
- *   → 1日あたりの上限 → Gemini 呼び出し
+ * - アクセストークン（LLM_ACCESS_TOKEN 設定時）→ レート制限（ルートごと、インメモリ）
+ *   → ルートごとの API キー確認（分類は選んだプロバイダーのキー）→ 本文サイズ（ストリーム読み込み中に
+ *   打ち切り）・入力検証 → 1日あたりの上限 → 上流（Gemini / Jev）の呼び出し
  * - タイムアウト・一時的エラーの再試行（指数バックオフ）。全体の締め切り（30 秒）を超えない
  * - 応答・エラーは型付き。API キーや入力本文はログ・応答に含めない
  */
@@ -66,6 +79,18 @@ export interface LlmHandlerDeps extends BaseHandlerDeps {
   generate: GenerateJsonFn;
   /** 1回の試行のタイムアウト（ミリ秒） */
   timeoutMs: Record<LlmGenerateKind, number>;
+  /**
+   * 分類の実装を設定から選ぶ（ADR-011）。未指定なら generate（gemini）と fetch（jev）から作る。
+   * ルートでは provider.ts の classifierProvider を渡す
+   */
+  classifierFor?: (config: LlmServerConfig) => ClassifyIncidentFn;
+  /** Jev の呼び出しに使う fetch（テスト用。未指定なら globalThis.fetch） */
+  fetch?: typeof fetch;
+}
+
+/** /api/llm/facts の依存（fact-model.md §4）。1日の上限は推論・分類と共有する */
+export interface FactsHandlerDeps extends BaseHandlerDeps {
+  evaluate: JevEvaluateFn;
 }
 
 /** /api/llm/embed の依存（ADR-010）。1日の上限は推論・分類とは別に数える */
@@ -75,10 +100,26 @@ export interface EmbedHandlerDeps extends BaseHandlerDeps {
   timeoutMs: number;
 }
 
-const MAX_OUTPUT_TOKENS: Record<LlmGenerateKind, number> = {
-  reason: 6_000,
-  classify: 1_024,
-};
+const REASON_MAX_OUTPUT_TOKENS = 6_000;
+
+/**
+ * Jev の締め切り（jev-classifier-design §4.2, §6）。通常は約 100 ms のため、遅い場合は
+ * 早めにキーワード分類へ戻す。1回 3 秒・全体 10 秒・残り 1 秒未満なら再試行しない（最大 3 回）
+ */
+export const JEV_ATTEMPT_TIMEOUT_MS = 3_000;
+export const JEV_TOTAL_DEADLINE_MS = 10_000;
+const JEV_MIN_REMAINING_FOR_RETRY_MS = 1_000;
+
+function jevRetry(retry: RetryOptions): RetryOptions {
+  return {
+    ...retry,
+    totalDeadlineMs: Math.min(retry.totalDeadlineMs, JEV_TOTAL_DEADLINE_MS),
+    minRemainingForRetryMs: Math.min(
+      retry.minRemainingForRetryMs,
+      JEV_MIN_REMAINING_FOR_RETRY_MS
+    ),
+  };
+}
 
 const STATUS: Record<LlmApiErrorCode, number> = {
   "invalid-request": 400,
@@ -157,13 +198,24 @@ const baseDefaults: Omit<BaseHandlerDeps, "dailyCounter"> = {
   log: (event) => console.warn("[llm]", JSON.stringify(event)),
 };
 
+/** 推論・分類・fact の判定で共有する1日の上限（dailyRequestLimit） */
+const sharedDailyCounter = new DailyRequestCounter();
+
 const defaultDeps: LlmHandlerDeps = {
   ...baseDefaults,
   generate: async () => {
     throw new Error("generate is not configured");
   },
-  dailyCounter: new DailyRequestCounter(),
+  dailyCounter: sharedDailyCounter,
   timeoutMs: { reason: 20_000, classify: 8_000 },
+};
+
+const defaultFactsDeps: FactsHandlerDeps = {
+  ...baseDefaults,
+  evaluate: async () => {
+    throw new Error("evaluate is not configured");
+  },
+  dailyCounter: sharedDailyCounter,
 };
 
 /** 検索語の埋め込みのサーバー側の締め切り（クライアントは QUERY_CLIENT_TIMEOUT_MS で打ち切る） */
@@ -270,12 +322,39 @@ function rejected(
 }
 
 type Guarded =
-  | { ok: true; config: LlmServerConfig & { apiKey: string }; body: unknown }
+  | { ok: true; config: LlmServerConfig; body: unknown }
   | { ok: false; response: Response };
 
 /**
+ * ルートが必要とする上流の API キーがあるか（ADR-011 §3。ルートごと）。
+ * - 推論・埋め込み: Gemini のキー
+ * - 分類: 選んだプロバイダーのキー
+ * - fact の判定: 分類のプロバイダーが jev で、TypeSafe のキーがある場合のみ
+ */
+export function routeKeyConfigured(
+  kind: LlmApiKind,
+  config: LlmServerConfig
+): boolean {
+  switch (kind) {
+    case "reason":
+    case "embed":
+      return Boolean(config.apiKey);
+    case "classify":
+      return Boolean(
+        config.classifierProvider === "jev"
+          ? config.typesafeApiKey
+          : config.apiKey
+      );
+    case "facts":
+      return (
+        config.classifierProvider === "jev" && Boolean(config.typesafeApiKey)
+      );
+  }
+}
+
+/**
  * 全ルート共通の前処理: Content-Type → アクセストークン（本番では必須）→ レート制限
- * → API キー → 本文（サイズ上限・JSON）
+ * → ルートの API キー → 本文（サイズ上限・JSON）
  */
 async function guard(
   kind: LlmApiKind,
@@ -314,18 +393,27 @@ async function guard(
     };
   }
 
-  if (!config.apiKey) {
+  if (!routeKeyConfigured(kind, config)) {
     deps.log({ route: kind, code: "not-configured" });
     return { ok: false, response: fail("not-configured") };
   }
 
   const read = await readBody(req);
   if (!read.ok) return read;
-  return {
-    ok: true,
-    config: { ...config, apiKey: config.apiKey },
-    body: read.body,
-  };
+  return { ok: true, config, body: read.body };
+}
+
+/** 上流の失敗を応答にする（ログはコード・種類・ステータスだけ） */
+function upstreamFailure(
+  kind: LlmApiKind,
+  error: unknown,
+  deps: BaseHandlerDeps
+): Response {
+  const upstream =
+    error instanceof UpstreamError ? error : new UpstreamError("network");
+  const code = upstreamCode(upstream);
+  deps.log({ route: kind, code, kind: upstream.kind, status: upstream.status });
+  return fail(code);
 }
 
 export function createLlmRouteHandler(
@@ -333,55 +421,44 @@ export function createLlmRouteHandler(
   overrides: Partial<LlmHandlerDeps> = {}
 ): (req: Request) => Promise<Response> {
   const deps: LlmHandlerDeps = { ...defaultDeps, ...overrides };
+  return kind === "reason" ? reasonHandler(deps) : classifyHandler(deps);
+}
 
-  return async (req) => {
-    const guarded = await guard(kind, req, deps);
+function reasonHandler(deps: LlmHandlerDeps) {
+  return async (req: Request): Promise<Response> => {
+    const guarded = await guard("reason", req, deps);
     if (!guarded.ok) return guarded.response;
     const { config } = guarded;
 
-    let model: string;
-    let systemInstruction: string;
-    let userContent: string;
-    let schema: unknown;
-    if (kind === "reason") {
-      const v = validateReasoningRequest(guarded.body);
-      if (!v.ok) return rejected(kind, v, deps);
-      model = config.reasoningModel;
-      systemInstruction = REASONING_SYSTEM_PROMPT;
-      userContent = buildReasoningUserContent(v.value);
-      schema = reasoningResponseSchema(v.value.articles.map((a) => a.id));
-    } else {
-      const v = validateClassificationRequest(guarded.body);
-      if (!v.ok) return rejected(kind, v, deps);
-      model = config.classifierModel;
-      systemInstruction = CLASSIFIER_SYSTEM_PROMPT;
-      userContent = buildClassificationUserContent(v.value);
-      schema = CLASSIFICATION_RESPONSE_SCHEMA;
-    }
+    const v = validateReasoningRequest(guarded.body);
+    if (!v.ok) return rejected("reason", v, deps);
+    const model = config.reasoningModel;
+    const userContent = buildReasoningUserContent(v.value);
+    const schema = reasoningResponseSchema(v.value.articles.map((a) => a.id));
 
     // 費用の上限（検証を通過し、実際に上流を呼ぶリクエストのみ数える）
     if (!deps.dailyCounter.take(config.dailyRequestLimit)) {
-      deps.log({ route: kind, code: "quota-exceeded" });
+      deps.log({ route: "reason", code: "quota-exceeded" });
       return fail("quota-exceeded");
     }
 
-    const { apiKey } = config;
+    const apiKey = config.apiKey ?? "";
     let result: Awaited<ReturnType<GenerateJsonFn>>;
     try {
       const out = await withRetry((_attempt, remainingMs) => {
         // 1回の試行は全体の締め切りを超えない
         const timeoutMs = Math.max(
           1,
-          Math.min(deps.timeoutMs[kind], remainingMs)
+          Math.min(deps.timeoutMs.reason, remainingMs)
         );
         return withTimeout(timeoutMs, (signal) =>
           deps.generate({
             apiKey,
             model,
-            systemInstruction,
+            systemInstruction: REASONING_SYSTEM_PROMPT,
             userContent,
             responseJsonSchema: schema,
-            maxOutputTokens: MAX_OUTPUT_TOKENS[kind],
+            maxOutputTokens: REASON_MAX_OUTPUT_TOKENS,
             thinking: resolveThinking(model, config),
             timeoutMs,
             signal,
@@ -390,20 +467,11 @@ export function createLlmRouteHandler(
       }, deps.retry);
       result = out.value;
     } catch (error) {
-      const upstream =
-        error instanceof UpstreamError ? error : new UpstreamError("network");
-      const code = upstreamCode(upstream);
-      deps.log({
-        route: kind,
-        code,
-        kind: upstream.kind,
-        status: upstream.status,
-      });
-      return fail(code);
+      return upstreamFailure("reason", error, deps);
     }
 
     if (result.blocked || !result.text?.trim()) {
-      deps.log({ route: kind, code: "blocked" });
+      deps.log({ route: "reason", code: "blocked" });
       return fail("blocked");
     }
     let parsed: unknown;
@@ -411,13 +479,175 @@ export function createLlmRouteHandler(
       parsed = JSON.parse(result.text);
     } catch {
       deps.log({
-        route: kind,
+        route: "reason",
         code: "invalid-model-output",
         truncated: result.truncated ? 1 : 0,
       });
       return fail("invalid-model-output");
     }
     return json({ ok: true, result: parsed, model }, 200);
+  };
+}
+
+/** fetch はテストで差し替えられるよう、呼び出し時に解決する */
+function jevEvaluateFor(deps: { fetch?: typeof fetch }): JevEvaluateFn {
+  return createJevEvaluate((input, init) =>
+    (deps.fetch ?? globalThis.fetch)(input, init)
+  );
+}
+
+/**
+ * 分類（ADR-011）。プロバイダーは設定（LLM_CLASSIFIER_PROVIDER）で選ぶ。
+ * 応答の形（{ ok, result, model }）はプロバイダーによらず同じ。result はプロバイダーの生の出力
+ */
+function classifyHandler(deps: LlmHandlerDeps) {
+  const classifierFor =
+    deps.classifierFor ??
+    ((config: LlmServerConfig) =>
+      selectClassifier(config, {
+        generate: deps.generate,
+        evaluate: jevEvaluateFor(deps),
+      }));
+
+  return async (req: Request): Promise<Response> => {
+    const guarded = await guard("classify", req, deps);
+    if (!guarded.ok) return guarded.response;
+    const { config } = guarded;
+
+    const v = validateClassificationRequest(guarded.body);
+    if (!v.ok) return rejected("classify", v, deps);
+
+    if (!deps.dailyCounter.take(config.dailyRequestLimit)) {
+      deps.log({ route: "classify", code: "quota-exceeded" });
+      return fail("quota-exceeded");
+    }
+
+    const isJev = config.classifierProvider === "jev";
+    const retry = isJev ? jevRetry(deps.retry) : deps.retry;
+    const perAttemptMs = isJev
+      ? Math.min(deps.timeoutMs.classify, JEV_ATTEMPT_TIMEOUT_MS)
+      : deps.timeoutMs.classify;
+    const classify = classifierFor(config);
+
+    let outcome: ClassifyOutcome;
+    let attempts: number;
+    try {
+      const out = await withRetry((_attempt, remainingMs) => {
+        const timeoutMs = Math.max(1, Math.min(perAttemptMs, remainingMs));
+        return withTimeout(timeoutMs, (signal) =>
+          classify({ narrative: v.value.narrative, config, timeoutMs, signal })
+        );
+      }, retry);
+      outcome = out.value;
+      attempts = out.attempts;
+    } catch (error) {
+      return upstreamFailure("classify", error, deps);
+    }
+
+    if (!outcome.ok) {
+      deps.log({
+        route: "classify",
+        code: outcome.code,
+        provider: config.classifierProvider,
+        truncated: outcome.truncated ? 1 : undefined,
+      });
+      return fail(outcome.code);
+    }
+    if (isJev)
+      deps.log({
+        route: "classify",
+        code: "ok",
+        provider: "jev",
+        model: outcome.model,
+        attempts,
+        inputTokens: outcome.inputTokens,
+      });
+    return json(
+      { ok: true, result: outcome.result, model: outcome.model },
+      200
+    );
+  };
+}
+
+/**
+ * /api/llm/facts（fact-model.md §4）。報告文に fact が明示されているかを Jev に尋ねる。
+ * 分類のプロバイダーが jev で TypeSafe のキーがある場合のみ使える（それ以外は 503 not-configured）。
+ * 質問はカタログからサーバーが作る。応答の result は { presence: { [factId]: p }, provider }
+ */
+export function createFactsRouteHandler(
+  overrides: Partial<FactsHandlerDeps> & { fetch?: typeof fetch } = {}
+): (req: Request) => Promise<Response> {
+  const deps: FactsHandlerDeps = {
+    ...defaultFactsDeps,
+    evaluate: jevEvaluateFor(overrides),
+    ...overrides,
+  };
+
+  return async (req) => {
+    const guarded = await guard("facts", req, deps);
+    if (!guarded.ok) return guarded.response;
+    const { config } = guarded;
+
+    const v = validateFactPresenceRequest(guarded.body);
+    if (!v.ok) return rejected("facts", v, deps);
+
+    if (!deps.dailyCounter.take(config.dailyRequestLimit)) {
+      deps.log({ route: "facts", code: "quota-exceeded" });
+      return fail("quota-exceeded");
+    }
+
+    const { narrative, factIds } = v.value;
+    const questions = buildJevPresenceQuestions(factIds);
+    let invalidOutput = false;
+    let response: Awaited<ReturnType<JevEvaluateFn>>;
+    let attempts: number;
+    try {
+      const out = await withRetry((_attempt, remainingMs) => {
+        const timeoutMs = Math.max(
+          1,
+          Math.min(JEV_ATTEMPT_TIMEOUT_MS, remainingMs)
+        );
+        return withTimeout(timeoutMs, async (signal) => {
+          try {
+            return await deps.evaluate({
+              apiKey: config.typesafeApiKey ?? "",
+              model: config.jevModel,
+              state: buildJevState(narrative),
+              questions,
+              signal,
+            });
+          } catch (error) {
+            if (error instanceof InvalidProviderOutput) invalidOutput = true;
+            throw error;
+          }
+        });
+      }, jevRetry(deps.retry));
+      response = out.value;
+      attempts = out.attempts;
+    } catch (error) {
+      if (invalidOutput) {
+        deps.log({ route: "facts", code: "invalid-model-output" });
+        return fail("invalid-model-output");
+      }
+      return upstreamFailure("facts", error, deps);
+    }
+
+    deps.log({
+      route: "facts",
+      code: "ok",
+      model: response.model,
+      attempts,
+      facts: factIds.length,
+      inputTokens: response.usage?.inputTokens,
+    });
+    return json(
+      {
+        ok: true,
+        result: jevAnswersToRawPresence(response.answers, factIds),
+        model: response.model,
+      },
+      200
+    );
   };
 }
 
@@ -468,7 +698,7 @@ export function createEmbedRouteHandler(
         return withTimeout(timeoutMs, async (signal) => {
           try {
             return await deps.embed({
-              apiKey: config.apiKey,
+              apiKey: config.apiKey ?? "",
               model: EMBEDDING_MODEL.id,
               texts: v.value.texts,
               taskType: v.value.taskType,
@@ -488,16 +718,7 @@ export function createEmbedRouteHandler(
         deps.log({ route: "embed", code: "invalid-model-output" });
         return fail("invalid-model-output");
       }
-      const upstream =
-        error instanceof UpstreamError ? error : new UpstreamError("network");
-      const code = upstreamCode(upstream);
-      deps.log({
-        route: "embed",
-        code,
-        kind: upstream.kind,
-        status: upstream.status,
-      });
-      return fail(code);
+      return upstreamFailure("embed", error, deps);
     }
     return json(
       { ok: true, result: { vectors }, model: EMBEDDING_MODEL.key },

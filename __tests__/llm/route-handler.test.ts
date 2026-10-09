@@ -442,12 +442,15 @@ describe("readLlmConfig", () => {
       })
     ).toEqual({
       apiKey: undefined,
+      classifierProvider: "gemini",
+      typesafeApiKey: undefined,
+      jevModel: "jev-1.13.0",
       reasoningModel: "gemini-flash-latest",
       classifierModel: "gemini-flash-lite-latest",
       accessToken: undefined,
       requireAccessToken: false,
       trustProxy: false,
-      rateLimitPerMinute: { reason: 10, classify: 10, embed: 60 },
+      rateLimitPerMinute: { reason: 10, classify: 10, embed: 60, facts: 10 },
       dailyRequestLimit: 500,
       dailyEmbedRequestLimit: 1000,
       thinkingLevel: "low",

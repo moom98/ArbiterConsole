@@ -9,10 +9,12 @@ import type { GenerateJsonFn } from "@/lib/infrastructure/llm/server/generate";
 import type { LlmApiResponse } from "@/lib/infrastructure/llm/contract";
 import {
   CLASSIFIER_PROVIDER_LABELS,
+  PROVIDERS_TIMEOUT_MS,
   fetchExternalAiProviders,
   prepareClassification,
 } from "@/lib/application/external-ai-guard";
 import {
+  PROVIDER_CHANGED_NOTICE,
   classificationView,
   prepareIncidentClassification,
 } from "@/lib/application/llm-classification";
@@ -71,6 +73,42 @@ describe("/api/llm/providers", () => {
     expect(res.status).toBe(400);
   });
 
+  it("an unauthenticated request does not use the rate limit", async () => {
+    const rateLimiter = { take: vi.fn(() => ({ allowed: true as const })) };
+    const handler = createProvidersRouteHandler({
+      config: () => readLlmConfig({ LLM_ACCESS_TOKEN: "tok" }),
+      dailyCounter: new DailyRequestCounter(),
+      rateLimiter: rateLimiter as never,
+      log: vi.fn(),
+    });
+    expect((await handler(request({}))).status).toBe(401);
+    expect(rateLimiter.take).not.toHaveBeenCalled();
+  });
+
+  it("uses its own bucket: using up providers leaves classify available", async () => {
+    // このファイル内だけで使う上限（既定のリミッターはプロセス内で共有される）
+    const env = {
+      GEMINI_API_KEY: "g",
+      LLM_RATE_LIMIT_CLASSIFY_PER_MINUTE: "2",
+    };
+    const providers = providersHandler(env).handler;
+    expect((await providers(request({}))).status).toBe(200);
+    expect((await providers(request({}))).status).toBe(200);
+    expect((await providers(request({}))).status).toBe(429);
+    const classify = createLlmRouteHandler("classify", {
+      config: () => readLlmConfig(env),
+      generate: vi.fn<GenerateJsonFn>(async () => ({
+        text: JSON.stringify({ category: "clock-time" }),
+      })),
+      dailyCounter: new DailyRequestCounter(),
+      log: vi.fn(),
+    });
+    expect(
+      (await classify(request({ narrative: NARRATIVE, provider: "gemini" })))
+        .status
+    ).toBe(200);
+  });
+
   it("requires the access token when one is configured", async () => {
     const { handler } = providersHandler({ LLM_ACCESS_TOKEN: "tok" });
     expect((await handler(request({}))).status).toBe(401);
@@ -113,6 +151,84 @@ describe("classify: the provider shown in the preview must be the one used", () 
       route: "classify",
       code: "provider-changed",
     });
+  });
+
+  it("the reverse (server on jev, request says gemini) is also 409", async () => {
+    const { handler, generate, daily } = classify({
+      LLM_CLASSIFIER_PROVIDER: "jev",
+      TYPESAFE_API_KEY: "t",
+    });
+    const res = await handler(
+      request({ narrative: NARRATIVE, provider: "gemini" })
+    );
+    expect(res.status).toBe(409);
+    expect(generate).not.toHaveBeenCalled();
+    expect(daily.take).not.toHaveBeenCalled();
+  });
+
+  it("provider jev on a jev server reaches the classifier", async () => {
+    const classifier = vi.fn(async () => ({
+      ok: true as const,
+      result: { provider: "jev" },
+      model: "jev-1.13.0",
+    }));
+    const handler = createLlmRouteHandler("classify", {
+      config: () =>
+        readLlmConfig({
+          LLM_CLASSIFIER_PROVIDER: "jev",
+          TYPESAFE_API_KEY: "t",
+        }),
+      generate: vi.fn<GenerateJsonFn>(),
+      classifierFor: () => classifier,
+      dailyCounter: { take: () => true },
+      log: vi.fn(),
+    });
+    const res = await handler(
+      request({ narrative: NARRATIVE, provider: "jev" })
+    );
+    expect(res.status).toBe(200);
+    expect(classifier).toHaveBeenCalledTimes(1);
+  });
+
+  it("race: the server setting changes between the preview and send → nothing reaches the upstream", async () => {
+    const env: Record<string, string> = { GEMINI_API_KEY: "g" };
+    const generate = vi.fn<GenerateJsonFn>(async () => ({
+      text: JSON.stringify({ category: "clock-time" }),
+    }));
+    const config = () => readLlmConfig(env);
+    const providers = createProvidersRouteHandler({
+      config,
+      dailyCounter: new DailyRequestCounter(),
+      log: vi.fn(),
+    });
+    const classifyRoute = createLlmRouteHandler("classify", {
+      config,
+      generate,
+      dailyCounter: new DailyRequestCounter(),
+      log: vi.fn(),
+    });
+    const call = async (kind: string, body: unknown) => {
+      const handler = kind === "providers" ? providers : classifyRoute;
+      return (await handler(request(body))).json();
+    };
+    const step = await prepareIncidentClassification(
+      NARRATIVE,
+      {},
+      {
+        identifiers: async () => NO_IDENTIFIERS,
+        isOnline: () => true,
+        call: call as never,
+      }
+    );
+    if (step.status !== "needs-confirmation") throw new Error("expected");
+    expect(step.preview.destination).toBe("カテゴリの提案（Gemini（Google））");
+    // プレビュー表示後に設定が jev に変わる
+    env.LLM_CLASSIFIER_PROVIDER = "jev";
+    env.TYPESAFE_API_KEY = "t";
+    const r = await step.send();
+    expect(generate).not.toHaveBeenCalled();
+    expect(r.notice).toBe(PROVIDER_CHANGED_NOTICE);
+    expect(r.classification?.method).toBe("keyword");
   });
 
   it("the same provider is sent", async () => {
@@ -190,6 +306,22 @@ describe("client: the preview names the provider the server reports", () => {
     expect(call.mock.calls.map((c) => c[0])).toEqual(["providers"]);
   });
 
+  it("the providers call uses a short timeout", async () => {
+    const call = vi.fn(async () => ({
+      ok: true,
+      result: { classify: "gemini", facts: false },
+      model: "",
+    }));
+    await fetchExternalAiProviders({ call: call as never });
+    await fetchExternalAiProviders({ call: call as never, timeoutMs: 60_000 });
+    for (const c of call.mock.calls as unknown as [
+      string,
+      unknown,
+      { timeoutMs: number },
+    ][])
+      expect(c[2].timeoutMs).toBe(PROVIDERS_TIMEOUT_MS);
+  });
+
   it("a malformed providers answer is not trusted", async () => {
     const r = await fetchExternalAiProviders({
       call: (async () => ({
@@ -201,7 +333,7 @@ describe("client: the preview names the provider the server reports", () => {
     expect(r).toMatchObject({ status: "provider-unknown" });
   });
 
-  it("provider-changed from the server falls back to keywords with the server's message", async () => {
+  it("provider-changed from the server falls back to keywords and asks to confirm again", async () => {
     const step = await prepareIncidentClassification(
       NARRATIVE,
       {},
@@ -221,7 +353,7 @@ describe("client: the preview names the provider the server reports", () => {
     if (step.status !== "needs-confirmation") throw new Error("expected");
     const r = await step.send();
     expect(r.classification?.method).toBe("keyword");
-    expect(r.notice).toMatch(/送り先が確認時から変わった/);
+    expect(r.notice).toBe(PROVIDER_CHANGED_NOTICE);
   });
 });
 

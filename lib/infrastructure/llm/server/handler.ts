@@ -354,7 +354,7 @@ export function routeKeyConfigured(
       return (
         config.classifierProvider === "jev" && Boolean(config.typesafeApiKey)
       );
-    // 送り先の確認は上流を呼ばない（キーの有無も返さない）
+    // 送り先の確認は上流を呼ばない。facts の可否は TypeSafe のキーの有無を含む（トークンの内側。§15.1）
     case "providers":
       return true;
   }

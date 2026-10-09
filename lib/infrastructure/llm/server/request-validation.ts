@@ -167,6 +167,8 @@ class Checker {
   }
 }
 
+const CLASSIFIER_PROVIDERS: readonly ClassifierProvider[] = ["gemini", "jev"];
+
 export function validateClassificationRequest(
   body: unknown
 ): Validated<LlmClassificationRequest> {
@@ -201,8 +203,6 @@ export function validateClassificationRequest(
     provider: provider as ClassifierProvider,
   }));
 }
-
-const CLASSIFIER_PROVIDERS: readonly ClassifierProvider[] = ["gemini", "jev"];
 
 /** /api/llm/providers の入力検証: 本文は {} のみ */
 export function validateProvidersRequest(body: unknown): Validated<object> {

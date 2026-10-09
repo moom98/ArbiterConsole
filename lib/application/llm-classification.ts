@@ -20,7 +20,7 @@ import {
  *
  * 1. 外部AIガードが記述を確認する。止まった場合（機微な内容の可能性・「外部AIに送らない」）は
  *    端末内のキーワード分類と「外部AIには送信していません（理由: …）」を返す
- * 2. 通った場合は送信内容のプレビューを返す。アービターが確認してから send() で Gemini に送る（D13）
+ * 2. 通った場合は送信内容のプレビューを返す。アービターが確認してから send() でサーバーが示した送り先（Gemini / Jev）に送る（D13）
  * 3. オフライン・失敗・不正な出力の場合はキーワード分類にフォールバックする
  *
  * 結果は**カテゴリ選択の提案（プレフィル）のみ**に使う。決定木の対象となる事象は、
@@ -51,6 +51,10 @@ export interface ClassifyTextOptions {
   /** 「外部AIに送らない」 */
   doNotSend?: boolean;
 }
+
+/** 確認後に送り先が変わった（サーバーが 409 で拒否。何も送っていない） */
+export const PROVIDER_CHANGED_NOTICE =
+  "AIの送り先が確認時から変わったため送信していません。もう一度「カテゴリを提案」を押して、新しい送り先を確認してください。端末内のキーワード分類を表示しています";
 
 export async function prepareIncidentClassification(
   text: string,
@@ -118,7 +122,9 @@ export async function prepareIncidentClassification(
         return keyword(
           res.error.code === "offline"
             ? "オフラインのため端末内のキーワード分類を表示しています（AI分類はオンライン時のみ）"
-            : `AI分類を利用できないため、キーワード分類を表示しています（${res.error.message}）`
+            : res.error.code === "provider-changed"
+              ? PROVIDER_CHANGED_NOTICE
+              : `AI分類を利用できないため、キーワード分類を表示しています（${res.error.message}）`
         );
       }
       const parsed = parseLlmClassification(res.result, { model: res.model });

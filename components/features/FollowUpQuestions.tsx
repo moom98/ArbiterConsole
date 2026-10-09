@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+  groupQuestionsByPresence,
   isQuestionVisible,
   type FollowUpQuestion,
 } from "@/lib/domain/follow-up";
@@ -10,7 +11,16 @@ interface FollowUpQuestionsProps {
   questions: FollowUpQuestion[];
   disabled?: boolean;
   onSubmit: (answers: Record<string, string>) => void;
+  /**
+   * 報告文での記載の有無（任意。fact-model.md §4.3）。指定時は「記載なし」を先、「記載あり」を後に
+   * 見出し付きで並べる。並べ方だけに使い、質問を省略せず、回答も埋めない
+   */
+  presence?: Readonly<Partial<Record<string, "present" | "missing">>>;
 }
+
+export const PRESENCE_MISSING_HEADING =
+  "報告に書かれていない事実 — 確認してください";
+export const PRESENCE_PRESENT_HEADING = "報告に記載あり — 内容を選んでください";
 
 function initialAnswers(questions: FollowUpQuestion[]): Record<string, string> {
   const out: Record<string, string> = {};
@@ -44,6 +54,7 @@ export function FollowUpQuestions({
   questions,
   disabled,
   onSubmit,
+  presence,
 }: FollowUpQuestionsProps) {
   const [answers, setAnswers] = useState<Record<string, string>>(() =>
     initialAnswers(questions)
@@ -164,22 +175,46 @@ export function FollowUpQuestions({
     );
   };
 
+  const renderBlocks = (qs: FollowUpQuestion[], prefix: string) =>
+    blocks(qs).map((b, i) =>
+      b.group ? (
+        <section
+          key={`${prefix}${b.group}-${i}`}
+          aria-label={b.group}
+          className="rounded-lg bg-gray-50 p-3 space-y-2"
+        >
+          <h3 className="font-bold">{b.group}</h3>
+          {b.items.map(renderQuestion)}
+        </section>
+      ) : (
+        b.items.map(renderQuestion)
+      )
+    );
+
+  const grouped = presence
+    ? groupQuestionsByPresence(visible, presence)
+    : undefined;
+
   return (
     <div className="space-y-6">
-      {blocks(visible).map((b, i) =>
-        b.group ? (
-          <section
-            key={`${b.group}-${i}`}
-            aria-label={b.group}
-            className="rounded-lg bg-gray-50 p-3 space-y-2"
-          >
-            <h3 className="font-bold">{b.group}</h3>
-            {b.items.map(renderQuestion)}
-          </section>
-        ) : (
-          b.items.map(renderQuestion)
-        )
-      )}
+      {grouped
+        ? (
+            [
+              ["missing", PRESENCE_MISSING_HEADING, grouped.missing],
+              ["present", PRESENCE_PRESENT_HEADING, grouped.present],
+            ] as const
+          ).map(
+            ([key, heading, qs]) =>
+              qs.length > 0 && (
+                <section key={key} aria-label={heading} className="space-y-6">
+                  <h3 className="font-bold text-gray-800 border-b border-gray-300 pb-1">
+                    {heading}
+                  </h3>
+                  {renderBlocks(qs, `${key}:`)}
+                </section>
+              )
+          )
+        : renderBlocks(visible, "")}
       <button
         type="button"
         disabled={!allAnswered || disabled}

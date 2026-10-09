@@ -201,10 +201,17 @@ export function IncidentTextClassifier({
           )}
           {view && view.candidates.length > 0 && (
             <div className="mt-2">
-              <p className="text-sm font-semibold text-gray-700">
+              <p
+                id="classifier-candidates-label"
+                className="text-sm font-semibold text-gray-700"
+              >
                 {view.candidatesLabel}
               </p>
-              <div className="flex flex-wrap gap-2 mt-1">
+              <div
+                role="group"
+                aria-labelledby="classifier-candidates-label"
+                className="flex flex-wrap gap-2 mt-1"
+              >
                 {view.candidates.map((cat) => (
                   <button
                     key={cat}

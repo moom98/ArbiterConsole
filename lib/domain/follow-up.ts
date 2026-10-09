@@ -1371,3 +1371,32 @@ export function parseGameContextAnswers(
     out.supervisionRegime = sr;
   return out;
 }
+
+/**
+ * 報告文での記載の有無（Jev の判定。fact-model.md §4.3）で質問を並べ替える。
+ * - **質問は省略しない。** 値も埋めない（ADR-002, ADR-013）
+ * - missing（記載なし）を先、present（記載あり）を後にする。判定のない質問は missing として扱う
+ * - 表示条件（showWhen）で別の質問に続く質問は、元の質問と同じグループに置く
+ */
+export function groupQuestionsByPresence(
+  questions: readonly FollowUpQuestion[],
+  presence: Readonly<Partial<Record<string, "present" | "missing">>>
+): { missing: FollowUpQuestion[]; present: FollowUpQuestion[] } {
+  const byId = new Map(questions.map((q) => [q.id as string, q]));
+  const rootOf = (q: FollowUpQuestion): FollowUpQuestion => {
+    let cur = q;
+    const seen = new Set<string>();
+    while (cur.showWhen && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      const parent = byId.get(cur.showWhen.questionId);
+      if (!parent) break;
+      cur = parent;
+    }
+    return cur;
+  };
+  const missing: FollowUpQuestion[] = [];
+  const present: FollowUpQuestion[] = [];
+  for (const q of questions)
+    (presence[rootOf(q).id] === "present" ? present : missing).push(q);
+  return { missing, present };
+}

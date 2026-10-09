@@ -9,6 +9,8 @@ import {
 } from "@/components/tournament/TournamentGamePicker";
 import { DecisionDisplay } from "@/components/features/DecisionDisplay";
 import { FollowUpQuestions } from "@/components/features/FollowUpQuestions";
+import { FactPresenceCheck } from "@/components/features/FactPresenceCheck";
+import type { FactPresenceOutcome } from "@/lib/application/fact-presence";
 import { IncidentTextClassifier } from "@/components/features/IncidentTextClassifier";
 import { ExternalAiOptOutSwitch } from "@/components/features/ExternalAiOptOutSwitch";
 import { ExternalAiSendConfirmation } from "@/components/features/ExternalAiSendConfirmation";
@@ -94,8 +96,15 @@ export default function ReportPage() {
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [pickError, setPickError] = useState<string | null>(null);
 
+  /** 報告文での記載の有無（質問の組ごと。並べ方にだけ使う。fact-model.md §4.3） */
+  const [presence, setPresence] = useState<{
+    key: string;
+    byQuestion: FactPresenceOutcome["byQuestion"];
+  } | null>(null);
+
   const {
     currentDecision,
+    currentIncident,
     followUpQuestions,
     isProcessing,
     llmPending,
@@ -240,16 +249,7 @@ export default function ReportPage() {
 
   // 分類の提案を採用: カテゴリと説明のみをプレフィルする。
   // subtype は送らず、決定木の質問で確認する（提案が判断に入り込まないように）
-  const handleApplySuggestion = (
-    classification: IncidentClassification,
-    text: string
-  ) => {
-    setSelectedCategory(classification.category);
-    setDescription(text);
-    setStep("description");
-  };
-
-  /** 分類の候補のチップから選ぶ（jev-classifier-design §7） */
+  // 候補のチップから選んだ場合も同じ（jev-classifier-design §7）
   const handlePickSuggestedCategory = (
     category: IncidentCategory,
     text: string
@@ -258,6 +258,10 @@ export default function ReportPage() {
     setDescription(text);
     setStep("description");
   };
+  const handleApplySuggestion = (
+    classification: IncidentClassification,
+    text: string
+  ) => handlePickSuggestedCategory(classification.category, text);
 
   // 違法手・時計（フラッグ）・ドロー（同一局面）は構造化された追加質問で判断するため、説明は任意
   const descriptionRequired =
@@ -296,6 +300,7 @@ export default function ReportPage() {
   const incidentQuestions = followUpQuestions.filter(
     (q) => q.scope === "incident"
   );
+  const incidentQuestionsKey = incidentQuestions.map((q) => q.id).join("|");
   const contextQuestions = followUpQuestions.filter(
     (q) => q.scope === "game-context"
   );
@@ -723,12 +728,36 @@ export default function ReportPage() {
                 </div>
               )}
 
+              {incidentQuestions.length > 0 && currentIncident && (
+                <div className="mb-4">
+                  <FactPresenceCheck
+                    key={`${currentIncident.id}:${incidentQuestionsKey}`}
+                    input={{
+                      category: currentIncident.category,
+                      subtype: currentIncident.subtype,
+                      description: currentIncident.description,
+                      questions: incidentQuestions,
+                      doNotSend: currentIncident.externalAiOptOut,
+                    }}
+                    disabled={isProcessing}
+                    onResult={(byQuestion) =>
+                      setPresence({ key: incidentQuestionsKey, byQuestion })
+                    }
+                  />
+                </div>
+              )}
+
               {incidentQuestions.length > 0 && (
                 <FollowUpQuestions
-                  key={incidentQuestions.map((q) => q.id).join("|")}
+                  key={incidentQuestionsKey}
                   questions={incidentQuestions}
                   disabled={isProcessing}
                   onSubmit={handleAnswers}
+                  presence={
+                    presence?.key === incidentQuestionsKey
+                      ? presence.byQuestion
+                      : undefined
+                  }
                 />
               )}
 

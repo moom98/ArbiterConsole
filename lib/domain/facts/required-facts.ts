@@ -113,3 +113,37 @@ export function presenceCheckableFacts(
     (r) => r.definition.presenceCheckable && !r.definition.localOnly
   );
 }
+
+/** DT の質問と、その報告文での記載の有無を判定できる fact（fact-model.md §4.1） */
+export interface PresenceTarget {
+  questionId: IncidentQuestionId;
+  factId: FactId;
+}
+
+/**
+ * DT が求めた質問のうち、Jev で「報告文に明示されているか」を判定できるものと、その fact。
+ * 対応する fact がない質問・端末内だけの fact・設定から求める fact は含めない。
+ * 同じ fact に複数の質問が対応する場合は、fact を1回だけ尋ねる（全質問に結果を使う）
+ */
+export function presenceTargets(
+  category: IncidentCategory,
+  subtype: string | undefined,
+  questionIds: readonly IncidentQuestionId[]
+): PresenceTarget[] {
+  const out: PresenceTarget[] = [];
+  for (const questionId of questionIds) {
+    const usage = usagesFor(category, subtype).find((u) =>
+      u.dtQuestionIds?.includes(questionId)
+    );
+    if (!usage) continue;
+    const definition = getFactDefinition(usage.factId);
+    if (
+      !definition?.presenceCheckable ||
+      definition.localOnly ||
+      definition.derivedFrom !== undefined
+    )
+      continue;
+    out.push({ questionId, factId: usage.factId });
+  }
+  return out;
+}

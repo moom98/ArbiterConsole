@@ -95,6 +95,9 @@ function isProvidersInfo(v: unknown): v is LlmProvidersInfo {
   );
 }
 
+/** 送り先の確認の待ち時間（上流を呼ばないため短くする。会場の不安定な回線で長く待たせない） */
+export const PROVIDERS_TIMEOUT_MS = 5_000;
+
 /**
  * サーバーに外部AIの送り先を尋ねる（/api/llm/providers。上流は呼ばない）。
  * プレビューに実際の送り先を示すため、送信の準備のたびに確かめる（設定は実行時に変わりうる）
@@ -102,7 +105,17 @@ function isProvidersInfo(v: unknown): v is LlmProvidersInfo {
 export async function fetchExternalAiProviders(
   deps: ExternalAiGuardDeps = {}
 ): Promise<{ ok: true; info: LlmProvidersInfo } | ProviderUnknown> {
-  const res = await callOf(deps)("providers", {}, deps);
+  const res = await callOf(deps)(
+    "providers",
+    {},
+    {
+      ...deps,
+      timeoutMs: Math.min(
+        deps.timeoutMs ?? PROVIDERS_TIMEOUT_MS,
+        PROVIDERS_TIMEOUT_MS
+      ),
+    }
+  );
   if (!res.ok) return { status: "provider-unknown", error: res.error };
   if (!isProvidersInfo(res.result))
     return {
@@ -209,6 +222,60 @@ export async function prepareClassification(
     provider,
     send: () => callOf(deps)("classify", { narrative, provider }, deps),
     reidentify: (text) => reidentify(text, map),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 報告文での記載の有無（/api/llm/facts。fact-model.md §4）
+// ---------------------------------------------------------------------------
+
+/** fact の判定はこのサーバーで使えない（Jev でない・キーがない）。送らない */
+export interface PresenceUnavailable {
+  status: "unavailable";
+}
+
+/**
+ * 報告文に fact が明示されているか（Jev のみ）。送るのは分類と同じ置き換え・最小化した narrative と、
+ * カタログの fact id（コード）だけ。結果は質問の並べ方にだけ使う（値は埋めない）
+ */
+export async function prepareFactPresence(
+  text: string,
+  factIds: readonly string[],
+  options: IncidentTextOptions = {},
+  deps: ExternalAiGuardDeps = {}
+): Promise<
+  NotSent | ProviderUnknown | PresenceUnavailable | PendingSend<LlmApiResponse>
+> {
+  const ids = Array.from(new Set(factIds)).slice(0, LLM_LIMITS.maxFactIds);
+  if (ids.length === 0) return { status: "unavailable" };
+  const known = await identifiersOrNull(deps);
+  if (!known) return IDENTIFIERS_UNAVAILABLE;
+  const protectedText = protectIncidentText({
+    route: "facts",
+    text,
+    category: options.category,
+    doNotSend: options.doNotSend,
+    identifiers: known,
+    map: new PlaceholderMap(),
+  });
+  if (!protectedText.ok) return notSent(protectedText);
+  const narrative = protectedText.text;
+  const providers = await fetchExternalAiProviders(deps);
+  if (!("ok" in providers)) return providers;
+  if (!providers.info.facts) return { status: "unavailable" };
+  return {
+    status: "needs-confirmation",
+    preview: {
+      destination: `報告文の記載の確認（${CLASSIFIER_PROVIDER_LABELS.jev}）`,
+      fields: [
+        { label: "送る記述（名前・日時などは置き換え済み）", text: narrative },
+      ],
+      notes: [
+        `確認する事実: ${ids.length}件（カタログのコードだけを送ります。質問文・回答は送りません）`,
+        "結果は質問の並び順にだけ使います。回答はアービターが選びます",
+      ],
+    },
+    send: () => callOf(deps)("facts", { narrative, factIds: ids }, deps),
   };
 }
 

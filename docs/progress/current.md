@@ -1,6 +1,6 @@
 # Current Progress
 
-**Last updated:** 2026-10-09 (J2 merged via PR #10; J2-3 review fixes in a follow-up PR; not deployed)
+**Last updated:** 2026-10-10 (PR #11 merged and deployed; J3 in progress on `feature/j3-eval`)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
@@ -23,7 +23,19 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
 - J2-3: **DT-011** (FIDE 8.4 recording obligation for scoresheet "記入していない／遅れている" in Standard), `game.record-state` as record-only, and facts keeping the shared daily cap.
 - **Merged via PR #10** (`1fc8f5b`). The J2-3 review (FIX FIRST: "遅れている" ignored FIDE 8.1.3) is fixed in a follow-up PR from `feature/fact-catalog`. The user asked to deploy after merging; deploy once the follow-up is merged.
 
-**Next:** J3 (evaluation, calibration, production switch). See Next steps.
+**Deployed 2026-10-10:** `main` at `466ae58` (PRs #8–#11), version `7263f6cc-fba3-4cc2-9ce6-d05938bba4d8`, from a clean worktree (`npm ci`, tsc clean, 83 files / 1634 tests). Production checks: all pages 200 (`/` → 307 `/home`), `sw.js` and `manifest.json` 200, `/api/llm/{reason,classify,facts,providers}` 401 without the token. Secrets present: `GEMINI_API_KEY`, `LLM_ACCESS_TOKEN` (no `TYPESAFE_API_KEY` yet).
+
+**J3 (in progress, branch `feature/j3-eval`, worktree `.claude/worktrees/j3`):** see "J3 status" below.
+
+## J3 status (2026-10-10)
+
+- **Tooling (committed):** `lib/evaluation/classifier-eval.ts` (pure metrics, Wilson-bound threshold choice, gate, `buildJevCalibration`), `scripts/eval/classifier.eval.ts` (live runner, vitest, `vitest.eval.config.ts`), launcher `npm run eval:classifier` (runs `__tests__/privacy` + the dataset test first). Output goes to `docs/progress/evaluations/<run>/` (`report.md`, `records.json` without text, `evaluation.json`, `calibration.candidate.json` if calibratable).
+- **Keys:** `~/.config/arbiter-console/typesafe.key` exists. **There is no local Gemini key**, so the Gemini comparison (gate item "accuracy ≥ Gemini − 2 pt") cannot run until the user puts one in `~/.config/arbiter-console/gemini.key` (chmod 600).
+- **Dataset v1** (`__tests__/fixtures/classification-eval.ja.json`, 270 items, 30/category, every item passes the guard). First run: `docs/progress/evaluations/classifier-v1-run1/report.md` — Jev held-out 89.6 %, top-2 95.6 %, p95 204 ms, sum drift ≤ 0.01 (±0.02 tolerance is fine), keyword baseline 70.4 %; tournament-admin 66.7 %.
+- **Changes after run 1:** thresholds now need the Wilson 95 % lower bound ≥ target (the point-estimate rule chose t = 0.4 = "everything"); category descriptions revised from **tuning errors only** (prompt hash test updated on purpose); the v1 held-out is now considered seen, so **dataset v2** = all v1 items as tuning + 15 fresh held-out per category written by an agent that did not see results.
+- Presence check offer now requires a calibrated threshold for a target fact (category-only calibration keeps the card hidden).
+- **Guard finding:** about a third of first-draft synthetic reports were blocked by the known-vocabulary layer (L3v); team reports that mention 主将/キャプテン/チーム/監督/メンバー are uncertain/blocked, so in production most captain-related team reports never reach Jev.
+- **Production switch:** only if the full gate passes, which needs the Gemini comparison.
 - After the first deploy, 「意味検索用データを作成」 rebuilds every vector once (key `+deid1`).
 `docs/IMPLEMENTATION_STATUS.md` is a stale 2024 snapshot. Use this file and `docs/progress/milestones/` instead.
 

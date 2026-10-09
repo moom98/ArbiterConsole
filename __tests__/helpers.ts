@@ -36,3 +36,22 @@ export function fixedProviders(prefix = "id"): DomainProviders {
     now: () => new Date(FIXED_NOW),
   };
 }
+
+/**
+ * 外部AIガードのテスト用: /api/llm/providers（送り先の確認）に答え、それ以外は call に渡す。
+ * 分類は送信前に送り先を確かめるため（J2-1）
+ */
+export function answeringProviders<
+  F extends (kind: string, body: unknown, deps?: unknown) => unknown,
+>(
+  call: F,
+  info: { classify: "gemini" | "jev"; facts: boolean } = {
+    classify: "gemini",
+    facts: false,
+  }
+): F {
+  return (async (kind: string, body: unknown, deps?: unknown) =>
+    kind === "providers"
+      ? { ok: true, result: info, model: "" }
+      : call(kind, body, deps)) as unknown as F;
+}

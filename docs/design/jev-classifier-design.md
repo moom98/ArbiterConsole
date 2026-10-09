@@ -438,8 +438,23 @@ The default stays `gemini`. With the default environment, the classify route, it
 ### 14.3 Not done in J1c (for J2 and J3)
 
 - **The client does not call `/api/llm/facts` yet.** J2 adds a guard function in `external-ai-guard.ts` (the only `callLlmApi` user), its confirmation (D13) and the grouping in `FollowUpQuestions`.
-- **The preview names Gemini.** `external-ai-guard.ts` labels the classification destination 「カテゴリの提案（Gemini（Google））」. **Before production switches to `jev`, the preview must name the provider actually used** (for example, the server tells the client its classify provider). This blocks the J3 switch.
-- The UI of §7 (percentage, candidate chips, `onPickCategory`).
+- ~~**The preview names Gemini.**~~ **Done in J2-1** (§15.1): the preview names the provider the server reports, and the server rejects a classification sent for a different provider.
+- ~~The UI of §7 (percentage, candidate chips, `onPickCategory`).~~ **Done in J2-1** (§15.2).
 - `scripts/eval-classifier.mjs`, the datasets and the first calibration (J3).
 - **Check in J3 (review note):** the sum tolerance of ±0.02. If Jev rounds each of the 10 probabilities separately, the sum can drift by up to ±0.05, and valid answers would fall back to keywords. Record the observed sums in the evaluation and widen the tolerance (with a test) if needed.
 - **Daily cap (review note):** `/api/llm/facts` shares `LLM_DAILY_REQUEST_LIMIT` with reason and classify. When J2 calls it on every DT round, decide whether it needs its own cap.
+
+## 15. Implementation (J2-1, 2026-10-09): classification UI and the provider-named preview
+
+### 15.1 The preview names the provider actually used (closes the §14.3 blocker)
+
+- **New route `POST /api/llm/providers`** (body `{}` only) returns `{ classify: "gemini" | "jev", facts: boolean }`. It goes through the same guard as the other routes (JSON content type, access token, rate limit; the limit equals the classify limit) but never calls an upstream, never counts toward the daily cap, and returns codes only (no keys, no model names).
+- **The guard asks before every classification** (`fetchExternalAiProviders` in `external-ai-guard.ts`) and shows 「カテゴリの提案（Gemini（Google））」 or 「カテゴリの提案（Jev（TypeSafe））」 (`CLASSIFIER_PROVIDER_LABELS`). The provider is checked each time because the server setting can change at runtime (the J3 switch).
+- **The classify body is now `{ narrative, provider }`.** The server compares `provider` with `LLM_CLASSIFIER_PROVIDER`; if they differ it returns **409 `provider-changed`** without calling the upstream and without counting the daily cap. So what the arbiter confirmed is exactly where the text goes. An old client's `{ narrative }` gets 400 (falls back to keywords).
+- **If the provider cannot be confirmed** (network error, malformed answer), nothing is sent and the keyword classification is shown with 「AIの送り先を確認できないため送信していません」. The online check now runs before the guard (offline → keywords, no providers call).
+
+### 15.2 UI (§7)
+
+- `classificationView` (`lib/application/llm-classification.ts`, display only) decides: the percentage (Jev only, rounded), whether 「このカテゴリで続ける」 is shown (not when `prefill: false`), the candidate chips (「他の候補」 = alternatives; 「候補（タップで選択）」 = the category and the alternatives when `prefill: false`) and the probability hint (only with a percentage).
+- `IncidentTextClassifier` shows 「AI分類（提案） · 91%」, the hint 「確率はAIの推定です。カテゴリはアービターが確定してください。」, the chips (large, one tap → `onPickCategory`), and the placeholder now says 「選手名ではなく「白」「黒」で書いてください」. The report page pre-fills the picked category and the text, as for 「このカテゴリで続ける」.
+- **Live preview:** §7's collapsed live preview is not added. Since D13 every send already shows the de-identified payload in the confirmation step before anything is sent, which is the same content at the moment that matters; a second, live copy would add a guard run per keystroke for no extra protection.

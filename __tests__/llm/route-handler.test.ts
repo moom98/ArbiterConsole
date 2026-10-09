@@ -409,17 +409,21 @@ describe("LLM route handler – classify", () => {
     }));
     const handler = createLlmRouteHandler("classify", makeDeps(generate));
     const res = await handler(
-      request({ narrative: "白の時計のフラッグが落ちたと黒が申し立てた" })
+      request({
+        narrative: "白の時計のフラッグが落ちたと黒が申し立てた",
+        provider: "gemini",
+      })
     );
     expect(res.status).toBe(200);
     expect(generate.mock.calls[0][0].model).toBe("gemini-flash-lite-latest");
 
-    const bad = await handler(request({ narrative: "" }));
+    const bad = await handler(request({ narrative: "", provider: "gemini" }));
     expect(bad.status).toBe(400);
     // 最小化した narrative の上限（500 文字。§5.3）
     const long = await handler(
       request({
         narrative: "x".repeat(LLM_LIMITS.maxClassifyNarrativeChars + 1),
+        provider: "gemini",
       })
     );
     expect(long.status).toBe(400);
@@ -450,7 +454,13 @@ describe("readLlmConfig", () => {
       accessToken: undefined,
       requireAccessToken: false,
       trustProxy: false,
-      rateLimitPerMinute: { reason: 10, classify: 10, embed: 60, facts: 10 },
+      rateLimitPerMinute: {
+        reason: 10,
+        classify: 10,
+        embed: 60,
+        facts: 10,
+        providers: 10,
+      },
       dailyRequestLimit: 500,
       dailyEmbedRequestLimit: 1000,
       thinkingLevel: "low",
@@ -587,21 +597,30 @@ describe("access control and cost caps (S-H1)", () => {
     expect(
       (
         await classify(
-          request({ narrative: "白の時計のフラッグが落ちたと黒が申し立てた" })
+          request({
+            narrative: "白の時計のフラッグが落ちたと黒が申し立てた",
+            provider: "gemini",
+          })
         )
       ).status
     ).toBe(200);
     expect(
       (
         await classify(
-          request({ narrative: "白の時計のフラッグが落ちたと黒が申し立てた" })
+          request({
+            narrative: "白の時計のフラッグが落ちたと黒が申し立てた",
+            provider: "gemini",
+          })
         )
       ).status
     ).toBe(200);
     expect(
       (
         await classify(
-          request({ narrative: "白の時計のフラッグが落ちたと黒が申し立てた" })
+          request({
+            narrative: "白の時計のフラッグが落ちたと黒が申し立てた",
+            provider: "gemini",
+          })
         )
       ).status
     ).toBe(429);
@@ -686,8 +705,14 @@ describe("access control and cost caps (S-H1)", () => {
     expect(res2.status).toBe(400);
     const classify = createLlmRouteHandler("classify", makeDeps(generate));
     expect(
-      (await classify(request({ narrative: "Suspected engine assistance" })))
-        .status
+      (
+        await classify(
+          request({
+            narrative: "Suspected engine assistance",
+            provider: "gemini",
+          })
+        )
+      ).status
     ).toBe(400);
     expect(generate).not.toHaveBeenCalled();
   });
@@ -1014,7 +1039,7 @@ describe("server re-check (L5) and minimized shapes only (J1a-3)", () => {
     ["an unknown word", "白がジョギングの後でフラッグが落ちた"],
   ])("classify: 400 not-sendable for %s", async (_n, narrative) => {
     const { generate, handler } = setup("classify");
-    const res = await handler(request({ narrative }));
+    const res = await handler(request({ narrative, provider: "gemini" }));
     expect(res.status).toBe(400);
     expect((await errorOf(res)).code).toBe("not-sendable");
     expect(generate).not.toHaveBeenCalled();

@@ -12,6 +12,7 @@
  */
 import type { IncidentCategory, RuleSourceType } from "@/lib/domain/entities";
 import type {
+  ClassifierProvider,
   ExternalAiPreview,
   LlmArticle,
   LlmIncidentSummary,
@@ -41,7 +42,9 @@ import {
   ARTICLE_ID,
   LLM_LIMITS,
   TOURNAMENT_SOURCE_NAME,
+  type LlmApiError,
   type LlmApiResponse,
+  type LlmProvidersInfo,
 } from "@/lib/infrastructure/llm/contract";
 import {
   callLlmApi,
@@ -70,6 +73,47 @@ export interface PendingSend<T> {
 }
 
 const GEMINI = "Gemini（Google）";
+
+/** 分類の送り先の表示名（プレビューに示す。D13） */
+export const CLASSIFIER_PROVIDER_LABELS: Record<ClassifierProvider, string> = {
+  gemini: GEMINI,
+  jev: "Jev（TypeSafe）",
+};
+
+/** 送り先を確認できなかった（送らない）。error は通信・サーバーのエラー */
+export interface ProviderUnknown {
+  status: "provider-unknown";
+  error: LlmApiError;
+}
+
+function isProvidersInfo(v: unknown): v is LlmProvidersInfo {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    (r.classify === "gemini" || r.classify === "jev") &&
+    typeof r.facts === "boolean"
+  );
+}
+
+/**
+ * サーバーに外部AIの送り先を尋ねる（/api/llm/providers。上流は呼ばない）。
+ * プレビューに実際の送り先を示すため、送信の準備のたびに確かめる（設定は実行時に変わりうる）
+ */
+export async function fetchExternalAiProviders(
+  deps: ExternalAiGuardDeps = {}
+): Promise<{ ok: true; info: LlmProvidersInfo } | ProviderUnknown> {
+  const res = await callOf(deps)("providers", {}, deps);
+  if (!res.ok) return { status: "provider-unknown", error: res.error };
+  if (!isProvidersInfo(res.result))
+    return {
+      status: "provider-unknown",
+      error: {
+        code: "upstream-error",
+        message: "AIの送り先を確認できませんでした",
+      },
+    };
+  return { ok: true, info: res.result };
+}
 
 async function knownIdentifiers(
   deps: ExternalAiGuardDeps
@@ -127,9 +171,12 @@ export async function prepareClassification(
   deps: ExternalAiGuardDeps = {}
 ): Promise<
   | NotSent
+  | ProviderUnknown
   | (PendingSend<LlmApiResponse> & {
       /** 応答のプレースホルダーを元の表記へ戻す（このリクエストの対応表） */
       reidentify(text: string): ReidentifyResult;
+      /** プレビューで示した送り先 */
+      provider: ClassifierProvider;
     })
 > {
   const ids = await identifiersOrNull(deps);
@@ -145,16 +192,22 @@ export async function prepareClassification(
   });
   if (!protectedText.ok) return notSent(protectedText);
   const narrative = protectedText.text;
+  // 実際の送り先をサーバーに確かめてからプレビューに示す。送信にも同じ送り先を添え、
+  // サーバーの設定が変わっていれば送らない（provider-changed。D13）
+  const providers = await fetchExternalAiProviders(deps);
+  if (!("ok" in providers)) return providers;
+  const provider = providers.info.classify;
   return {
     status: "needs-confirmation",
     preview: {
-      destination: `カテゴリの提案（${GEMINI}）`,
+      destination: `カテゴリの提案（${CLASSIFIER_PROVIDER_LABELS[provider]}）`,
       fields: [
         { label: "送る記述（名前・日時などは置き換え済み）", text: narrative },
       ],
       notes: [],
     },
-    send: () => callOf(deps)("classify", { narrative }, deps),
+    provider,
+    send: () => callOf(deps)("classify", { narrative, provider }, deps),
     reidentify: (text) => reidentify(text, map),
   };
 }

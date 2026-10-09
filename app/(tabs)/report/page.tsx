@@ -249,6 +249,16 @@ export default function ReportPage() {
     setStep("description");
   };
 
+  /** 分類の候補のチップから選ぶ（jev-classifier-design §7） */
+  const handlePickSuggestedCategory = (
+    category: IncidentCategory,
+    text: string
+  ) => {
+    setSelectedCategory(category);
+    setDescription(text);
+    setStep("description");
+  };
+
   // 違法手・時計（フラッグ）・ドロー（同一局面）は構造化された追加質問で判断するため、説明は任意
   const descriptionRequired =
     selectedCategory !== null && !usesStructuredQuestions(selectedCategory);
@@ -609,6 +619,7 @@ export default function ReportPage() {
             doNotSend={externalAiOptOut}
             onDoNotSendChange={setExternalAiOptOut}
             onApply={handleApplySuggestion}
+            onPickCategory={handlePickSuggestedCategory}
           />
           <p className="text-gray-600 mb-4">
             発生したインシデントのカテゴリを選択してください

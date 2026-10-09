@@ -1,3 +1,5 @@
+import type { ClassifierProvider } from "@/lib/domain/llm/types";
+
 /**
  * /api/llm/* の通信契約（サーバー・クライアント共通。SDK には依存しない）。ADR-007。
  */
@@ -8,11 +10,19 @@ export const LLM_API_PATHS = {
   embed: "/api/llm/embed",
   /** 報告文に fact が明示されているか（Jev のみ。fact-model.md §4） */
   facts: "/api/llm/facts",
+  /**
+   * 外部AIの送り先（分類のプロバイダー・fact の判定の可否）。本文は {} のみ。
+   * 送信前のプレビューに実際の送り先を示すために使う（D13。jev-classifier-design §14.3）
+   */
+  providers: "/api/llm/providers",
 } as const;
 
 export type LlmApiKind = keyof typeof LLM_API_PATHS;
 /** JSON を返す分類・推論のルート（埋め込み・fact の判定以外） */
-export type LlmGenerateKind = Exclude<LlmApiKind, "embed" | "facts">;
+export type LlmGenerateKind = Exclude<
+  LlmApiKind,
+  "embed" | "facts" | "providers"
+>;
 
 /**
  * 意味検索の埋め込みモデル（ADR-010）。サーバーとクライアントで共有する固定値。
@@ -85,6 +95,11 @@ export type LlmApiErrorCode =
   | "invalid-request"
   /** 送信前の再確認（L5）で止めた。外部AIには送っていない（external-ai-data-protection.md §7, §12） */
   | "not-sendable"
+  /**
+   * 分類のプロバイダーが、プレビューで示したもの（リクエストの provider）と違う。
+   * 上流は呼んでいない（送信先を確認したものと一致させるため。D13）
+   */
+  | "provider-changed"
   /** Content-Type が application/json でない */
   | "unsupported-media-type"
   /** 本文が大きすぎる */
@@ -115,6 +130,14 @@ export type LlmApiErrorCode =
 export interface LlmApiError {
   code: LlmApiErrorCode;
   message: string;
+}
+
+/** /api/llm/providers の result（コードのみ。キーや設定値は含めない） */
+export interface LlmProvidersInfo {
+  /** 分類の送り先 */
+  classify: ClassifierProvider;
+  /** /api/llm/facts（Jev）を使えるか */
+  facts: boolean;
 }
 
 export type LlmApiResponse =

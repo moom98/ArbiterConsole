@@ -13,6 +13,7 @@ import {
   type ProtectedTextRoute,
 } from "@/lib/domain/privacy";
 import type {
+  ClassifierProvider,
   LlmArticle,
   LlmClassificationRequest,
   LlmFactPresenceRequest,
@@ -178,17 +179,41 @@ export function validateClassificationRequest(
   if ("text" in body && !("narrative" in body))
     return { ok: false, errors: [OLD_CLASSIFY_SHAPE] };
   const c = new Checker();
-  c.only(body, "本文", ["narrative"]);
+  c.only(body, "本文", ["narrative", "provider"]);
   const narrative = c.str(
     body,
     "narrative",
     "narrative",
     LLM_LIMITS.maxClassifyNarrativeChars
   );
+  // プレビューで示した送り先（D13）。サーバーの設定との一致はハンドラーが確かめる
+  const provider = c.oneOf<ClassifierProvider>(
+    body,
+    "provider",
+    "provider",
+    CLASSIFIER_PROVIDERS
+  );
   if (typeof narrative === "string" && mentionsFairPlay(narrative))
     c.errors.push(FAIR_PLAY_NOT_SENT);
   c.incidentText(narrative, "classify", "narrative");
-  return c.result(() => ({ narrative: narrative as string }));
+  return c.result(() => ({
+    narrative: narrative as string,
+    provider: provider as ClassifierProvider,
+  }));
+}
+
+const CLASSIFIER_PROVIDERS: readonly ClassifierProvider[] = ["gemini", "jev"];
+
+/** /api/llm/providers の入力検証: 本文は {} のみ */
+export function validateProvidersRequest(body: unknown): Validated<object> {
+  if (!isObject(body))
+    return {
+      ok: false,
+      errors: ["本文はJSONオブジェクトである必要があります"],
+    };
+  const c = new Checker();
+  c.only(body, "本文", []);
+  return c.result(() => ({}));
 }
 
 /**

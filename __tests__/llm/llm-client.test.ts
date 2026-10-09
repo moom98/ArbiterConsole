@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi } from "vitest";
 import { callLlmApi } from "@/lib/infrastructure/llm/llm-api-client";
+import { answeringProviders } from "../helpers";
 import {
   createLlmAssistPort,
   type LlmAssistDeps,
@@ -352,7 +353,7 @@ describe("prepareIncidentClassification", () => {
       model: "m",
     }));
     const r = await classifyConfirmed("黒のスマホが鳴った", {
-      call: call as never,
+      call: answeringProviders(call) as never,
       isOnline: () => true,
     });
     expect(r.classification?.method).toBe("llm");
@@ -360,9 +361,10 @@ describe("prepareIncidentClassification", () => {
       "電源は切れていましたか？",
     ]);
     expect(r.notice).toBeUndefined();
+    // プレビューで示した送り先（gemini）を添えて送る（J2-1）
     expect((call.mock.calls[0] as unknown[]).slice(0, 2)).toEqual([
       "classify",
-      { narrative: "黒のスマホが鳴った" },
+      { narrative: "黒のスマホが鳴った", provider: "gemini" },
     ]);
   });
 
@@ -373,7 +375,7 @@ describe("prepareIncidentClassification", () => {
         players: [{ name: "田中 太郎" }],
       }),
       isOnline: () => true,
-      call: (async () => ({
+      call: answeringProviders(async () => ({
         ok: true,
         result: {
           category: "player-behavior",
@@ -396,7 +398,7 @@ describe("prepareIncidentClassification", () => {
     const step = await prepareIncidentClassification(
       "黒のスマホが鳴った",
       {},
-      { ...NO_IDS, call, isOnline: () => true }
+      { ...NO_IDS, call: answeringProviders(call), isOnline: () => true }
     );
     if (step.status !== "needs-confirmation") throw new Error("expected");
     expect(step.preview.fields.map((f) => f.text)).toEqual([
@@ -420,7 +422,7 @@ describe("prepareIncidentClassification", () => {
 
     const failed = await classifyConfirmed("黒のスマホが鳴った", {
       isOnline: () => true,
-      call: (async () => ({
+      call: answeringProviders(async () => ({
         ok: false,
         error: { code: "upstream-timeout", message: "timeout" },
       })) as never,
@@ -430,7 +432,7 @@ describe("prepareIncidentClassification", () => {
 
     const invalid = await classifyConfirmed("フラッグが落ちた", {
       isOnline: () => true,
-      call: (async () => ({
+      call: answeringProviders(async () => ({
         ok: true,
         result: { category: "nonsense" },
         model: "m",

@@ -75,6 +75,11 @@ The independent read-only reviewer gave **FIX REQUIRED** (1 must-fix, 7 should-f
   - the seed label `explicit-08` now names the player;
   - presence asks only the case's own fact per request (documented, accepted).
 
+**Re-review: MERGE.** Of its non-blocking nits:
+- argument checks now run before the privacy suite;
+- the comment that wrongly said the Gemini SDK is not loaded for a Jev-only run is corrected (esbuild hoists the import; harmless);
+- transport errors on the tuning split are not gated. They only drop out of the threshold points, which is the safe direction (left as is).
+
 ## How to run J3-3 (user's machine)
 
 1. Put the keys in `~/.config/arbiter-console/typesafe.key` and `gemini.key` (`chmod 600`). Never put them in `.env*`.

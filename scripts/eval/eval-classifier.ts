@@ -206,7 +206,7 @@ export function classifierFor(
       ? jevClassifyIncident(createJevEvaluate(deps.fetch))
       : // Gemini は SDK を使う（本番と同じ実装）。fetch の差し替えは効かない
         geminiClassifyIncident(
-          // 動的 import にして、Jev だけの評価で SDK を読み込まない
+          // esbuild はこの import も先頭にまとめるため、SDK は常に読み込まれる（依存にあるので問題ない）
           async (req) =>
             (
               await import("@/lib/infrastructure/llm/server/gemini-client")
@@ -290,16 +290,16 @@ async function run(argv: readonly string[], deps: EvalDeps): Promise<number> {
     deps.log("presence は Jev だけを評価する");
     return 2;
   }
+  const concurrency = Number(arg(argv, "concurrency") ?? "1");
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    deps.log("--concurrency は 1 以上の整数");
+    return 2;
+  }
   // §9.4: 精度の評価の前に、通信なしのプライバシーの確認が通ること
   deps.log("プライバシーの確認（__tests__/privacy）を実行する…");
   if (!deps.runPrivacyCheck()) {
     deps.log("プライバシーの確認に失敗した。送らずに終了する");
     return 1;
-  }
-  const concurrency = Number(arg(argv, "concurrency") ?? "1");
-  if (!Number.isInteger(concurrency) || concurrency < 1) {
-    deps.log("--concurrency は 1 以上の整数");
-    return 2;
   }
   const progress = (done: number, total: number) => {
     if (done === total || done % 20 === 0) deps.log(`  ${done}/${total}`);

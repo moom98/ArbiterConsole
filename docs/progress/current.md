@@ -7,6 +7,19 @@
 
 This file is the handoff for a fresh Claude session. Do not rely on conversation history.
 
+## Waiting on the user (as of 2026-10-09)
+
+The user said they will do these later. When a new session starts, check which are done (ask the user, check `git log origin/main`, and check `gh`/GitHub for PRs) before continuing.
+
+1. **Deploy `main`** (PRs #10 and #11: J2 and DT-011). This is not possible from a cloud session because it needs the user's `wrangler login`. On the user's machine, with no `.env*` files:
+   `git checkout main && git pull && npm ci && npm run cf:deploy`
+   - It changes no AI destination: the classifier stays `gemini`, and the presence card stays hidden until a calibration is registered.
+   - Afterwards, record the version id under "Latest deploy" in this file.
+2. **J3-1 PR:** `feature/fact-catalog` (`efc8336`, the J3-1 evaluation tooling) is pushed but has no PR. The user decides whether to open one; Claude may create it when asked.
+3. **J3-3 (later):** the user runs the evaluation with real keys on their machine. Follow "How to run J3-3" in `milestones/j3-1-eval-tooling.md`.
+
+**Claude can continue without the user:** J3-2, the presence dataset (see Next steps). Confirm with the user before starting, because they paused here.
+
 **Current state in one paragraph (2026-10-09):** all work up to the incident-log AI retry was merged into `main` via **PR #7** (`392cd61`) and **deployed** (version `c85907c7-…`). PR #7 holds:
 - the fact catalogue and ADR-014 (J1b-1…J1b-8, all done);
 - the pure privacy package (J1a-1, done);

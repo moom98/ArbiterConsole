@@ -1,3 +1,4 @@
+import { answeringProviders } from "../helpers";
 import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -99,16 +100,20 @@ describe("classification", () => {
     const r = await prepareClassification(
       "田中太郎のスマホが鳴った",
       {},
-      { ...withIds, call }
+      { ...withIds, call: answeringProviders(call) }
     );
     if (r.status !== "needs-confirmation") throw new Error("expected clear");
     expect(r.preview.fields[0].text).toBe("〈選手A〉のスマホが鳴った");
+    expect(r.preview.destination).toBe("カテゴリの提案（Gemini（Google））");
     expect(call).not.toHaveBeenCalled();
     await r.send();
     expect(call).toHaveBeenCalledTimes(1);
     const [kind, body] = call.mock.calls[0] as unknown as [string, unknown];
     expect(kind).toBe("classify");
-    expect(body).toEqual({ narrative: "〈選手A〉のスマホが鳴った" });
+    expect(body).toEqual({
+      narrative: "〈選手A〉のスマホが鳴った",
+      provider: "gemini",
+    });
     expect(JSON.stringify(body)).not.toContain("田中");
   });
 

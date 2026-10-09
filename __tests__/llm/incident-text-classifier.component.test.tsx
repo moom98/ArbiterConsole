@@ -28,7 +28,10 @@ const prepare = vi.fn(async (_text: string, _options: unknown) => ({
   decline,
 }));
 
-vi.mock("@/lib/application/llm-classification", () => ({
+vi.mock("@/lib/application/llm-classification", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/application/llm-classification")
+  >()),
   prepareIncidentClassification: (text: string, options: unknown) =>
     prepare(text, options),
 }));
@@ -45,10 +48,12 @@ describe("IncidentTextClassifier", () => {
 
   function renderClassifier(doNotSend = false) {
     const onApply = vi.fn();
+    const onPickCategory = vi.fn();
     const onDoNotSendChange = vi.fn();
     render(
       <IncidentTextClassifier
         onApply={onApply}
+        onPickCategory={onPickCategory}
         doNotSend={doNotSend}
         onDoNotSendChange={onDoNotSendChange}
       />
@@ -57,7 +62,7 @@ describe("IncidentTextClassifier", () => {
       target: { value: "田中太郎のスマホが鳴った" },
     });
     fireEvent.click(screen.getByRole("button", { name: "カテゴリを提案" }));
-    return { onApply, onDoNotSendChange };
+    return { onApply, onPickCategory, onDoNotSendChange };
   }
 
   it("shows the de-identified payload and sends only after confirmation; the suggestion is a pre-fill only", async () => {
@@ -128,5 +133,72 @@ describe("IncidentTextClassifier", () => {
     });
     fireEvent.click(screen.getByRole("switch", { name: /外部AIに送らない/ }));
     expect(onDoNotSendChange).toHaveBeenCalledWith(false);
+  });
+
+  it("Jev: shows the percentage, the probability hint and the other candidates as chips (§7)", async () => {
+    send.mockImplementationOnce(async () => ({
+      classification: {
+        ...LLM_RESULT.classification,
+        provider: "jev",
+        probability: 0.914,
+        alternatives: ["fair-play", "team"],
+        prefill: true,
+      },
+    }));
+    const { onApply, onPickCategory } = renderClassifier();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "確認してAIで分類" })
+    );
+    expect(await screen.findByText("AI分類（提案） · 91%")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "確率はAIの推定です。カテゴリはアービターが確定してください。"
+      )
+    ).toBeTruthy();
+    expect(screen.getByText("他の候補")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "フェアプレー" }));
+    expect(onPickCategory).toHaveBeenCalledWith(
+      "fair-play",
+      "田中太郎のスマホが鳴った"
+    );
+    expect(onApply).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "このカテゴリで続ける" })
+    ).toBeTruthy();
+  });
+
+  it("prefill false: no 'continue' button; the top candidates (including the category) are chips", async () => {
+    send.mockImplementationOnce(async () => ({
+      classification: {
+        ...LLM_RESULT.classification,
+        confidence: "low",
+        provider: "jev",
+        probability: 0.42,
+        alternatives: ["fair-play", "team"],
+        prefill: false,
+      },
+    }));
+    const { onPickCategory } = renderClassifier();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "確認してAIで分類" })
+    );
+    expect(await screen.findByText("候補（タップで選択）")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "このカテゴリで続ける" })
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "プレイヤー行動" }));
+    expect(onPickCategory).toHaveBeenCalledWith(
+      "player-behavior",
+      "田中太郎のスマホが鳴った"
+    );
+  });
+
+  it("Gemini (no probability): no percentage", async () => {
+    renderClassifier();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "確認してAIで分類" })
+    );
+    expect(await screen.findByText("AI分類（提案）")).toBeTruthy();
+    expect(screen.queryByText(/%/)).toBeNull();
   });
 });

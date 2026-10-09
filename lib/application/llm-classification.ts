@@ -20,7 +20,7 @@ import {
  *
  * 1. 外部AIガードが記述を確認する。止まった場合（機微な内容の可能性・「外部AIに送らない」）は
  *    端末内のキーワード分類と「外部AIには送信していません（理由: …）」を返す
- * 2. 通った場合は送信内容のプレビューを返す。アービターが確認してから send() で Gemini に送る（D13）
+ * 2. 通った場合は送信内容のプレビューを返す。アービターが確認してから send() でサーバーが示した送り先（Gemini / Jev）に送る（D13）
  * 3. オフライン・失敗・不正な出力の場合はキーワード分類にフォールバックする
  *
  * 結果は**カテゴリ選択の提案（プレフィル）のみ**に使う。決定木の対象となる事象は、
@@ -52,6 +52,10 @@ export interface ClassifyTextOptions {
   doNotSend?: boolean;
 }
 
+/** 確認後に送り先が変わった（サーバーが 409 で拒否。何も送っていない） */
+export const PROVIDER_CHANGED_NOTICE =
+  "AIの送り先が確認時から変わったため送信していません。もう一度「カテゴリを提案」を押して、新しい送り先を確認してください。端末内のキーワード分類を表示しています";
+
 export async function prepareIncidentClassification(
   text: string,
   options: ClassifyTextOptions = {},
@@ -78,6 +82,14 @@ export async function prepareIncidentClassification(
     };
   }
 
+  if (!(deps.isOnline ?? browserIsOnline)())
+    return {
+      status: "done",
+      result: keyword(
+        "オフラインのため端末内のキーワード分類を表示しています（AI分類はオンライン時のみ）"
+      ),
+    };
+
   const guarded = await prepareClassification(input, options, deps);
   if (guarded.status === "local")
     return {
@@ -86,12 +98,14 @@ export async function prepareIncidentClassification(
         `${notSentNotice(guarded.reasons)}。端末内のキーワード分類を表示しています`
       ),
     };
-
-  if (!(deps.isOnline ?? browserIsOnline)())
+  // 送り先を確認できない場合は送らない（プレビューに送り先を示せないため。D13）
+  if (guarded.status === "provider-unknown")
     return {
       status: "done",
       result: keyword(
-        "オフラインのため端末内のキーワード分類を表示しています（AI分類はオンライン時のみ）"
+        guarded.error.code === "offline"
+          ? "オフラインのため端末内のキーワード分類を表示しています（AI分類はオンライン時のみ）"
+          : `AIの送り先を確認できないため送信していません（${guarded.error.message}）。端末内のキーワード分類を表示しています`
       ),
     };
 
@@ -108,7 +122,9 @@ export async function prepareIncidentClassification(
         return keyword(
           res.error.code === "offline"
             ? "オフラインのため端末内のキーワード分類を表示しています（AI分類はオンライン時のみ）"
-            : `AI分類を利用できないため、キーワード分類を表示しています（${res.error.message}）`
+            : res.error.code === "provider-changed"
+              ? PROVIDER_CHANGED_NOTICE
+              : `AI分類を利用できないため、キーワード分類を表示しています（${res.error.message}）`
         );
       }
       const parsed = parseLlmClassification(res.result, { model: res.model });
@@ -127,5 +143,51 @@ export async function prepareIncidentClassification(
         },
       };
     },
+  };
+}
+
+/** 分類結果の表示（jev-classifier-design §7）。判断はしない。表示の形だけを決める */
+export interface ClassificationView {
+  /** 「AI分類（提案）· 91%」の百分率（確率がある場合のみ。四捨五入） */
+  percent?: number;
+  /** 「このカテゴリで続ける」を出すか（prefill: false では出さない） */
+  showContinue: boolean;
+  /**
+   * 候補のチップ（タップでそのカテゴリを選ぶ）。prefill: false では category を含む上位の候補、
+   * それ以外は「他の候補」（category を含まない）
+   */
+  candidates: IncidentCategory[];
+  /** candidates の見出し */
+  candidatesLabel?: "候補（タップで選択）" | "他の候補";
+  /** 確率の注意書きを出すか（百分率を示す場合） */
+  showProbabilityHint: boolean;
+}
+
+export const PROBABILITY_HINT =
+  "確率はAIの推定です。カテゴリはアービターが確定してください。";
+
+export function classificationView(
+  c: IncidentClassification
+): ClassificationView {
+  const prefill = c.prefill !== false;
+  const alternatives = (c.alternatives ?? []).filter((a) => a !== c.category);
+  const candidates = prefill ? alternatives : [c.category, ...alternatives];
+  const percent =
+    c.method === "llm" &&
+    typeof c.probability === "number" &&
+    Number.isFinite(c.probability)
+      ? Math.round(Math.min(1, Math.max(0, c.probability)) * 100)
+      : undefined;
+  return {
+    percent,
+    showContinue: prefill,
+    candidates,
+    candidatesLabel:
+      candidates.length === 0
+        ? undefined
+        : prefill
+          ? "他の候補"
+          : "候補（タップで選択）",
+    showProbabilityHint: percent !== undefined,
   };
 }

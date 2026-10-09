@@ -1221,8 +1221,15 @@ export const FACT_USAGES: readonly FactUsage[] = [
     appliesWhen: is("gr.issue", "mismatch", "resignation-dispute"),
   },
 
-  // ---- 棋譜: fact plan
-  { factId: "ss.issue", category: "scoresheet", level: "blocking" },
+  // ---- 棋譜: fact plan。記入していない・遅れている（Standard）は DT-011（J2-3）。
+  // DT-011 の 8.4 の質問（5分未満か・30秒以上か・ピリオド）は fact の値の粗い形のため対応付けず、
+  // 必要かどうかは従来どおり appliesWhen で決める
+  {
+    factId: "ss.issue",
+    category: "scoresheet",
+    level: "blocking",
+    dtQuestionIds: ["scoresheetIssue"],
+  },
   {
     factId: "ss.moves-behind",
     category: "scoresheet",
@@ -1263,6 +1270,7 @@ export const FACT_USAGES: readonly FactUsage[] = [
   },
   // 設定と手数から求めるだけで質問しない（求められない場合は ss.move-number を尋ねる）
   { factId: "ss.current-period", category: "scoresheet", level: "optional" },
+
   {
     factId: "ss.move-number",
     category: "scoresheet",

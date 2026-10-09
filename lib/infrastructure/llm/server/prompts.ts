@@ -181,7 +181,7 @@ export function buildReasoningUserContent(req: LlmReasoningRequest): string {
 }
 
 export function buildClassificationUserContent(
-  req: LlmClassificationRequest
+  req: Pick<LlmClassificationRequest, "narrative">
 ): string {
   return `次の報告を分類して JSON で出力してください。\n\n${JSON.stringify({ report: req.narrative })}`;
 }

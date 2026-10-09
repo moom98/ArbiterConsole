@@ -1,3 +1,4 @@
+import { answeringProviders } from "../helpers";
 import "fake-indexeddb/auto";
 import { describe, expect, it, vi } from "vitest";
 import benign from "../fixtures/privacy/benign.ja.json";
@@ -218,7 +219,7 @@ describe("client and server agree: whatever the guard sends passes the server (n
         const r = await prepareClassification(
           c.text,
           {},
-          { identifiers: async () => ids, call }
+          { identifiers: async () => ids, call: answeringProviders(call) }
         );
         if (r.status !== "needs-confirmation") continue;
         await r.send();

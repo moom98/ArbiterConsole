@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import {
+  PROBABILITY_HINT,
+  classificationView,
   prepareIncidentClassification,
   type ClassificationStep,
   type ClassifyTextResult,
@@ -16,7 +18,10 @@ import {
   TOUCH_MOVE_LABEL,
   usesStructuredQuestions,
 } from "@/lib/domain/follow-up";
-import { TOUCH_MOVE_SUBTYPE } from "@/lib/domain/entities";
+import {
+  TOUCH_MOVE_SUBTYPE,
+  type IncidentCategory,
+} from "@/lib/domain/entities";
 
 interface IncidentTextClassifierProps {
   disabled?: boolean;
@@ -25,6 +30,8 @@ interface IncidentTextClassifierProps {
   onDoNotSendChange: (value: boolean) => void;
   /** 提案を採用する（カテゴリ・subtype・説明文のプレフィル） */
   onApply: (classification: IncidentClassification, text: string) => void;
+  /** 候補のチップから選ぶ（カテゴリと説明文のプレフィル。jev-classifier-design §7） */
+  onPickCategory: (category: IncidentCategory, text: string) => void;
 }
 
 function subtypeLabel(c: IncidentClassification): string | undefined {
@@ -49,6 +56,7 @@ export function IncidentTextClassifier({
   doNotSend,
   onDoNotSendChange,
   onApply,
+  onPickCategory,
 }: IncidentTextClassifierProps) {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -106,6 +114,7 @@ export function IncidentTextClassifier({
   };
 
   const c = result?.classification ?? null;
+  const view = c ? classificationView(c) : null;
 
   return (
     <section
@@ -122,7 +131,7 @@ export function IncidentTextClassifier({
           setText(e.target.value);
           clear();
         }}
-        placeholder="例: 黒がスマートウォッチを着けている"
+        placeholder="例: 黒がスマートウォッチを着けている（選手名ではなく「白」「黒」で書いてください）"
         className="w-full h-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
       <ExternalAiOptOutSwitch
@@ -167,6 +176,7 @@ export function IncidentTextClassifier({
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-100 text-amber-900">
               {c.method === "llm" ? "AI分類（提案）" : "キーワード分類（提案）"}
+              {view?.percent !== undefined && ` · ${view.percent}%`}
             </span>
             {c.needsTournamentRules && (
               <span className="text-xs font-semibold px-2 py-0.5 rounded bg-purple-100 text-purple-900">
@@ -185,6 +195,36 @@ export function IncidentTextClassifier({
           )}
           {result?.notice && (
             <p className="text-xs text-gray-600 mt-1">{result.notice}</p>
+          )}
+          {view?.showProbabilityHint && (
+            <p className="text-xs text-gray-600 mt-1">{PROBABILITY_HINT}</p>
+          )}
+          {view && view.candidates.length > 0 && (
+            <div className="mt-2">
+              <p
+                id="classifier-candidates-label"
+                className="text-sm font-semibold text-gray-700"
+              >
+                {view.candidatesLabel}
+              </p>
+              <div
+                role="group"
+                aria-labelledby="classifier-candidates-label"
+                className="flex flex-wrap gap-2 mt-1"
+              >
+                {view.candidates.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => onPickCategory(cat, text.trim())}
+                    disabled={disabled}
+                    className="min-h-12 px-4 py-2 rounded-full border-2 border-blue-300 bg-white font-semibold text-blue-900 disabled:opacity-40"
+                  >
+                    {CATEGORY_LABELS[cat]}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
           {c.followUpQuestions.length > 0 && (
             <div className="mt-2">
@@ -210,14 +250,16 @@ export function IncidentTextClassifier({
               </ul>
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => onApply(c, text.trim())}
-            disabled={disabled}
-            className="mt-3 w-full min-h-12 px-4 bg-blue-600 text-white rounded-lg font-semibold disabled:bg-gray-300"
-          >
-            このカテゴリで続ける
-          </button>
+          {view?.showContinue && (
+            <button
+              type="button"
+              onClick={() => onApply(c, text.trim())}
+              disabled={disabled}
+              className="mt-3 w-full min-h-12 px-4 bg-blue-600 text-white rounded-lg font-semibold disabled:bg-gray-300"
+            >
+              このカテゴリで続ける
+            </button>
+          )}
         </div>
       )}
     </section>

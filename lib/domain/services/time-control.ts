@@ -213,10 +213,20 @@ export interface RecordingObligationInput {
   competitionType: CompetitionType;
   /** 記入していない側の時計の、今の残り時間（秒。ss.remaining-time） */
   remainingSeconds?: number;
+  /**
+   * 今の残り時間が5分未満か（ss.remaining-time を5分と比べた回答。DT-011 はこちらを質問する）。
+   * remainingSeconds がある場合はそちらを使う
+   */
+  belowFiveNow?: boolean;
   /** このピリオドの中で、残り時間が一度でも5分を下回ったか（ss.below-five-in-period） */
   belowFiveInPeriod?: boolean;
-  /** 現在のピリオドの1手ごとの加算（秒。ss.increment。設定から求めたもの、または回答） */
+  /** 現在のピリオドの1手ごとの加算（秒。ss.increment。設定から求めたもの） */
   incrementSeconds?: number;
+  /**
+   * 現在のピリオドの加算が30秒以上か（設定から秒数を求められない場合の回答・全ピリオドで同じ場合）。
+   * incrementSeconds がある場合はそちらを使う
+   */
+  incrementAtLeast30?: boolean;
   /**
    * 遅延（Delay）秒数。8.4 は「1手ごとに加算される時間」とだけ定めており、遅延を加算と同じに
    * 扱うかは原典から確定できない。遅延がある場合は免除を確定せず、CAへの確認を求める。
@@ -269,6 +279,10 @@ export function assessRecordingObligation(
   const inc = isNonNegativeInteger(input.incrementSeconds)
     ? input.incrementSeconds
     : undefined;
+  const atLeast30 =
+    inc !== undefined
+      ? inc >= RECORDING_EXEMPTION_MAX_INCREMENT_SECONDS
+      : input.incrementAtLeast30;
   const rem =
     typeof input.remainingSeconds === "number" &&
     Number.isFinite(input.remainingSeconds) &&
@@ -277,15 +291,17 @@ export function assessRecordingObligation(
       : undefined;
   const below = input.belowFiveInPeriod;
 
-  if (inc !== undefined && inc >= RECORDING_EXEMPTION_MAX_INCREMENT_SECONDS) {
+  if (atLeast30 === true) {
     return {
       status: "required",
-      explanation: `1手ごとの加算が${inc}秒（30秒以上）のため、8.4 の免除はありません。8.1.1 により記録が必要です。`,
+      explanation: `1手ごとの加算が${inc !== undefined ? `${inc}秒（30秒以上）` : "30秒以上"}のため、8.4 の免除はありません。8.1.1 により記録が必要です。`,
       sources,
     };
   }
   const lowNow =
-    rem === undefined ? undefined : rem < RECORDING_EXEMPTION_THRESHOLD_SECONDS;
+    rem === undefined
+      ? input.belowFiveNow
+      : rem < RECORDING_EXEMPTION_THRESHOLD_SECONDS;
   // ピリオド中に5分未満になったか: 今5分未満、または「下回った」の回答なら成り立つ。
   // 「下回っていない」の回答なら成り立たない（今も5分以上）。それ以外は不明
   const lowInPeriod =
@@ -305,7 +321,7 @@ export function assessRecordingObligation(
   }
   const hasDelay =
     typeof input.delaySeconds === "number" && input.delaySeconds > 0;
-  if (lowInPeriod === true && inc !== undefined && hasDelay) {
+  if (lowInPeriod === true && atLeast30 === false && hasDelay) {
     return {
       status: "unknown",
       missing: ["delayTreatment"],
@@ -313,7 +329,7 @@ export function assessRecordingObligation(
       sources,
     };
   }
-  if (lowInPeriod === true && inc !== undefined) {
+  if (lowInPeriod === true && atLeast30 === false) {
     return {
       status: "exempt",
       explanation:
@@ -325,9 +341,9 @@ export function assessRecordingObligation(
   }
 
   const missing: RecordingObligationMissing[] = [];
-  if (inc === undefined) missing.push("increment");
+  if (atLeast30 === undefined) missing.push("increment");
   if (lowInPeriod === undefined) {
-    if (rem === undefined) missing.push("remainingTime");
+    if (lowNow === undefined) missing.push("remainingTime");
     else missing.push("belowFiveInPeriod");
   }
   return {
@@ -337,4 +353,71 @@ export function assessRecordingObligation(
       "8.4 の免除に当たるかを判定するには、残り時間・このピリオド中に5分を下回ったか・現在のピリオドの加算が必要です。",
     sources,
   };
+}
+
+// ---------------------------------------------------------------------------
+// DT-011: 現在のピリオドの加算（設定から求める・質問する）
+// ---------------------------------------------------------------------------
+
+/**
+ * 8.4 の判定に使う、現在のピリオドの加算の求め方（DT-011）。
+ * - known:       設定から秒数が決まる（確認済みの単一ピリオド、またはピリオドの回答）
+ * - class-known: どのピリオドでも「30秒以上か」が同じ（ピリオドを尋ねなくてよい）
+ * - ask-period:  確認済みの複数ピリオドで、ピリオドによって変わる（ピリオドを選んでもらう）
+ * - ask-increment: 設定がない・不完全（加算を直接尋ねる）
+ * - unknown:     ピリオドが「わからない」
+ */
+export type RecordingIncrement =
+  | { status: "known"; incrementSeconds: number }
+  | { status: "class-known"; atLeast30: boolean }
+  | { status: "ask-period" }
+  | { status: "ask-increment" }
+  | { status: "unknown" };
+
+/** period: 選ばれたピリオド（1から）または "unknown"。未回答は undefined */
+export function recordingIncrement(
+  tc: TimeControl | undefined,
+  period?: number | "unknown"
+): RecordingIncrement {
+  if (!tc || tc.periodsIncomplete || tc.periods.length === 0)
+    return { status: "ask-increment" };
+  const single = currentPeriod(tc);
+  if (single)
+    return {
+      status: "known",
+      incrementSeconds: single.period.incrementSeconds,
+    };
+  const classes = new Set(
+    tc.periods.map(
+      (p) => p.incrementSeconds >= RECORDING_EXEMPTION_MAX_INCREMENT_SECONDS
+    )
+  );
+  if (classes.size === 1)
+    return { status: "class-known", atLeast30: classes.has(true) };
+  if (period === undefined) return { status: "ask-period" };
+  if (period === "unknown") return { status: "unknown" };
+  const p = tc.periods[period - 1];
+  return p
+    ? { status: "known", incrementSeconds: p.incrementSeconds }
+    : { status: "ask-period" };
+}
+
+/** ピリオドの選択肢（「第2ピリオド（41〜60手目・加算30秒）」）。DT-011 の質問用 */
+export function timeControlPeriodOptions(
+  tc: TimeControl
+): { value: string; label: string }[] {
+  const out: { value: string; label: string }[] = [];
+  let start = 1;
+  tc.periods.forEach((p, i) => {
+    const range =
+      p.moves !== undefined && i < tc.periods.length - 1
+        ? `${start}〜${start + p.moves - 1}手目`
+        : `${start}手目以降`;
+    out.push({
+      value: String(i + 1),
+      label: `第${i + 1}ピリオド（${range}・加算${p.incrementSeconds}秒）`,
+    });
+    if (p.moves !== undefined) start += p.moves;
+  });
+  return out;
 }

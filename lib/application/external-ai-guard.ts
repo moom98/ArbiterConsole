@@ -11,7 +11,9 @@
  * - 対応表（PlaceholderMap）はリクエストごとに作り、メモリ内だけで使う（送信・保存しない）
  */
 import type { IncidentCategory, RuleSourceType } from "@/lib/domain/entities";
+import { getFactDefinition } from "@/lib/domain/facts/catalog";
 import type {
+  ClassifierProvider,
   ExternalAiPreview,
   LlmArticle,
   LlmIncidentSummary,
@@ -41,7 +43,9 @@ import {
   ARTICLE_ID,
   LLM_LIMITS,
   TOURNAMENT_SOURCE_NAME,
+  type LlmApiError,
   type LlmApiResponse,
+  type LlmProvidersInfo,
 } from "@/lib/infrastructure/llm/contract";
 import {
   callLlmApi,
@@ -70,6 +74,60 @@ export interface PendingSend<T> {
 }
 
 const GEMINI = "Gemini（Google）";
+
+/** 分類の送り先の表示名（プレビューに示す。D13） */
+export const CLASSIFIER_PROVIDER_LABELS: Record<ClassifierProvider, string> = {
+  gemini: GEMINI,
+  jev: "Jev（TypeSafe）",
+};
+
+/** 送り先を確認できなかった（送らない）。error は通信・サーバーのエラー */
+export interface ProviderUnknown {
+  status: "provider-unknown";
+  error: LlmApiError;
+}
+
+function isProvidersInfo(v: unknown): v is LlmProvidersInfo {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    (r.classify === "gemini" || r.classify === "jev") &&
+    typeof r.facts === "boolean"
+  );
+}
+
+/** 送り先の確認の待ち時間（上流を呼ばないため短くする。会場の不安定な回線で長く待たせない） */
+export const PROVIDERS_TIMEOUT_MS = 5_000;
+
+/**
+ * サーバーに外部AIの送り先を尋ねる（/api/llm/providers。上流は呼ばない）。
+ * プレビューに実際の送り先を示すため、送信の準備のたびに確かめる（設定は実行時に変わりうる）
+ */
+export async function fetchExternalAiProviders(
+  deps: ExternalAiGuardDeps = {}
+): Promise<{ ok: true; info: LlmProvidersInfo } | ProviderUnknown> {
+  const res = await callOf(deps)(
+    "providers",
+    {},
+    {
+      ...deps,
+      timeoutMs: Math.min(
+        deps.timeoutMs ?? PROVIDERS_TIMEOUT_MS,
+        PROVIDERS_TIMEOUT_MS
+      ),
+    }
+  );
+  if (!res.ok) return { status: "provider-unknown", error: res.error };
+  if (!isProvidersInfo(res.result))
+    return {
+      status: "provider-unknown",
+      error: {
+        code: "upstream-error",
+        message: "AIの送り先を確認できませんでした",
+      },
+    };
+  return { ok: true, info: res.result };
+}
 
 async function knownIdentifiers(
   deps: ExternalAiGuardDeps
@@ -127,9 +185,12 @@ export async function prepareClassification(
   deps: ExternalAiGuardDeps = {}
 ): Promise<
   | NotSent
+  | ProviderUnknown
   | (PendingSend<LlmApiResponse> & {
       /** 応答のプレースホルダーを元の表記へ戻す（このリクエストの対応表） */
       reidentify(text: string): ReidentifyResult;
+      /** プレビューで示した送り先 */
+      provider: ClassifierProvider;
     })
 > {
   const ids = await identifiersOrNull(deps);
@@ -145,17 +206,84 @@ export async function prepareClassification(
   });
   if (!protectedText.ok) return notSent(protectedText);
   const narrative = protectedText.text;
+  // 実際の送り先をサーバーに確かめてからプレビューに示す。送信にも同じ送り先を添え、
+  // サーバーの設定が変わっていれば送らない（provider-changed。D13）
+  const providers = await fetchExternalAiProviders(deps);
+  if (!("ok" in providers)) return providers;
+  const provider = providers.info.classify;
   return {
     status: "needs-confirmation",
     preview: {
-      destination: `カテゴリの提案（${GEMINI}）`,
+      destination: `カテゴリの提案（${CLASSIFIER_PROVIDER_LABELS[provider]}）`,
       fields: [
         { label: "送る記述（名前・日時などは置き換え済み）", text: narrative },
       ],
       notes: [],
     },
-    send: () => callOf(deps)("classify", { narrative }, deps),
+    provider,
+    send: () => callOf(deps)("classify", { narrative, provider }, deps),
     reidentify: (text) => reidentify(text, map),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 報告文での記載の有無（/api/llm/facts。fact-model.md §4）
+// ---------------------------------------------------------------------------
+
+/** fact の判定はこのサーバーで使えない（Jev でない・キーがない）。送らない */
+export interface PresenceUnavailable {
+  status: "unavailable";
+}
+
+/**
+ * 報告文に fact が明示されているか（Jev のみ）。送るのは分類と同じ置き換え・最小化した narrative と、
+ * カタログの fact id（コード）だけ。結果は質問の並べ方にだけ使う（値は埋めない）
+ */
+export async function prepareFactPresence(
+  text: string,
+  factIds: readonly string[],
+  options: IncidentTextOptions = {},
+  deps: ExternalAiGuardDeps = {}
+): Promise<
+  | NotSent
+  | ProviderUnknown
+  | PresenceUnavailable
+  | (PendingSend<LlmApiResponse> & { factIds: readonly string[] })
+> {
+  const ids = Array.from(new Set(factIds)).slice(0, LLM_LIMITS.maxFactIds);
+  if (ids.length === 0) return { status: "unavailable" };
+  const known = await identifiersOrNull(deps);
+  if (!known) return IDENTIFIERS_UNAVAILABLE;
+  const protectedText = protectIncidentText({
+    route: "facts",
+    text,
+    category: options.category,
+    doNotSend: options.doNotSend,
+    identifiers: known,
+    map: new PlaceholderMap(),
+  });
+  if (!protectedText.ok) return notSent(protectedText);
+  const narrative = protectedText.text;
+  const providers = await fetchExternalAiProviders(deps);
+  if (!("ok" in providers)) return providers;
+  if (!providers.info.facts) return { status: "unavailable" };
+  return {
+    status: "needs-confirmation",
+    preview: {
+      destination: `報告文の記載の確認（${CLASSIFIER_PROVIDER_LABELS.jev}）`,
+      fields: [
+        { label: "送る記述（名前・日時などは置き換え済み）", text: narrative },
+        {
+          label: `確認する事実（${ids.length}件。カタログのコードだけを送ります。質問文・回答は送りません）`,
+          text: ids
+            .map((id) => `${id}: ${getFactDefinition(id)?.question ?? id}`)
+            .join("\n"),
+        },
+      ],
+      notes: ["結果は質問の並び順にだけ使います。回答はアービターが選びます"],
+    },
+    factIds: ids,
+    send: () => callOf(deps)("facts", { narrative, factIds: ids }, deps),
   };
 }
 

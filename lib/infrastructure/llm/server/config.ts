@@ -69,6 +69,8 @@ export interface LlmServerConfig {
     classify: number;
     embed: number;
     facts: number;
+    /** 送り先の確認（分類と同じ上限） */
+    providers: number;
   };
   /** プロセス全体の1日あたりの上限（推論・分類。0 は無制限） */
   dailyRequestLimit: number;
@@ -207,6 +209,14 @@ export function readLlmConfig(
         1,
         nonNegativeInt(
           env.LLM_RATE_LIMIT_FACTS_PER_MINUTE,
+          DEFAULT_RATE_LIMIT_PER_MINUTE
+        )
+      ),
+      // 送り先の確認は分類の前に1回ずつ行うため、分類と同じ上限にする
+      providers: Math.max(
+        1,
+        nonNegativeInt(
+          env.LLM_RATE_LIMIT_CLASSIFY_PER_MINUTE,
           DEFAULT_RATE_LIMIT_PER_MINUTE
         )
       ),

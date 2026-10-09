@@ -74,7 +74,9 @@ export type DecisionTreeId =
   /** Automatic Draw: 五回同一局面（9.6.1）・75手（9.6.2） */
   | "DT-006-automatic-draw"
   /** Touch Move: 触れた駒の規則（Article 4。ADR-014 §6） */
-  | "DT-007-touch-move";
+  | "DT-007-touch-move"
+  /** 棋譜の記録義務: 8.4 の免除（8.1.1 / 8.4。ADR-014 §7） */
+  | "DT-011-recording-obligation";
 
 /** 判断の種類 */
 export type DecisionKind =

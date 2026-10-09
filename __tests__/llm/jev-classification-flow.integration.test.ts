@@ -10,7 +10,10 @@ import {
   type LlmApiKind,
   type LlmApiResponse,
 } from "@/lib/infrastructure/llm/contract";
-import { createLlmRouteHandler } from "@/lib/infrastructure/llm/server/handler";
+import {
+  createLlmRouteHandler,
+  createProvidersRouteHandler,
+} from "@/lib/infrastructure/llm/server/handler";
 import { readLlmConfig } from "@/lib/infrastructure/llm/server/config";
 import { DailyRequestCounter } from "@/lib/infrastructure/llm/server/rate-limiter";
 import { fixedProviders, FIXED_NOW } from "../helpers";
@@ -53,10 +56,18 @@ function wiring(answers: unknown) {
     dailyCounter: new DailyRequestCounter(),
     log: () => {},
   });
+  const providers = createProvidersRouteHandler({
+    config: () =>
+      readLlmConfig({
+        LLM_CLASSIFIER_PROVIDER: "jev",
+        TYPESAFE_API_KEY: "ts-test-key",
+      }),
+    log: () => {},
+  });
   // クライアントの callLlmApi の代わりに、同じプロセスのハンドラーへ送る
   const call = vi.fn(
     async (kind: LlmApiKind, body: unknown): Promise<LlmApiResponse> => {
-      const res = await handler(
+      const res = await (kind === "providers" ? providers : handler)(
         new Request(`http://localhost${LLM_API_PATHS[kind]}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -84,8 +95,11 @@ describe("Jev classification flow (guard → handler → domain → decision tre
     const step = await prepareIncidentClassification(text, {}, deps);
     if (step.status !== "needs-confirmation")
       throw new Error("must ask before sending");
-    // 確認するまで何も送らない（D13）
-    expect(call).not.toHaveBeenCalled();
+    // プレビューには実際の送り先（Jev）を示す（J2-1）
+    expect(step.preview.destination).toBe("カテゴリの提案（Jev（TypeSafe））");
+    // 確認するまで分類は送らない（送り先の確認だけ。D13）
+    expect(call.mock.calls.map((c) => c[0])).toEqual(["providers"]);
+    expect(upstream).not.toHaveBeenCalled();
     const result = await step.send();
 
     expect(upstream).toHaveBeenCalledTimes(1);

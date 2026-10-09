@@ -7,6 +7,7 @@ import {
   type LlmApiKind,
   type LlmApiResponse,
   type LlmGenerateKind,
+  type LlmProvidersInfo,
 } from "../contract";
 import { readLlmConfig, resolveThinking, type LlmServerConfig } from "./config";
 import {
@@ -50,6 +51,7 @@ import {
   validateClassificationRequest,
   validateEmbedRequest,
   validateFactPresenceRequest,
+  validateProvidersRequest,
   validateReasoningRequest,
   type Validated,
 } from "./request-validation";
@@ -124,6 +126,7 @@ function jevRetry(retry: RetryOptions): RetryOptions {
 const STATUS: Record<LlmApiErrorCode, number> = {
   "invalid-request": 400,
   "not-sendable": 400,
+  "provider-changed": 409,
   "unsupported-media-type": 415,
   "payload-too-large": 413,
   "rate-limited": 429,
@@ -153,6 +156,8 @@ const MESSAGES: Partial<Record<LlmApiErrorCode, string>> = {
   "upstream-error": "AIサービスの呼び出しに失敗しました",
   "invalid-model-output": "AIの応答を解釈できませんでした",
   blocked: "AIが応答を返しませんでした（安全性フィルタ等）",
+  "provider-changed":
+    "AIの送り先が確認時から変わったため送信しませんでした。もう一度確認してください",
 };
 
 function json(
@@ -349,6 +354,9 @@ export function routeKeyConfigured(
       return (
         config.classifierProvider === "jev" && Boolean(config.typesafeApiKey)
       );
+    // 送り先の確認は上流を呼ばない。facts の可否は TypeSafe のキーの有無を含む（トークンの内側。§15.1）
+    case "providers":
+      return true;
   }
 }
 
@@ -516,6 +524,11 @@ function classifyHandler(deps: LlmHandlerDeps) {
 
     const v = validateClassificationRequest(guarded.body);
     if (!v.ok) return rejected("classify", v, deps);
+    // プレビューで示した送り先と違えば送らない（D13）。日次上限も消費しない
+    if (v.value.provider !== config.classifierProvider) {
+      deps.log({ route: "classify", code: "provider-changed" });
+      return fail("provider-changed");
+    }
 
     if (!deps.dailyCounter.take(config.dailyRequestLimit)) {
       deps.log({ route: "classify", code: "quota-exceeded" });
@@ -566,6 +579,33 @@ function classifyHandler(deps: LlmHandlerDeps) {
       { ok: true, result: outcome.result, model: outcome.model },
       200
     );
+  };
+}
+
+/**
+ * /api/llm/providers: 外部AIの送り先（分類のプロバイダー・fact の判定の可否）を返す。
+ * 送信前のプレビューに実際の送り先を示すため（D13）。上流は呼ばず、日次上限も消費しない。
+ * 返すのはコードだけ（キー・モデル名・設定値は返さない）
+ */
+export function createProvidersRouteHandler(
+  overrides: Partial<BaseHandlerDeps> = {}
+): (req: Request) => Promise<Response> {
+  const deps: BaseHandlerDeps = {
+    ...baseDefaults,
+    dailyCounter: sharedDailyCounter,
+    ...overrides,
+  };
+  return async (req: Request): Promise<Response> => {
+    const guarded = await guard("providers", req, deps);
+    if (!guarded.ok) return guarded.response;
+    const v = validateProvidersRequest(guarded.body);
+    if (!v.ok) return rejected("providers", v, deps);
+    const { config } = guarded;
+    const info: LlmProvidersInfo = {
+      classify: config.classifierProvider,
+      facts: routeKeyConfigured("facts", config),
+    };
+    return json({ ok: true, result: info, model: "" }, 200);
   };
 }
 

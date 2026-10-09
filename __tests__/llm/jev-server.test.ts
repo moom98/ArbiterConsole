@@ -383,7 +383,9 @@ describe("classify handler – provider switch (ADR-011)", () => {
       GEMINI_API_KEY: GEMINI_KEY,
       TYPESAFE_API_KEY: TYPESAFE_KEY,
     });
-    const res = await handler(request({ narrative: NARRATIVE }));
+    const res = await handler(
+      request({ narrative: NARRATIVE, provider: "gemini" })
+    );
     expect(res.status).toBe(200);
     expect(generate).toHaveBeenCalledTimes(1);
     expect(fetch).not.toHaveBeenCalled();
@@ -407,7 +409,9 @@ describe("classify handler – provider switch (ADR-011)", () => {
     const { handler, generate } = classifyHandler(JEV_ENV, {
       fetch: fetchMock,
     });
-    const res = await handler(request({ narrative: NARRATIVE }));
+    const res = await handler(
+      request({ narrative: NARRATIVE, provider: "jev" })
+    );
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.model).toBe("jev-1.13.1");
@@ -435,7 +439,9 @@ describe("classify handler – provider switch (ADR-011)", () => {
       GEMINI_API_KEY: GEMINI_KEY,
       LLM_CLASSIFIER_PROVIDER: "jev",
     });
-    const res = await handler(request({ narrative: NARRATIVE }));
+    const res = await handler(
+      request({ narrative: NARRATIVE, provider: "gemini" })
+    );
     expect(res.status).toBe(503);
     expect((await errorOf(res)).code).toBe("not-configured");
     expect(fetch).not.toHaveBeenCalled();
@@ -444,7 +450,9 @@ describe("classify handler – provider switch (ADR-011)", () => {
 
   it("jev without GEMINI_API_KEY: classify works, reason and embed return 503", async () => {
     const { handler } = classifyHandler(JEV_ENV);
-    expect((await handler(request({ narrative: NARRATIVE }))).status).toBe(200);
+    expect(
+      (await handler(request({ narrative: NARRATIVE, provider: "jev" }))).status
+    ).toBe(200);
 
     const generate = vi.fn<GenerateJsonFn>();
     const reason = createLlmRouteHandler("reason", {
@@ -468,14 +476,23 @@ describe("classify handler – provider switch (ADR-011)", () => {
 
   it("gemini provider without GEMINI_API_KEY → 503 (TypeSafe key is not enough)", async () => {
     const { handler } = classifyHandler({ TYPESAFE_API_KEY: TYPESAFE_KEY });
-    expect((await handler(request({ narrative: NARRATIVE }))).status).toBe(503);
+    expect(
+      (await handler(request({ narrative: NARRATIVE, provider: "gemini" })))
+        .status
+    ).toBe(503);
   });
 
   it.each([
-    ["fair play", { narrative: "相手がエンジンを使っている疑いがある" }],
+    [
+      "fair play",
+      { narrative: "相手がエンジンを使っている疑いがある", provider: "jev" },
+    ],
     [
       "a narrative the server pattern pass would change",
-      { narrative: "白の時計のフラッグが13時に落ちたと黒が申し立てた" },
+      {
+        narrative: "白の時計のフラッグが13時に落ちたと黒が申し立てた",
+        provider: "jev",
+      },
     ],
     ["the legacy { text } body", { text: NARRATIVE }],
   ])("jev: %s is rejected before any provider runs", async (_n, body) => {
@@ -490,7 +507,9 @@ describe("classify handler – provider switch (ADR-011)", () => {
       category: choice("cheating", { cheating: 1 }),
     });
     const { handler } = classifyHandler(JEV_ENV, { fetch: fetchMock });
-    const res = await handler(request({ narrative: NARRATIVE }));
+    const res = await handler(
+      request({ narrative: NARRATIVE, provider: "jev" })
+    );
     expect(res.status).toBe(502);
     expect((await errorOf(res)).code).toBe("invalid-model-output");
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -499,7 +518,7 @@ describe("classify handler – provider switch (ADR-011)", () => {
       jsonResponse({ model: "jev-1.13.0" })
     );
     const res2 = await classifyHandler(JEV_ENV, { fetch: malformed }).handler(
-      request({ narrative: NARRATIVE })
+      request({ narrative: NARRATIVE, provider: "jev" })
     );
     expect((await errorOf(res2)).code).toBe("invalid-model-output");
     expect(malformed).toHaveBeenCalledTimes(1);
@@ -510,7 +529,7 @@ describe("classify handler – provider switch (ADR-011)", () => {
       async () => new Response("{}", { status: 401 })
     );
     const res = await classifyHandler(JEV_ENV, { fetch: unauthorized }).handler(
-      request({ narrative: NARRATIVE })
+      request({ narrative: NARRATIVE, provider: "jev" })
     );
     expect(res.status).toBe(502);
     expect((await errorOf(res)).code).toBe("upstream-error");
@@ -520,7 +539,7 @@ describe("classify handler – provider switch (ADR-011)", () => {
       async () => new Response("{}", { status: 429 })
     );
     const res2 = await classifyHandler(JEV_ENV, { fetch: busy }).handler(
-      request({ narrative: NARRATIVE })
+      request({ narrative: NARRATIVE, provider: "jev" })
     );
     expect(res2.status).toBe(503);
     expect(busy).toHaveBeenCalledTimes(3);
@@ -556,7 +575,12 @@ describe("classify handler – provider switch (ADR-011)", () => {
       const res = await classifyHandler(env, {
         retry,
         classifierFor: () => failing,
-      }).handler(request({ narrative: NARRATIVE }));
+      }).handler(
+        request({
+          narrative: NARRATIVE,
+          provider: env === JEV_ENV ? "jev" : "gemini",
+        })
+      );
       expect(res.status).toBe(503);
       return { timeouts: [...timeouts], remaining: [...remainingAtStart] };
     };
@@ -593,7 +617,9 @@ describe("classify handler – provider switch (ADR-011)", () => {
       fetch: hanging,
       timeoutMs: { reason: 20, classify: 20 },
     });
-    const res = await handler(request({ narrative: NARRATIVE }));
+    const res = await handler(
+      request({ narrative: NARRATIVE, provider: "jev" })
+    );
     expect(res.status).toBe(504);
     expect((await errorOf(res)).code).toBe("upstream-timeout");
     expect(hanging).toHaveBeenCalledTimes(3);
@@ -608,7 +634,7 @@ describe("classify handler – provider switch (ADR-011)", () => {
         : jsonResponse({ model: "jev-1.13.0", answers: jevClassifyAnswers() })
     );
     const res = await classifyHandler(JEV_ENV, { fetch: flaky }).handler(
-      request({ narrative: NARRATIVE })
+      request({ narrative: NARRATIVE, provider: "jev" })
     );
     expect(res.status).toBe(200);
     expect(flaky).toHaveBeenCalledTimes(2);
@@ -620,9 +646,9 @@ describe("classify handler – provider switch (ADR-011)", () => {
         new Response(`{"detail":[{"input":"${NARRATIVE}"}]}`, { status: 422 })
     );
     const ok = classifyHandler(JEV_ENV);
-    await ok.handler(request({ narrative: NARRATIVE }));
+    await ok.handler(request({ narrative: NARRATIVE, provider: "jev" }));
     const bad = classifyHandler(JEV_ENV, { fetch: leaky });
-    await bad.handler(request({ narrative: NARRATIVE }));
+    await bad.handler(request({ narrative: NARRATIVE, provider: "jev" }));
     const logged = JSON.stringify([
       ...ok.log.mock.calls,
       ...bad.log.mock.calls,

@@ -60,6 +60,7 @@ import {
 } from "@/lib/domain/services/mate-possibility";
 import { touchObligation } from "@/lib/domain/services/touch-move";
 import { lastPeriodFromTimeControl } from "@/lib/domain/services/time-control";
+import { RecordingObligationTree } from "@/lib/domain/decision-trees/dt-011-recording-obligation";
 import type { LlmAssistOutcome, LlmAssistPort } from "@/lib/domain/llm/ports";
 import type { ExternalAiPreview } from "@/lib/domain/llm/types";
 import { notSentNotice } from "@/lib/domain/llm/external-ai";
@@ -498,6 +499,25 @@ export class DecisionEngine {
       }
     }
 
+    // 棋譜: 記入していない・遅れている（Standard）は DT-011（8.1.1 / 8.4。ADR-014 §7）。
+    // それ以外の問題・Rapid / Blitz は決定木の対象外（従来どおり）
+    if (incident.category === "scoresheet") {
+      if (incident.subtype === undefined)
+        return this.ask(incident, [QUESTIONS.scoresheetIssue], rulesVersion);
+      if (
+        (incident.subtype === "not-writing" || incident.subtype === "behind") &&
+        competitionType === "standard"
+      )
+        return this.finish(
+          incident,
+          new RecordingObligationTree(this.providers, rulesVersion).evaluate({
+            facts: incident.scoresheetFacts ?? {},
+            timeControl: ruleset.timeControl,
+          }),
+          rulesVersion
+        );
+    }
+
     if (incident.category === "draw") {
       if (incident.subtype === undefined)
         return this.ask(incident, [QUESTIONS.drawSubtype], rulesVersion);
@@ -809,6 +829,7 @@ export { DT_004_ID } from "@/lib/domain/decision-trees/dt-004-flag-fall";
 export { DT_005_ID } from "@/lib/domain/decision-trees/dt-005-draw-claim";
 export { DT_006_ID } from "@/lib/domain/decision-trees/dt-006-automatic-draw";
 export { DT_007_ID } from "@/lib/domain/decision-trees/dt-007-touch-move";
+export { DT_011_ID } from "@/lib/domain/decision-trees/dt-011-recording-obligation";
 
 /**
  * 違法手の事実から、J1b-8 より前の「対局は終了していたか（はい/いいえ）」を除く。

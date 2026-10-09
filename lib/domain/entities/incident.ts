@@ -119,6 +119,28 @@ export type EndedBeforeFlag =
   | "stalemate"
   | "other";
 
+/**
+ * 棋譜の問題（ss.issue。要件 §20）。scoresheet カテゴリの Incident.subtype に入る。
+ * not-writing / behind は DT-011（FIDE 8.4 の記録義務の免除）で扱う
+ */
+export type ScoresheetIssue =
+  "not-writing" | "behind" | "pre-written" | "illegible" | "wrong";
+
+/** 現在のピリオドの加算の回答（ss.increment を設定から求められない場合。DT-011） */
+export type RecordingIncrementAnswer = "at-least-30" | "below-30" | "delay";
+
+/** DT-011 の構造化された回答（「わからない」は "unknown"） */
+export interface ScoresheetFacts {
+  /** ss.remaining-time を5分と比べた回答: 今の残り時間が5分未満か */
+  belowFiveNow?: boolean | "unknown";
+  /** ss.below-five-in-period */
+  belowFiveInPeriod?: boolean | "unknown";
+  /** 現在のピリオド（1から。設定のピリオドで加算が異なる場合だけ質問する） */
+  period?: number | "unknown";
+  /** 現在のピリオドの加算（設定がない・不完全な場合だけ質問する） */
+  increment?: RecordingIncrementAnswer | "unknown";
+}
+
 /** 結果の記入・署名の状態（game.record-state。要件 §20） */
 export type GameRecordState = "none" | "written" | "one-signed" | "both-signed";
 
@@ -394,6 +416,8 @@ export interface Incident {
   drawClaimFacts?: Partial<DrawClaimFacts>;
   /** 触れた駒の規則（subtype touch-move。DT-007）の構造化された回答 */
   touchMoveFacts?: Partial<TouchMoveFacts>;
+  /** 棋譜の記録義務（scoresheet の not-writing / behind。DT-011）の構造化された回答 */
+  scoresheetFacts?: ScoresheetFacts;
   /**
    * 「わからない・確認できない」と回答された追加質問の ID（fact-model §3.3）。
    * 該当する事実の値は未設定のまま。未回答（needs-input）とは区別され、

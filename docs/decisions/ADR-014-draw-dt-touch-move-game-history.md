@@ -160,6 +160,10 @@ A new domain service, `assessMatePossibility(position)`, replaces both the count
   - The old profile form never offered a second period, so a legacy `{ initialMinutes, incrementSeconds }` may hide one. **Every legacy value becomes one period marked `periodsIncomplete: true`**, not just values with `additionalTimeAfterMove`. The profile form asks the arbiter to confirm the periods.
   - For DT-004, an explicit `lastPeriod` answer takes precedence over the value derived from the settings. The derived value only fills an unanswered or "unknown" question, so an incomplete setting can never override "not the last period" into a draw.
   - A delay (`delaySeconds`) is not treated as "additional time added with each move". With a delay, the 8.4 assessment does not confirm the exemption (consult the CA).
+- **Amendment (J2-3, 2026-10-09): the tree is DT-011** (`lib/domain/decision-trees/dt-011-recording-obligation.ts`; DT-008 to DT-010 are retired numbers). Scoresheet incidents first ask the issue (`ss.issue`); "記入していない" and "遅れている" in Standard go to DT-011, every other issue and Rapid/Blitz stay outside the trees (AI reference / CA).
+  - The remaining time is asked as "under 5:00 / 5:00 or more / unknown" rather than as a duration, because 8.4 only needs the comparison.
+  - The increment comes from the time control. When all periods agree on "30 s or more", no period is asked; when they differ, the arbiter picks the period from a list built from the profile (one tap) instead of typing the move number. With no or an unconfirmed time control, the increment itself is asked (30 s or more / under 30 s / delay / unknown).
+  - An increment of 30 s or more gives "recording required" without asking the clock. Any unknown answer, an unknown period or a delay gives "consult the CA". No penalty is applied automatically (12.9).
 
 ## Consequences
 

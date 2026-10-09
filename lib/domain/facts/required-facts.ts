@@ -40,7 +40,15 @@ export interface RequiredFact {
   definition: FactDefinition;
   usage: FactUsage;
   level: FactLevel;
+  /**
+   * 記録のための fact（判断を止めない）。未回答でも DT の判断は確定してよく、不足の一覧には
+   * 「記録用」として出す（例: game.record-state。fact-model §3.9）
+   */
+  recordOnly: boolean;
 }
+
+/** 判断には使わず記録に残す fact（fact-model §3.1, §3.9） */
+export const RECORD_ONLY_FACTS: readonly FactId[] = ["game.record-state"];
 
 /** カテゴリ・サブタイプに当てはまる usage（カタログの順） */
 export function usagesFor(
@@ -89,7 +97,12 @@ export function requiredFacts(input: RequiredFactsInput): RequiredFact[] {
     const definition = getFactDefinition(usage.factId);
     if (!definition) continue;
     seen.add(usage.factId);
-    result.push({ definition, usage, level: usage.level });
+    result.push({
+      definition,
+      usage,
+      level: usage.level,
+      recordOnly: RECORD_ONLY_FACTS.includes(usage.factId),
+    });
   }
   return result;
 }
@@ -112,4 +125,40 @@ export function presenceCheckableFacts(
   return required.filter(
     (r) => r.definition.presenceCheckable && !r.definition.localOnly
   );
+}
+
+/** DT の質問と、その報告文での記載の有無を判定できる fact（fact-model.md §4.1） */
+export interface PresenceTarget {
+  questionId: IncidentQuestionId;
+  factId: FactId;
+}
+
+/**
+ * DT が求めた質問のうち、Jev で「報告文に明示されているか」を判定できるものと、その fact。
+ * 対応する fact がない質問・端末内だけの fact・設定から求める fact・値を計算で渡す fact
+ * （dtValues: "computed"）は含めない。
+ * 同じ fact に複数の質問が対応する場合は、fact を1回だけ尋ねる（全質問に結果を使う）
+ */
+export function presenceTargets(
+  category: IncidentCategory,
+  subtype: string | undefined,
+  questionIds: readonly IncidentQuestionId[]
+): PresenceTarget[] {
+  const out: PresenceTarget[] = [];
+  for (const questionId of questionIds) {
+    const usage = usagesFor(category, subtype).find((u) =>
+      u.dtQuestionIds?.includes(questionId)
+    );
+    // 値を計算で質問へ渡す fact（例: tch.special → 昇格の質問）は、記載の有無が質問と一致しない
+    if (!usage || usage.dtValues === "computed") continue;
+    const definition = getFactDefinition(usage.factId);
+    if (
+      !definition?.presenceCheckable ||
+      definition.localOnly ||
+      definition.derivedFrom !== undefined
+    )
+      continue;
+    out.push({ questionId, factId: usage.factId });
+  }
+  return out;
 }

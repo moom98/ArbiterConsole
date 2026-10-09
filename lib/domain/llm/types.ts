@@ -118,6 +118,11 @@ export interface LlmCitationDraft {
  */
 export interface LlmClassificationRequest {
   narrative: string;
+  /**
+   * 送信前のプレビューで示した分類のプロバイダー。サーバーの設定と違えば上流を呼ばずに
+   * provider-changed で拒否する（プレビューの送り先と実際の送り先を一致させる。D13）
+   */
+  provider: ClassifierProvider;
 }
 
 /**

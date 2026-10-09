@@ -195,7 +195,7 @@ Full text is in `docs/decisions/`. Do not re-decide these in conversation.
 
 - tsc is clean.
 - eslint (`app components lib __tests__ scripts`) reports 0 problems.
-- 85 files / 1671 tests pass.
+- 85 files / 1680 tests pass (after the review fixes).
 - `npm run build` succeeds.
 - `node scripts/eval-classifier.mjs check` reports no errors and no held-back reports.
 - There were no live calls (no keys).
@@ -426,6 +426,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
   - チーム / キャプテン and 「席を離れて会場の外に出た」 are always held back at gate-raw. スマートウォッチ and 「黒が駒に触れた」 are held back at gate-redacted.
   - So captain incidents, leaving the playing area and plain touch-move notes never reach AI classification (keywords only), and the evaluation cannot measure them.
   - Ask the user whether these words may be sent once de-identified (a change to the J1a gate, D12/D13), or whether keyword-only is acceptable for them.
+- **Presence dataset size vs held-out Wilson (J3-1 review).** fact-model §5.2 asks for 250 / 160 explicit reports per fact, but step 2 also requires the Wilson bound on held-out, so each split needs ~190 / ~125 clean predictions (≈ 400 / 260 reports). The code follows step 2 (no relaxation). Ask the user: keep the stricter held-out bound and write the larger dataset (J3-2), or allow held-out to check precision only.
 - Whether the user's federation applies 1 or 2 minutes for Blitz B.2 (adequate supervision).
 - **Custom domain:** whether to use one, or the default `*.workers.dev` URL.
 
@@ -490,8 +491,8 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
    - **J3:**
      - **J3-1: done 2026-10-09** (`milestones/j3-1-eval-tooling.md`): evaluation script, datasets, fitting, acceptance gate.
      - **J3-2 (next, no key needed):** the presence dataset `__tests__/fixtures/presence-eval.ja.json`.
-       - At least 250 explicit reports per blocking fact (160 for the others), and as many inferred / near-miss / absent ones.
-       - Split about 80 % tuning / 20 % held-out. Blocking facts first.
+       - Size depends on the open question above: about 400 explicit reports per blocking fact (260 for the others) if held-out keeps the Wilson bound, and as many inferred / near-miss / absent ones.
+       - Blocking facts first.
        - Every report must pass the guard (`node scripts/eval-classifier.mjs check`).
      - **J3-3 (user's machine, real keys):** follow "How to run J3-3" in the J3-1 milestone.
        - Then check the ±0.02 probability-sum tolerance in the report;
@@ -513,7 +514,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
    - The evaluation script needs `npm ci` (esbuild is a devDependency). It writes into `docs/progress/eval/` and `lib/domain/llm/calibration/`.
    - The privacy package's reviews used independent reviewer agents that wrote their own synthetic sensitive phrases; keep doing that for any change to `lib/domain/privacy/` (the author's own fixtures say little).
    - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/<slice>-*.md` and update this file.
-   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (85 files / 1671 tests after J3-1; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
+   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (85 files / 1680 tests after J3-1; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
    - The project tsconfig has no `target` (tsc treats it as ES5): avoid regex-literal flags such as `/u` or `/s` and `matchAll`; use `new RegExp(source, flags)` and `exec` loops, as `lib/domain/privacy/` does.
    - In a nested worktree, run eslint as `npx eslint --no-eslintrc -c .eslintrc.json --ext .ts,.tsx app components lib __tests__`.
 3. Do not edit `docs/requirements/product-requirements.md` for implementation convenience.

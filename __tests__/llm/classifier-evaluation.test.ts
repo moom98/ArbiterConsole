@@ -1,4 +1,5 @@
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -27,6 +28,7 @@ import {
   CLASSIFICATION_DATASET,
   PRESENCE_DATASET,
   main,
+  minimizeRaw,
   type EvalDeps,
 } from "@/scripts/eval/eval-classifier";
 
@@ -196,7 +198,51 @@ describe("runClassificationEval", () => {
     );
     expect(records[2].notSent).toBeDefined();
     expect(classify).toHaveBeenCalledTimes(2);
-    expect(records[0].error).toBe("TypeError");
+    expect(records[0]).toMatchObject({
+      error: "TypeError",
+      errorKind: "transport",
+    });
+  });
+
+  it("records a model error separately from a transport error", async () => {
+    const records = await runClassificationEval(tiny, async () => ({
+      ok: false,
+      error: "invalid-model-output",
+      attempts: 1,
+    }));
+    expect(records[0]).toMatchObject({
+      error: "invalid-model-output",
+      errorKind: "model",
+      attempts: 1,
+    });
+  });
+
+  it("holds back a narrative the server would reject as fair-play", () => {
+    expect(
+      deidentifyEvalText("白が対局中にフェアプレー違反を申告した", IDS)
+    ).toMatchObject({ ok: false });
+  });
+
+  it("rejects an invalid concurrency", async () => {
+    await expect(
+      runClassificationEval(tiny, async () => ({ ok: false, error: "x" }), {
+        concurrency: Number.NaN,
+      })
+    ).rejects.toThrow("concurrency");
+  });
+});
+
+describe("minimizeRaw", () => {
+  it("drops free-text fields that could restate the report", () => {
+    expect(
+      minimizeRaw({
+        category: "draw",
+        confidence: "medium",
+        missingInformation: ["白が…"],
+        followUpQuestions: ["…"],
+        provider: "jev",
+      })
+    ).toEqual({ category: "draw", confidence: "medium", provider: "jev" });
   });
 });
 
@@ -351,9 +397,46 @@ describe("scripts/eval/eval-classifier main", () => {
       join(root, "docs/progress/eval/classifier-eval-jev-1.13.0.md"),
       "utf8"
     );
-    // Gemini の結果がないため不合格（比較できない）
+    // Gemini の結果がないため不合格（比較できない）→ 較正のファイルは書かない
     expect(report).toContain("**Acceptance (§9.3): FAIL**");
     expect(report).toContain("| accuracy-vs-gemini | not evaluated |");
+    expect(report).toContain("no calibration file was written");
+    expect(
+      existsSync(join(root, "lib/domain/llm/calibration/jev-1.13.0.json"))
+    ).toBe(false);
+
+    // Gemini の結果（同じデータセット。正解を返したとする）を加えると合格し、較正を書く
+    const jevFile = JSON.parse(raw);
+    const geminiFile = {
+      ...jevFile,
+      provider: "gemini",
+      models: ["gemini-flash-lite-latest"],
+      records: jevFile.records.map((r: Record<string, unknown>) => ({
+        ...r,
+        model: "gemini-flash-lite-latest",
+        raw: { category: r.label, confidence: "medium" },
+      })),
+    };
+    writeFileSync(join(resultsDir, "gemini.json"), JSON.stringify(geminiFile));
+    expect(
+      await main(
+        [
+          "fit",
+          "--jev",
+          `docs/progress/eval/results/${cls}`,
+          "--gemini",
+          "docs/progress/eval/results/gemini.json",
+          "--presence",
+          `docs/progress/eval/results/${pres}`,
+        ],
+        deps
+      )
+    ).toBe(0);
+    const passed = readFileSync(
+      join(root, "docs/progress/eval/classifier-eval-jev-1.13.0.md"),
+      "utf8"
+    );
+    expect(passed).toContain("**Acceptance (§9.3): PASS**");
     const calibration = JSON.parse(
       readFileSync(
         join(root, "lib/domain/llm/calibration/jev-1.13.0.json"),
@@ -364,6 +447,73 @@ describe("scripts/eval/eval-classifier main", () => {
     expect(calibration.category).toEqual({ medium: 0.91, prefill: 0.91 });
     // presence は 0.1 しか返さない → しきい値なし
     expect(calibration.presence).toEqual({});
+  });
+
+  it("fit refuses mixed models, datasets or file kinds", async () => {
+    const { root, deps, log } = setup();
+    expect(await main(["run", "--provider", "jev"], deps)).toBe(0);
+    const resultsDir = join(root, "docs/progress/eval/results");
+    const cls = readdirSync(resultsDir)[0];
+    const jevFile = JSON.parse(readFileSync(join(resultsDir, cls), "utf8"));
+    const write = (name: string, v: unknown) =>
+      writeFileSync(join(resultsDir, name), JSON.stringify(v));
+    write("presence-other.json", {
+      kind: "presence",
+      provider: "jev",
+      dataset: { id: "p", version: "1" },
+      runAt: "x",
+      models: ["jev-1.12.0"],
+      records: [],
+    });
+    write("gemini-other.json", {
+      ...jevFile,
+      provider: "gemini",
+      dataset: { id: jevFile.dataset.id, version: "0" },
+    });
+    write("bad-model.json", { ...jevFile, models: ["a/../../x"] });
+    const fitWith = (...extra: string[]) =>
+      main(
+        ["fit", "--jev", `docs/progress/eval/results/${cls}`, ...extra],
+        deps
+      );
+
+    expect(
+      await fitWith(
+        "--presence",
+        "docs/progress/eval/results/presence-other.json"
+      )
+    ).toBe(1);
+    expect(log.join("\n")).toContain("presence の model（jev-1.12.0）");
+    expect(
+      await fitWith("--gemini", "docs/progress/eval/results/gemini-other.json")
+    ).toBe(1);
+    expect(log.join("\n")).toContain("データセット（id・version）が一致しない");
+    // Jev の結果を --gemini に渡した（provider が違う）
+    expect(await fitWith("--gemini", `docs/progress/eval/results/${cls}`)).toBe(
+      1
+    );
+    expect(
+      await main(
+        ["fit", "--jev", "docs/progress/eval/results/bad-model.json"],
+        deps
+      )
+    ).toBe(1);
+    expect(log.join("\n")).toContain("model 名をファイル名に使えない");
+    expect(
+      existsSync(join(root, "docs/progress/eval/classifier-eval-jev-1.13.0.md"))
+    ).toBe(false);
+  });
+
+  it("run rejects a non-integer --concurrency before sending", async () => {
+    const { deps } = setup();
+    const fetchSpy = vi.fn();
+    expect(
+      await main(["run", "--provider", "jev", "--concurrency", "x"], {
+        ...deps,
+        fetch: fetchSpy,
+      })
+    ).toBe(2);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("presence is evaluated for Jev only", async () => {

@@ -45,6 +45,17 @@ import {
   jevClassifyIncident,
 } from "@/lib/infrastructure/llm/server/classify-port";
 import { readLlmConfig } from "@/lib/infrastructure/llm/server/config";
+import {
+  DEFAULT_RETRY,
+  withRetry,
+  withTimeout,
+  type RetryOptions,
+} from "@/lib/infrastructure/llm/server/generate";
+import {
+  CLASSIFY_ATTEMPT_TIMEOUT_MS,
+  JEV_ATTEMPT_TIMEOUT_MS,
+  jevRetry,
+} from "@/lib/infrastructure/llm/server/handler";
 import { createJevEvaluate } from "@/lib/infrastructure/llm/server/jev-client";
 import {
   buildJevPresenceQuestions,
@@ -58,8 +69,6 @@ export const PRESENCE_DATASET = "__tests__/fixtures/presence-eval.ja.json";
 export const RESULTS_DIR = "docs/progress/eval/results";
 export const REPORTS_DIR = "docs/progress/eval";
 export const CALIBRATION_DIR = "lib/domain/llm/calibration";
-
-const ATTEMPT_TIMEOUT_MS = 30_000;
 
 export interface EvalDeps {
   root: string;
@@ -142,8 +151,41 @@ function check(deps: EvalDeps): number {
 // run
 // ---------------------------------------------------------------------------
 
-function signal(): AbortSignal {
-  return AbortSignal.timeout(ATTEMPT_TIMEOUT_MS);
+/** 本番と同じ再試行（handler.ts: 分類は 3 回・全体 30 秒、Jev は 1 回 3 秒・全体 10 秒） */
+function retryOptions(provider: EvalProvider): RetryOptions {
+  const base: RetryOptions = {
+    ...DEFAULT_RETRY,
+    now: () => Date.now(),
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    random: Math.random,
+  };
+  return provider === "jev" ? jevRetry(base) : base;
+}
+
+const attemptTimeoutMs = (provider: EvalProvider) =>
+  provider === "jev" ? JEV_ATTEMPT_TIMEOUT_MS : CLASSIFY_ATTEMPT_TIMEOUT_MS;
+
+/**
+ * 結果ファイルに残す欄だけにする（§18.2: 本文を書かない）。Gemini の missingInformation・
+ * followUpQuestions は記述を言い換えうるため捨てる。parseLlmClassification が使う欄だけ残す
+ */
+export function minimizeRaw(raw: unknown): unknown {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return raw;
+  const keep = [
+    "category",
+    "categoryProbabilities",
+    "subtype",
+    "subtypeProbability",
+    "needsTournamentRules",
+    "needsTournamentRulesProbability",
+    "playerColor",
+    "confidence",
+    "provider",
+  ];
+  const r = raw as Record<string, unknown>;
+  return Object.fromEntries(
+    keep.filter((k) => Object.hasOwn(r, k)).map((k) => [k, r[k]])
+  );
 }
 
 export function classifierFor(
@@ -170,16 +212,26 @@ export function classifierFor(
               await import("@/lib/infrastructure/llm/server/gemini-client")
             ).geminiGenerateJson(req)
         );
+  const perAttemptMs = attemptTimeoutMs(provider);
+  // 通信の失敗は再試行後に例外のまま投げる（runner が transport として記録する）
   return async (narrative) => {
-    const outcome = await classify({
-      narrative,
-      config,
-      timeoutMs: ATTEMPT_TIMEOUT_MS,
-      signal: signal(),
-    });
+    const { value: outcome, attempts } = await withRetry(
+      (_attempt, remainingMs) => {
+        const timeoutMs = Math.max(1, Math.min(perAttemptMs, remainingMs));
+        return withTimeout(timeoutMs, (signal) =>
+          classify({ narrative, config, timeoutMs, signal })
+        );
+      },
+      retryOptions(provider)
+    );
     return outcome.ok
-      ? { ok: true, raw: outcome.result, model: outcome.model }
-      : { ok: false, error: outcome.code };
+      ? {
+          ok: true,
+          raw: minimizeRaw(outcome.result),
+          model: outcome.model,
+          attempts,
+        }
+      : { ok: false, error: outcome.code, attempts };
   };
 }
 
@@ -192,13 +244,21 @@ export function presenceFor(deps: EvalDeps): EvalPresenceFn {
   const evaluate = createJevEvaluate(deps.fetch);
   return async (narrative, factIds) => {
     try {
-      const response = await evaluate({
-        apiKey: config.typesafeApiKey ?? "",
-        model: config.jevModel,
-        state: buildJevState(narrative),
-        questions: buildJevPresenceQuestions(factIds),
-        signal: signal(),
-      });
+      const { value: response } = await withRetry((_attempt, remainingMs) => {
+        const timeoutMs = Math.max(
+          1,
+          Math.min(JEV_ATTEMPT_TIMEOUT_MS, remainingMs)
+        );
+        return withTimeout(timeoutMs, (signal) =>
+          evaluate({
+            apiKey: config.typesafeApiKey ?? "",
+            model: config.jevModel,
+            state: buildJevState(narrative),
+            questions: buildJevPresenceQuestions(factIds),
+            signal,
+          })
+        );
+      }, retryOptions("jev"));
       return {
         ok: true,
         presence: jevAnswersToRawPresence(response.answers, factIds).presence,
@@ -237,6 +297,10 @@ async function run(argv: readonly string[], deps: EvalDeps): Promise<number> {
     return 1;
   }
   const concurrency = Number(arg(argv, "concurrency") ?? "1");
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    deps.log("--concurrency は 1 以上の整数");
+    return 2;
+  }
   const progress = (done: number, total: number) => {
     if (done === total || done % 20 === 0) deps.log(`  ${done}/${total}`);
   };
@@ -371,6 +435,10 @@ export function renderReport(input: {
         })
       : undefined;
 
+  const heldOutNotSent = (category: string) =>
+    input.jev.records.filter(
+      (r) => r.split === "held-out" && r.label === category && r.notSent
+    ).length;
   const notSent = (f: ResultsFile<{ notSent?: string }>) =>
     f.records.filter((r) => r.notSent).length;
   const lines: string[] = [
@@ -392,20 +460,20 @@ export function renderReport(input: {
     "",
     "## Category (held-out)",
     "",
-    "| Provider | n | invalid | accuracy | top-2 | p50 | p95 |",
+    "| Provider | n | invalid (transport) | accuracy | top-2 | p50 | p95 |",
     "| --- | --- | --- | --- | --- | --- | --- |",
-    `| Jev | ${jevHeld.n} | ${jevHeld.invalid} | ${pct(jevHeld.accuracy)} | ${pct(jevHeld.top2Accuracy)} | ${ms(jevHeld.latency.p50)} | ${ms(jevHeld.latency.p95)} |`,
+    `| Jev | ${jevHeld.n} | ${jevHeld.invalid} (${jevHeld.transportErrors}) | ${pct(jevHeld.accuracy)} | ${pct(jevHeld.top2Accuracy)} | ${ms(jevHeld.latency.p50)} | ${ms(jevHeld.latency.p95)} |`,
     ...(geminiHeld
       ? [
-          `| Gemini | ${geminiHeld.n} | ${geminiHeld.invalid} | ${pct(geminiHeld.accuracy)} | - | ${ms(geminiHeld.latency.p50)} | ${ms(geminiHeld.latency.p95)} |`,
+          `| Gemini | ${geminiHeld.n} | ${geminiHeld.invalid} (${geminiHeld.transportErrors}) | ${pct(geminiHeld.accuracy)} | - | ${ms(geminiHeld.latency.p50)} | ${ms(geminiHeld.latency.p95)} |`,
         ]
       : []),
     "",
-    "| Category | Jev | Gemini |",
-    "| --- | --- | --- |",
+    "| Category | not sent | Jev | Gemini |",
+    "| --- | --- | --- | --- |",
     ...Object.entries(jevHeld.perCategory).map(
       ([c, v]) =>
-        `| ${c} | ${pct(v!.accuracy)} (${v!.correct}/${v!.n}) | ${geminiHeld?.perCategory[c as keyof typeof geminiHeld.perCategory] ? pct(geminiHeld.perCategory[c as keyof typeof geminiHeld.perCategory]!.accuracy) : "-"} |`
+        `| ${c} | ${heldOutNotSent(c)} | ${pct(v!.accuracy)} (${v!.correct}/${v!.n}) | ${geminiHeld?.perCategory[c as keyof typeof geminiHeld.perCategory] ? pct(geminiHeld.perCategory[c as keyof typeof geminiHeld.perCategory]!.accuracy) : "-"} |`
     ),
     "",
     "## Thresholds (tuning → held-out)",
@@ -452,12 +520,66 @@ export function renderReport(input: {
   lines.push(
     "## Calibration",
     "",
-    calibration
-      ? `Written to \`${CALIBRATION_DIR}/${model}.json\`. Register it in \`JEV_CALIBRATIONS\` only if the gate passed and after review.`
-      : "Not built (medium/prefill not confirmed on held-out, or more than one model).",
+    calibration && gate.accepted
+      ? `Written to \`${CALIBRATION_DIR}/${model}.json\`. Register it in \`JEV_CALIBRATIONS\` after review (design §18.2).`
+      : calibration
+        ? `Thresholds were found, but the gate failed: **no calibration file was written**. Values for reference: medium ${calibration.category.medium}, prefill ${calibration.category.prefill}${calibration.subtype !== undefined ? `, subtype ${calibration.subtype}` : ""}.`
+        : "Not built (medium/prefill not confirmed on held-out).",
     ""
   );
   return { markdown: lines.join("\n"), calibration, accepted: gate.accepted };
+}
+
+/** ファイル名に使ってよいモデル名（パスの区切り・.. を含まない） */
+const SAFE_MODEL_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+export function isSafeModelName(model: string): boolean {
+  return SAFE_MODEL_NAME.test(model) && model.indexOf("..") < 0;
+}
+
+/**
+ * 結果ファイルの組み合わせを確かめる。モデル・データセットが混ざった較正は作らない
+ * （fact-model §5: 較正はモデルごと）。問題がなければ空配列
+ */
+export function checkResultFiles(input: {
+  jev: ResultsFile<ClassificationRecord>;
+  gemini?: ResultsFile<ClassificationRecord>;
+  presence?: ResultsFile<PresenceRecord>;
+}): string[] {
+  const errors: string[] = [];
+  const expect = (
+    name: string,
+    f: { kind?: unknown; provider?: unknown } | undefined,
+    kind: string,
+    provider: string
+  ) => {
+    if (f && (f.kind !== kind || f.provider !== provider))
+      errors.push(`--${name} は ${kind}/${provider} の結果ファイルでない`);
+  };
+  expect("jev", input.jev, "classification", "jev");
+  expect("gemini", input.gemini, "classification", "gemini");
+  expect("presence", input.presence, "presence", "jev");
+  const models = input.jev.models ?? [];
+  if (models.length !== 1)
+    errors.push(
+      `Jev の応答の model が1つでない: ${models.join(", ") || "なし"}`
+    );
+  else if (!isSafeModelName(models[0]))
+    errors.push(`model 名をファイル名に使えない: ${models[0]}`);
+  if (input.presence) {
+    const pm = input.presence.models ?? [];
+    if (pm.length !== 1 || pm[0] !== models[0])
+      errors.push(
+        `presence の model（${pm.join(", ") || "なし"}）が分類の model（${models.join(", ")}）と一致しない`
+      );
+  }
+  if (
+    input.gemini &&
+    (input.gemini.dataset?.id !== input.jev.dataset?.id ||
+      input.gemini.dataset?.version !== input.jev.dataset?.version)
+  )
+    errors.push("Gemini と Jev のデータセット（id・version）が一致しない");
+  return errors;
 }
 
 function fit(argv: readonly string[], deps: EvalDeps): number {
@@ -466,27 +588,34 @@ function fit(argv: readonly string[], deps: EvalDeps): number {
     deps.log("--jev <results file> を指定する");
     return 2;
   }
-  const jev = readJson<ResultsFile<ClassificationRecord>>(deps.root, jevPath);
   const geminiPath = arg(argv, "gemini");
   const presencePath = arg(argv, "presence");
-  const createdAt = deps.now().toISOString();
-  const { markdown, calibration, accepted } = renderReport({
-    jev,
+  const files = {
+    jev: readJson<ResultsFile<ClassificationRecord>>(deps.root, jevPath),
     gemini: geminiPath
       ? readJson<ResultsFile<ClassificationRecord>>(deps.root, geminiPath)
       : undefined,
     presence: presencePath
       ? readJson<ResultsFile<PresenceRecord>>(deps.root, presencePath)
       : undefined,
-    createdAt,
+  };
+  const errors = checkResultFiles(files);
+  if (errors.length) {
+    errors.forEach((e) => deps.log(`ERROR ${e}`));
+    return 1;
+  }
+  const { markdown, calibration, accepted } = renderReport({
+    ...files,
+    createdAt: deps.now().toISOString(),
   });
-  const model = jev.models[0] ?? "unknown";
+  const model = files.jev.models[0];
   const report = `${REPORTS_DIR}/classifier-eval-${model}.md`;
   const full = resolve(deps.root, report);
   mkdirSync(dirname(full), { recursive: true });
   writeFileSync(full, markdown);
   deps.log(`書き出した: ${report}`);
-  if (calibration) {
+  // 不合格の較正はソースツリーに置かない（JEV_CALIBRATIONS へ写し間違えないため）
+  if (calibration && accepted) {
     const out = `${CALIBRATION_DIR}/${model}.json`;
     writeJson(deps.root, out, calibration);
     deps.log(`書き出した: ${out}`);

@@ -7,6 +7,7 @@ import {
 import { parseFactPresence } from "@/lib/domain/llm/presence";
 import { isValidJevCalibration } from "@/lib/domain/llm/calibration";
 import {
+  EVALUATED_CATEGORIES,
   buildJevCalibration,
   chooseThreshold,
   evaluateAcceptance,
@@ -420,7 +421,7 @@ describe("fitPresence", () => {
   it("needs about 190 clean present predictions for a blocking fact", () => {
     const enough = fitPresence([
       ...presenceRecords("im.action", "tuning", 200, 200),
-      ...presenceRecords("im.action", "held-out", 50, 50),
+      ...presenceRecords("im.action", "held-out", 200, 50),
     ])[0];
     expect(enough.accepted).toBe(true);
     expect(enough.tuning!.threshold).toBe(0.97);
@@ -428,16 +429,27 @@ describe("fitPresence", () => {
 
     const tooFew = fitPresence([
       ...presenceRecords("im.action", "tuning", 150, 150),
-      ...presenceRecords("im.action", "held-out", 50, 50),
+      ...presenceRecords("im.action", "held-out", 200, 50),
     ])[0];
     expect(tooFew.accepted).toBe(false);
     expect(tooFew.tuning).toBeUndefined();
   });
 
+  it("requires the same Wilson bound on held-out (fact-model §5.2 step 2)", () => {
+    const fit = fitPresence([
+      ...presenceRecords("im.action", "tuning", 200, 200),
+      ...presenceRecords("im.action", "held-out", 50, 50),
+    ])[0];
+    expect(fit.tuning?.threshold).toBe(0.97);
+    expect(fit.heldOut?.precision).toBe(1);
+    expect(fit.heldOut!.wilson).toBeLessThan(0.98);
+    expect(fit.accepted).toBe(false);
+  });
+
   it("rejects a fact with a false 'present' on held-out", () => {
     const records = [
       ...presenceRecords("im.action", "tuning", 200, 200),
-      ...presenceRecords("im.action", "held-out", 50, 50),
+      ...presenceRecords("im.action", "held-out", 200, 50),
     ];
     // held-out の「記載なし」の1件が高い確率
     const absent = records.find((r) => r.split === "held-out" && !r.present)!;
@@ -450,7 +462,7 @@ describe("fitPresence", () => {
   it("treats a missing answer as missing and skips reports that were not sent", () => {
     const records = [
       ...presenceRecords("game.record-state", "tuning", 130, 10),
-      ...presenceRecords("game.record-state", "held-out", 20, 5),
+      ...presenceRecords("game.record-state", "held-out", 130, 5),
       {
         caseId: "x1",
         split: "tuning" as const,
@@ -478,7 +490,7 @@ describe("fitPresence", () => {
   it("puts only accepted facts into the calibration, and parseFactPresence uses them", () => {
     const presence = fitPresence([
       ...presenceRecords("im.action", "tuning", 200, 200),
-      ...presenceRecords("im.action", "held-out", 50, 50),
+      ...presenceRecords("im.action", "held-out", 200, 50),
       ...presenceRecords("im.noticed-by", "tuning", 20, 20),
       ...presenceRecords("im.noticed-by", "held-out", 5, 5),
     ]);
@@ -516,7 +528,17 @@ describe("fitPresence", () => {
 describe("evaluateAcceptance", () => {
   const obs = observe(syntheticRun(60));
   const heldOut = obs.filter((o) => o.split === "held-out");
-  const jev = summarizeClassification(heldOut, "jev");
+  const drawOnly = summarizeClassification(heldOut, "jev");
+  // 評価するカテゴリをすべて含む要約（合成データは draw だけのため）
+  const jev = {
+    ...drawOnly,
+    perCategory: Object.fromEntries(
+      EVALUATED_CATEGORIES.map((c) => [
+        c,
+        drawOnly.perCategory[c] ?? { n: 10, correct: 10, accuracy: 1 },
+      ])
+    ),
+  };
   const category = fitCategory(obs);
 
   it("fails without a Gemini comparison", () => {
@@ -532,7 +554,7 @@ describe("evaluateAcceptance", () => {
     });
   });
 
-  it("passes when every item holds and fails on a 2-point drop, latency or several models", () => {
+  it("passes with a 2-point drop, and fails on a 3-point drop, slow p95 or several models", () => {
     const gemini = { ...jev, accuracy: jev.accuracy + 0.02 };
     const ok = evaluateAcceptance({
       jevHeldOut: jev,
@@ -567,6 +589,32 @@ describe("evaluateAcceptance", () => {
         jevModels: [MODEL, "jev-1.14.0"],
       }).accepted
     ).toBe(false);
+  });
+
+  it("fails when a category is missing or too small on held-out (all held back)", () => {
+    const { team: _team, ...perCategory } = jev.perCategory;
+    const r = evaluateAcceptance({
+      jevHeldOut: { ...jev, perCategory },
+      geminiHeldOut: jev,
+      category,
+      jevModels: [MODEL],
+    });
+    const item = r.items.find((i) => i.id === "per-category")!;
+    expect(item.pass).toBe(false);
+    expect(item.detail).toContain("team n=0");
+  });
+
+  it("fails when a transport error survived the retries", () => {
+    const r = evaluateAcceptance({
+      jevHeldOut: { ...jev, transportErrors: 2 },
+      geminiHeldOut: jev,
+      category,
+      jevModels: [MODEL],
+    });
+    expect(r.items.find((i) => i.id === "transport")).toMatchObject({
+      pass: false,
+      detail: expect.stringContaining("Jev 2"),
+    });
   });
 
   it("fails when a category is below 80% on held-out", () => {

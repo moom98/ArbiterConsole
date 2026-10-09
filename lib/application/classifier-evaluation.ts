@@ -5,11 +5,12 @@ import {
 } from "@/lib/domain/follow-up";
 import { getFactDefinition } from "@/lib/domain/facts/catalog";
 import type { FactId } from "@/lib/domain/facts/types";
-import { INCIDENT_CATEGORIES } from "@/lib/domain/llm/classification";
-import type {
-  ClassificationRecord,
-  EvalSplit,
-  PresenceRecord,
+import { mentionsFairPlay } from "@/lib/domain/llm/keyword-classifier";
+import {
+  EVALUATED_CATEGORIES,
+  type ClassificationRecord,
+  type EvalSplit,
+  type PresenceRecord,
 } from "@/lib/domain/llm/calibration/fit";
 import {
   PlaceholderMap,
@@ -29,8 +30,7 @@ import {
 
 export const MIN_CASES_PER_CATEGORY = 15;
 /** 評価するカテゴリ（fair-play は送らないため除く） */
-export const EVAL_CATEGORIES: readonly IncidentCategory[] =
-  INCIDENT_CATEGORIES.filter((c) => c !== "fair-play");
+export const EVAL_CATEGORIES = EVALUATED_CATEGORIES;
 
 /** Jev に subtype の質問があるカテゴリ（jev-questions.ts と同じ） */
 const SUBTYPE_LABELS: Partial<
@@ -168,9 +168,10 @@ export function deidentifyEvalText(
     identifiers,
     map: new PlaceholderMap(),
   });
-  return result.ok
-    ? { ok: true, narrative: result.text }
-    : { ok: false, stage: result.stage };
+  if (!result.ok) return { ok: false, stage: result.stage };
+  // サーバーの入力検証（request-validation）と同じ: フェアプレーに触れる記述は 400 で送れない
+  if (mentionsFairPlay(result.text)) return { ok: false, stage: "fair-play" };
+  return { ok: true, narrative: result.text };
 }
 
 /** ガードの集計（送らなかった件数。カテゴリまたは fact ごと） */
@@ -198,11 +199,15 @@ export function summarizeDeidentification<T extends { text: string }>(
   return out;
 }
 
-/** 分類のポート。raw はプロバイダーの生の出力（サーバーの ClassifyIncidentFn と同じ） */
+/**
+ * 分類のポート。raw はプロバイダーの出力（サーバーの ClassifyIncidentFn と同じ。ただし
+ * 自由記述の欄は除く）。例外は再試行後の通信の失敗として記録する
+ */
 export type EvalClassifyFn = (
   narrative: string
 ) => Promise<
-  { ok: true; raw: unknown; model: string } | { ok: false; error: string }
+  | { ok: true; raw: unknown; model: string; attempts?: number }
+  | { ok: false; error: string; attempts?: number }
 >;
 
 /** 記載の有無のポート。factIds の確率（応答にない fact は含めない） */
@@ -215,7 +220,7 @@ export type EvalPresenceFn = (
 >;
 
 export interface RunOptions {
-  /** 同時に送る件数（既定 1。応答時間を正しく測るため） */
+  /** 同時に送る件数（既定 1。応答時間を正しく測るため）。1 以上の整数 */
   concurrency?: number;
   now?: () => number;
   /** 進捗（件数だけ。本文は出さない） */
@@ -228,6 +233,8 @@ async function mapLimited<T, R>(
   fn: (item: T) => Promise<R>,
   onDone?: (done: number) => void
 ): Promise<R[]> {
+  if (!Number.isInteger(limit) || limit < 1)
+    throw new Error("concurrency must be an integer >= 1");
   const results = new Array<R>(items.length);
   let next = 0;
   let done = 0;
@@ -273,10 +280,27 @@ export async function runClassificationEval(
         const res = await classify(d.narrative);
         const latencyMs = now() - started;
         return res.ok
-          ? { ...base, model: res.model, raw: res.raw, latencyMs }
-          : { ...base, error: res.error, latencyMs };
+          ? {
+              ...base,
+              model: res.model,
+              raw: res.raw,
+              attempts: res.attempts,
+              latencyMs,
+            }
+          : {
+              ...base,
+              error: res.error,
+              errorKind: "model",
+              attempts: res.attempts,
+              latencyMs,
+            };
       } catch (error) {
-        return { ...base, error: errorCode(error), latencyMs: now() - started };
+        return {
+          ...base,
+          error: errorCode(error),
+          errorKind: "transport",
+          latencyMs: now() - started,
+        };
       }
     },
     (done) => options.onProgress?.(done, dataset.cases.length)

@@ -18,6 +18,10 @@ import { isValidJevCalibration, type JevCalibration } from "./index";
  */
 
 export type EvalSplit = "tuning" | "held-out";
+
+/** 評価するカテゴリ（fair-play は外部AIに送らないため除く） */
+export const EVALUATED_CATEGORIES: readonly IncidentCategory[] =
+  INCIDENT_CATEGORIES.filter((c) => c !== "fair-play");
 export type EvalProvider = "jev" | "gemini";
 
 // ---------------------------------------------------------------------------
@@ -46,6 +50,8 @@ export const ACCEPTANCE = {
   maxAccuracyDropVsGemini: 0.02,
   /** held-out のカテゴリごとの正解率（件数が少ないため目安） */
   minPerCategoryAccuracy: 0.8,
+  /** held-out で評価できたカテゴリごとの最小件数（ガードで止まって減った場合は不合格） */
+  minHeldOutPerCategory: 5,
   /** p95 の応答時間（ミリ秒） */
   maxP95LatencyMs: 1_000,
 } as const;
@@ -68,7 +74,7 @@ export function wilsonLowerBound(
   return Math.max(0, (centre - margin) / (1 + z2 / n));
 }
 
-/** 昇順の配列の分位点（最近傍法）。空なら undefined */
+/** 分位点（最近傍法。入力は並べ替えなくてよい）。空なら undefined */
 export function percentile(
   values: readonly number[],
   q: number
@@ -183,7 +189,7 @@ export function fitThreshold(
 // 分類の観測
 // ---------------------------------------------------------------------------
 
-/** 評価の1件の生の記録（スクリプトが保存する。aplication 層の runner が作る） */
+/** 評価の1件の生の記録（スクリプトが保存する。application 層の runner が作る） */
 export interface ClassificationRecord {
   caseId: string;
   split: EvalSplit;
@@ -195,6 +201,10 @@ export interface ClassificationRecord {
   model?: string;
   raw?: unknown;
   error?: string;
+  /** transport: 再試行しても通信が失敗した / model: 応答はあったが使えない */
+  errorKind?: "transport" | "model";
+  /** 試行回数（本番と同じ再試行） */
+  attempts?: number;
   latencyMs?: number;
 }
 
@@ -205,6 +215,8 @@ export interface ClassificationObservation {
   labelSubtype?: string;
   /** ドメインの検証（parseLlmClassification）を通った */
   valid: boolean;
+  /** 通信の失敗（不正解に数えるが、レポートでは別に示す） */
+  transportError?: boolean;
   predicted?: IncidentCategory;
   /** 予測したカテゴリの確率（Jev のみ） */
   probability?: number;
@@ -238,7 +250,11 @@ export function toClassificationObservation(
     latencyMs: record.latencyMs,
   };
   if (record.error || record.raw === undefined)
-    return { ...base, valid: false };
+    return {
+      ...base,
+      valid: false,
+      ...(record.errorKind === "transport" ? { transportError: true } : {}),
+    };
 
   let probabilitySum: number | undefined;
   if (provider === "jev" && isObject(record.raw)) {
@@ -298,6 +314,8 @@ export interface ClassificationSummary {
   n: number;
   /** ドメインの検証を通らなかった件数（本番ではキーワード分類になる） */
   invalid: number;
+  /** そのうち通信の失敗（再試行後も）。0 でなければ評価をやり直す */
+  transportErrors: number;
   accuracy: number;
   /** Jev のみ（確率の上位2件に正解がある） */
   top2Accuracy?: number;
@@ -341,6 +359,7 @@ export function summarizeClassification(
   const summary: ClassificationSummary = {
     n,
     invalid: observations.filter((o) => !o.valid).length,
+    transportErrors: observations.filter((o) => o.transportError).length,
     accuracy: ratio(correct, n),
     perCategory,
     latency: {
@@ -476,8 +495,8 @@ export interface PresenceFit extends FittedThreshold {
 }
 
 /**
- * fact ごとに「記載あり」のしきい値を選ぶ（precision と Wilson 下限は tuning、
- * held-out は precision の目標だけ。held-out は件数が少ないため Wilson は記録のみ）
+ * fact ごとに「記載あり」のしきい値を選ぶ。tuning と held-out の両方で、precision の目標と
+ * Wilson 下限を満たすこと（fact-model §5.2 の手順 2「同じ目標」。ADR-013 Q-F2）
  */
 export function fitPresence(records: readonly PresenceRecord[]): PresenceFit[] {
   const factIds = Array.from(new Set(records.map((r) => r.factId))).sort();
@@ -496,7 +515,7 @@ export function fitPresence(records: readonly PresenceRecord[]): PresenceFit[] {
         }));
     const fit = fitThreshold(points("tuning"), points("held-out"), {
       tuning: { target: target.precision, minWilson: target.wilson },
-      heldOut: { target: target.precision },
+      heldOut: { target: target.precision, minWilson: target.wilson },
     });
     const count = (split: EvalSplit) => {
       const s = sent.filter((r) => r.split === split);
@@ -637,6 +656,7 @@ export interface GateItem {
     | "per-category"
     | "calibration"
     | "latency"
+    | "transport"
     | "single-model";
   pass: boolean;
   /** 判定できなかった（Gemini の結果がない等）。pass は false */
@@ -676,18 +696,38 @@ export function evaluateAcceptance(input: {
     });
   }
 
-  const low = Object.entries(jev.perCategory).filter(
-    ([, v]) => v!.accuracy < ACCEPTANCE.minPerCategoryAccuracy
-  );
+  // 評価するカテゴリはすべて（fair-play を除く）。件数が足りないカテゴリも不合格
+  const problems: string[] = [];
+  for (const c of EVALUATED_CATEGORIES) {
+    const v = jev.perCategory[c];
+    if (!v || v.n < ACCEPTANCE.minHeldOutPerCategory)
+      problems.push(
+        `${c} n=${v?.n ?? 0}（${ACCEPTANCE.minHeldOutPerCategory} 件未満）`
+      );
+    else if (v.accuracy < ACCEPTANCE.minPerCategoryAccuracy)
+      problems.push(`${c} ${pct(v.accuracy)}`);
+  }
   items.push({
     id: "per-category",
-    pass: jev.n > 0 && low.length === 0,
+    pass: problems.length === 0,
     detail:
-      low.length === 0
+      problems.length === 0
         ? `すべてのカテゴリが ${pct(ACCEPTANCE.minPerCategoryAccuracy)} 以上`
-        : `${pct(ACCEPTANCE.minPerCategoryAccuracy)} 未満: ${low
-            .map(([c, v]) => `${c} ${pct(v!.accuracy)}`)
-            .join(", ")}`,
+        : `${pct(ACCEPTANCE.minPerCategoryAccuracy)} 未満または件数不足: ${problems.join(", ")}`,
+  });
+
+  const transport = [
+    ["Jev", jev.transportErrors],
+    ["Gemini", input.geminiHeldOut?.transportErrors ?? 0],
+  ] as const;
+  const failed = transport.filter(([, n]) => n > 0);
+  items.push({
+    id: "transport",
+    pass: failed.length === 0,
+    detail:
+      failed.length === 0
+        ? "通信の失敗なし"
+        : `通信の失敗（再試行後）: ${failed.map(([p, n]) => `${p} ${n}`).join(", ")}。評価をやり直す`,
   });
 
   const { medium, prefill } = input.category;

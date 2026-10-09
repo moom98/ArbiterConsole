@@ -112,7 +112,10 @@ export const JEV_ATTEMPT_TIMEOUT_MS = 3_000;
 export const JEV_TOTAL_DEADLINE_MS = 10_000;
 const JEV_MIN_REMAINING_FOR_RETRY_MS = 1_000;
 
-function jevRetry(retry: RetryOptions): RetryOptions {
+/** 分類（Gemini）の1回の試行のタイムアウト（評価スクリプトも同じ値を使う） */
+export const CLASSIFY_ATTEMPT_TIMEOUT_MS = 8_000;
+
+export function jevRetry(retry: RetryOptions): RetryOptions {
   return {
     ...retry,
     totalDeadlineMs: Math.min(retry.totalDeadlineMs, JEV_TOTAL_DEADLINE_MS),
@@ -212,7 +215,7 @@ const defaultDeps: LlmHandlerDeps = {
     throw new Error("generate is not configured");
   },
   dailyCounter: sharedDailyCounter,
-  timeoutMs: { reason: 20_000, classify: 8_000 },
+  timeoutMs: { reason: 20_000, classify: CLASSIFY_ATTEMPT_TIMEOUT_MS },
 };
 
 const defaultFactsDeps: FactsHandlerDeps = {

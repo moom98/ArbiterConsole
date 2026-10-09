@@ -11,7 +11,7 @@
 This container has no TypeSafe or Gemini key; they live only on the user's machine (`~/.config/arbiter-console/`) and in Cloudflare secrets. So:
 
 - **J3-1 (this slice):** everything that runs without a key.
-- **J3-2:** the presence dataset (≥ 250 explicit reports per blocking fact, ≥ 160 for the others, 80/20 split).
+- **J3-2:** the presence dataset (size depends on an open question: ~400 / ~260 explicit reports per fact if held-out keeps the Wilson bound).
 - **J3-3 (user's machine):** run with keys, review the report, register the calibration, then switch production.
 
 ## Completed work
@@ -21,7 +21,7 @@ This container has no TypeSafe or Gemini key; they live only on the user's machi
   - `chooseThreshold`: the lowest observed `p` (never 0) whose `p ≥ t` set meets precision, support and Wilson; every candidate is checked;
   - `fitThreshold`: tuning → held-out;
   - `toClassificationObservation`: the domain's own `parseLlmClassification` (uncalibrated) decides validity, and invalid output is a miss. The probability sum is recorded before validation;
-  - `summarizeClassification`, `fitCategory` (medium 0.90 / prefill 0.80, min. support 20 / 10; subtype 0.90), `fitPresence` (blocking 0.995 + Wilson 0.98, others 0.99 + 0.97; held-out precision only), `buildJevCalibration`, `evaluateAcceptance`.
+  - `summarizeClassification`, `fitCategory` (medium 0.90 / prefill 0.80, min. support 20 / 10; subtype 0.90), `fitPresence` (blocking 0.995 + Wilson 0.98, others 0.99 + 0.97, on both tuning and held-out), `buildJevCalibration`, `evaluateAcceptance`.
 - **`lib/application/classifier-evaluation.ts`:** dataset types and validation; `deidentifyEvalText` (production `protectIncidentText`); runners with injected ports. Presence cases of the same text go in one request.
 - **`scripts/eval-classifier.mjs`** bundles **`scripts/eval/eval-classifier.ts`** with esbuild and runs:
   - `check`: datasets and guard counts, no network;
@@ -51,14 +51,29 @@ See design §18.2. In short:
 
 - `npx tsc --noEmit`: clean.
 - eslint (`app components lib __tests__ scripts`): 0 problems.
-- `npx vitest run`: 85 files / 1671 tests pass. New: `__tests__/llm/calibration-fit.test.ts` (24) and `__tests__/llm/classifier-evaluation.test.ts` (13), including a `run → fit` pass through `main` with a fake Jev `fetch` in a temporary root.
+- `npx vitest run`: see the numbers after the review fixes in `current.md`. New: `__tests__/llm/calibration-fit.test.ts` (27) and `__tests__/llm/classifier-evaluation.test.ts` (19), including a `run → fit` pass through `main` with a fake Jev `fetch` in a temporary root.
 - `npm run build`: succeeds.
 - `node scripts/eval-classifier.mjs check`: 180 + 22 reports, 0 held back, no errors.
 - Not done: any live call (no keys here).
 
 ## Review
 
-See the "Review" section below. It is filled in after the independent review.
+The independent read-only reviewer gave **FIX REQUIRED** (1 must-fix, 7 should-fix, nits). All were fixed in the review-fix commit:
+
+- **Must-fix:** `fit` mixed models and datasets. A presence run under another `JEV_MODEL`, or a Gemini run on another dataset version, went into the calibration or the comparison silently. `checkResultFiles` now refuses mismatches (exit 1).
+- **Should-fix:**
+  - a non-integer `--concurrency` produced an empty run (now exit 2, and the runner throws);
+  - the calibration JSON was written on a FAILed gate (now only on PASS);
+  - a category missing from held-out passed the per-category item (now every category needs ≥ 5 evaluated reports, and the report shows the held-back count);
+  - the eval used 30 s timeouts and no retries (now the production values and `withRetry`, with transport errors recorded apart and gated);
+  - Gemini's free-text fields reached the results files (`minimizeRaw`);
+  - presence held-out had no Wilson bound, which relaxed a user decision. It now has the bound, and the dataset size is an open question for the user;
+  - an unsafe model name was used as a file path (`isSafeModelName`).
+- **Nits:**
+  - the test name, the typo and the stale comment are fixed;
+  - the runner applies the server's fair-play check;
+  - the seed label `explicit-08` now names the player;
+  - presence asks only the case's own fact per request (documented, accepted).
 
 ## How to run J3-3 (user's machine)
 

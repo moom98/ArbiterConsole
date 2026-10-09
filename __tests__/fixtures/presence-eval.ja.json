@@ -1,7 +1,7 @@
 {
  "id": "presence-eval.ja",
  "version": "0.1-seed",
- "description": "Synthetic, de-identified seed set for fact presence (fact-model §5.2). Too small to set any threshold: every fact stays always 'missing' until J3-2 adds >=250 (blocking) / >=160 (other) explicit reports per fact, split about 80% tuning / 20% held-out.",
+ "description": "Synthetic, de-identified seed set for fact presence (fact-model §5.2). Too small to set any threshold: every fact stays always 'missing' until J3-2 adds enough explicit reports per fact for the Wilson bound on both tuning and held-out (see jev-classifier-design §18.2).",
  "identifiers": {
   "players": [
    {
@@ -82,7 +82,7 @@
    "split": "tuning",
    "factId": "im.clock-pressed",
    "kind": "explicit",
-   "text": "違法手の後、白は自分の時計を押した"
+   "text": "白は違法手を指し、その後に自分の時計を押した"
   },
   {
    "id": "im.clock-pressed-explicit-09",

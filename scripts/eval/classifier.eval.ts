@@ -43,7 +43,11 @@ import { geminiGenerateJson } from "@/lib/infrastructure/llm/server/gemini-clien
 import { toUpstreamError } from "@/lib/infrastructure/llm/server/generate";
 import { createJevEvaluate } from "@/lib/infrastructure/llm/server/jev-client";
 import { buildJevClassificationQuestions } from "@/lib/infrastructure/llm/server/jev-questions";
-import { CLASSIFIER_SYSTEM_PROMPT } from "@/lib/infrastructure/llm/server/prompts";
+import {
+  buildClassificationUserContent,
+  CLASSIFICATION_RESPONSE_SCHEMA,
+  CLASSIFIER_SYSTEM_PROMPT,
+} from "@/lib/infrastructure/llm/server/prompts";
 
 const ROOT = process.cwd();
 const DATASET_PATH = join(
@@ -322,7 +326,14 @@ it(
       },
       gemini: {
         model: config.classifierModel,
-        requestSha256: sha256(CLASSIFIER_SYSTEM_PROMPT),
+        // プロンプト・応答スキーマ・ユーザーメッセージの形
+        requestSha256: sha256(
+          JSON.stringify([
+            CLASSIFIER_SYSTEM_PROMPT,
+            CLASSIFICATION_RESPONSE_SCHEMA,
+            buildClassificationUserContent({ narrative: "" }),
+          ])
+        ),
       },
     };
     const meta: RunMeta = {
@@ -367,8 +378,11 @@ it(
         prior.model !== now.model ||
         prior.requestSha256 !== now.requestSha256
       ) {
-        console.log(`[eval] ${provider}: 条件が変わったため再利用しない`);
-        return null;
+        // 黙って実 API の呼び出しに切り替えない（意図しない課金・時間を避ける）。
+        // 呼び直す場合は EVAL_REUSE を外すか、EVAL_PROVIDERS からこのプロバイダーを外す
+        throw new Error(
+          `${provider}: 条件（モデル・リクエスト）が変わったため再利用できない`
+        );
       }
       const rs = reused.filter(
         (r) => r.provider === provider && itemIds.has(r.id)

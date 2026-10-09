@@ -1,6 +1,6 @@
 # Design: TypeSafe AI Jev for Incident Classification
 
-**Status:** Direction accepted (user answers Q1–Q3, Q5 and the catalogue reviews, 2026-10-08). J0, J1a and J1b are done. **J1c (server port, Jev client, calibrated parser, `/api/llm/facts`) is implemented (2026-10-09, §14).** J2 (UI) and J3 (evaluation, production switch) are next. The default provider is still `gemini`. Decision record: [ADR-011](../decisions/ADR-011-jev-for-incident-classification.md).
+**Status:** Direction accepted (user answers Q1–Q3, Q5 and the catalogue reviews, 2026-10-08). J0, J1a and J1b are done. **J1c (server port, Jev client, calibrated parser, `/api/llm/facts`) is implemented (2026-10-09, §14).** J2 (UI) is done. **J3 (evaluation and the jev-1.13.0 calibration) is done except the Gemini comparison; production is not switched (§18).** The default provider is still `gemini`. Decision record: [ADR-011](../decisions/ADR-011-jev-for-incident-classification.md).
 
 **Date:** 2026-10-08
 
@@ -485,3 +485,59 @@ The default stays `gemini`. With the default environment, the classify route, it
 - **`game.record-state`** is a record-only fact (`RequiredFact.recordOnly`, fact-model §3.9).
 - **Daily cap:** facts keeps the shared cap (§14.3).
 - Scoresheet issue codes are now reportable subtypes, so a non-DT scoresheet incident sends its issue code (not "unknown") with the AI reasoning request; the server validates with the same function.
+
+## 18. J3 (2026-10-10): evaluation and the first calibration
+
+### 18.1 Tooling
+
+| File | Content |
+| --- | --- |
+| `lib/evaluation/classifier-eval.ts` | Pure metrics: accuracy (failures count as wrong), top-2, per category, reliability table, probability-sum drift, threshold choice, acceptance gate (§9.3), `buildJevCalibration`. |
+| `scripts/eval/classifier.eval.ts` | Live runner (vitest, `vitest.eval.config.ts`, not part of `vitest run`). Each item goes through `protectIncidentText` (route `classify`) and then the production classify port (`jevClassifyIncident`, `geminiClassifyIncident`); the domain parser checks every answer. The local keyword classifier runs as a reference baseline. |
+| `scripts/eval-classifier.mjs` (`npm run eval:classifier`) | Runs `__tests__/privacy` and the dataset test first (§9.4), then the runner. |
+
+- Keys: `~/.config/arbiter-console/typesafe.key` and `gemini.key` (optional; without it Gemini is skipped and the gate cannot pass).
+- Output: `docs/progress/evaluations/<run>/` with `report.md`, `records.json` (ids, labels, probabilities, latency; **no text**), `evaluation.json`, and `calibration.candidate.json` when calibratable. `EVAL_REUSE=<run dir>` re-scores saved records without API calls (e.g. to add Gemini later). `EVAL_LIMIT=N` never writes a calibration.
+
+### 18.2 Dataset
+
+`__tests__/fixtures/classification-eval.ja.json` **v2**: 405 synthetic items, 45 per category (no fair-play).
+- v1 (270 items, 15/15 per category) was used for run 1. Its held-out results were then seen while changing the descriptions, so **v2 moves every v1 item to tuning and adds 15 fresh held-out items per category**, written by an agent that had not seen any results.
+- The dataset test checks counts, splits, subtypes, no duplicate text, and that **every item passes the guard**, so the evaluation measures what Jev really receives.
+
+### 18.3 Decisions made in J3 (differences from §9 / fact-model §5.2)
+
+- **Category thresholds use the Wilson 95 % lower bound** of the accuracy of the `p ≥ t` set, not the point estimate (same idea as presence). With the point estimate, run 1 chose t = 0.4 ("everything") because overall accuracy was just above 90 %, and it failed on held-out.
+- **A threshold is never below its target** (`T_medium ≥ 0.9`, `T_prefill ≥ 0.8`). The cumulative accuracy lets many high-probability correct answers hide low-probability errors (v2 chose 0.37 although held-out answers with p < 0.7 were right about 40 % of the time). A single answer with p = 0.4 cannot be shown as "≥ 90 %".
+- Minimum support: 30 tuning answers for category thresholds, 10 for the subtype. **`T_subtype`** uses target 0.9 on items whose category was right.
+- **`needsTournamentRules`** is not labelled, so it gets no threshold (domain rule only).
+- **Presence has no dataset yet** (fact-model §5.2 needs ≥ 250/160 positives per fact), so `presence` is empty and every fact stays "missing". `canOfferFactPresenceCheck` now requires a calibrated threshold for at least one target fact, so the J2-2 card stays hidden (no send that cannot change the screen).
+- **Category descriptions** (`INCIDENT_CATEGORY_DESCRIPTIONS`, shared with the Gemini prompt) were clarified from **tuning errors only**: game-result vs scoresheet (result sheet vs move record), draw (insufficient material), player-behavior (repeated draw offers, asking to resign), team (team points, substitutions), tournament-admin (byes, standings, board assignment). **This changes the Gemini classify prompt on the next deploy**; the prompt hash test was updated on purpose.
+
+### 18.4 Results (run `classifier-v2-run1`, rescored as `classifier-v2-run1-rescored`)
+
+| | Jev (jev-1.13.0) | Keyword (local) | Gemini |
+| --- | --- | --- | --- |
+| Held-out accuracy (135) | **90.4 %** | 54.8 % | not run (no key) |
+| Held-out top-2 | 99.3 % | — | — |
+| Latency p50 / p95 | 169 / 259 ms | — | — |
+
+- Thresholds: **T_medium 0.9** (held-out 98.9 %, n = 94), **T_prefill 0.8** (97.3 %, n = 113), **T_subtype 0.9** (100 %, n = 24). Registered as `lib/domain/llm/calibration/jev-1.13.0.{ts,json}`.
+- **Probability sum:** the raw sums drift by at most 0.01 (n = 405), so the ±0.02 tolerance stays (§14.3 check done).
+- **Gate (§9.3): not accepted yet.**
+  - accuracy vs Gemini: **not measured** (needs `gemini.key`);
+  - per category ≥ 80 %: **fails for player-behavior (60 %)**. Jev puts behaviour that mentions the clock or time (talking about the opponent's time, a hand on the clock, pressing the neighbour's clock) into clock-time. The other categories are 86.7–100 %. The held-out set is now seen, so this was not tuned further;
+  - T_medium, T_prefill, p95 < 1 s, no failures: pass.
+- **Guard finding:** about a third of first-draft synthetic reports were stopped by the known-vocabulary layer (L3v). Team reports that mention 主将/キャプテン/チーム/監督/メンバー are uncertain or blocked, so most captain-related reports never reach any external AI. The team accuracy above covers only reports without those words. Revisit with external-ai-data-protection §8.1 (false-positive rate).
+
+### 18.5 What the calibration changes
+
+- Only when `LLM_CLASSIFIER_PROVIDER=jev`: answers with p ≥ 0.9 show "medium" without alternatives, p ≥ 0.8 show the "このカテゴリで続ける" button, the subtype is shown at p ≥ 0.9. Below that, the top-3 chips (§7). Jev answers from any other model (alias or new version) stay uncalibrated.
+- Production uses `gemini`, so deploying J3 changes only the Gemini prompt wording (§18.3).
+
+### 18.6 Remaining for the production switch
+
+1. Put a Gemini key in `~/.config/arbiter-console/gemini.key` and run `EVAL_REUSE=docs/progress/evaluations/classifier-v2-run1-rescored EVAL_PROVIDERS=jev,gemini,keyword npx vitest run --config vitest.eval.config.ts` (Jev is reused; only Gemini is called, 405 requests).
+2. Decide on player-behavior: either accept the switch with this known weakness (the arbiter always confirms the category; top-2 is 99 %), or improve the descriptions and evaluate on a **new** held-out set (v3).
+3. Then `npx wrangler secret put TYPESAFE_API_KEY`, set `LLM_CLASSIFIER_PROVIDER=jev` (wrangler.jsonc `vars` or a secret), deploy, and check production.
+

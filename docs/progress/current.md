@@ -29,15 +29,26 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
 
 ## J3 status (2026-10-10)
 
-- **Tooling (committed):** `lib/evaluation/classifier-eval.ts` (pure metrics, Wilson-bound threshold choice, gate, `buildJevCalibration`), `scripts/eval/classifier.eval.ts` (live runner, vitest, `vitest.eval.config.ts`), launcher `npm run eval:classifier` (runs `__tests__/privacy` + the dataset test first). Output goes to `docs/progress/evaluations/<run>/` (`report.md`, `records.json` without text, `evaluation.json`, `calibration.candidate.json` if calibratable).
-- **Keys:** `~/.config/arbiter-console/typesafe.key` exists. **There is no local Gemini key**, so the Gemini comparison (gate item "accuracy ≥ Gemini − 2 pt") cannot run until the user puts one in `~/.config/arbiter-console/gemini.key` (chmod 600).
-- **Dataset v1** (`__tests__/fixtures/classification-eval.ja.json`, 270 items, 30/category, every item passes the guard). First run: `docs/progress/evaluations/classifier-v1-run1/report.md` — Jev held-out 89.6 %, top-2 95.6 %, p95 204 ms, sum drift ≤ 0.01 (±0.02 tolerance is fine), keyword baseline 70.4 %; tournament-admin 66.7 %.
-- **Changes after run 1:** thresholds now need the Wilson 95 % lower bound ≥ target (the point-estimate rule chose t = 0.4 = "everything"); category descriptions revised from **tuning errors only** (prompt hash test updated on purpose); the v1 held-out is now considered seen, so **dataset v2** = all v1 items as tuning + 15 fresh held-out per category written by an agent that did not see results.
-- Presence check offer now requires a calibrated threshold for a target fact (category-only calibration keeps the card hidden).
-- **Guard finding:** about a third of first-draft synthetic reports were blocked by the known-vocabulary layer (L3v); team reports that mention 主将/キャプテン/チーム/監督/メンバー are uncertain/blocked, so in production most captain-related team reports never reach Jev.
-- **Production switch:** only if the full gate passes, which needs the Gemini comparison.
-- After the first deploy, 「意味検索用データを作成」 rebuilds every vector once (key `+deid1`).
-`docs/IMPLEMENTATION_STATUS.md` is a stale 2024 snapshot. Use this file and `docs/progress/milestones/` instead.
+Summary: `milestones/j3-classifier-evaluation.md`; design: jev-classifier-design §18.
+
+- **Done:**
+  - evaluation tooling (`npm run eval:classifier`, `EVAL_REUSE`, `EVAL_LIMIT`);
+  - dataset v2 (405 synthetic items);
+  - Jev runs;
+  - calibration `jev-1.13.0`: medium 0.9, prefill 0.8, subtype 0.9, presence empty;
+  - Wilson threshold rule with a floor at the target;
+  - clarified category descriptions (**changes the Gemini prompt on the next deploy**);
+  - the presence card needs a calibrated presence threshold.
+- **Results:**
+  - Jev held-out 90.4 %, top-2 99.3 %, p95 259 ms;
+  - keyword 54.8 %;
+  - sum drift ≤ 0.01.
+- **Gate not passed:**
+  - **Gemini not compared** (no local key; the user must create `~/.config/arbiter-console/gemini.key`, chmod 600);
+  - player-behavior 60 % on held-out.
+- **Production is not switched.** It still uses `gemini`. Steps for the switch: jev-classifier-design §18.6.
+- Review: a separate reviewer agent was run on `origin/main...feature/j3-eval`. See the milestone file for the verdict and fixes.
+- **Guard finding:** L3v blocks many plain reports, and team reports mentioning 主将/キャプテン/チーム/監督/メンバー.
 
 ## Completed work
 
@@ -479,7 +490,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
      - wire `deriveTimeControlFacts` and `assessRecordingObligation`;
      - treat `game.record-state` as a non-blocking record fact;
      - decide whether facts needs its own daily cap.
-   - **J3 (next):**
+   - **J3: done except the Gemini comparison and the production switch (2026-10-10).** See `milestones/j3-classifier-evaluation.md`. Original scope:
      - the Japanese evaluation (`scripts/eval-classifier.mjs`, datasets) and the first calibration in `lib/domain/llm/calibration/`;
      - check the ±0.02 probability-sum tolerance against real responses;
      - then switch production by env: `LLM_CLASSIFIER_PROVIDER=jev` and `wrangler secret put TYPESAFE_API_KEY`.

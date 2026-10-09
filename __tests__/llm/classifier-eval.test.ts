@@ -167,6 +167,19 @@ describe("統計", () => {
     expect(wilsonLowerBound(0, 0)).toBe(0);
   });
 
+  it("Wilson の下限は丸めずに比べる（0.89996 を 0.9 として通さない）", () => {
+    // 正解 120 / 126 の下限は 0.8999971（4 桁に丸めると 0.9）
+    const lower = wilsonLowerBound(120, 126);
+    expect(lower).toBeLessThan(0.9);
+    expect(lower).toBeGreaterThan(0.89995);
+    const pts = Array.from({ length: 126 }, (_, i) => ({
+      p: 0.95,
+      correct: i < 120,
+    }));
+    expect(statsAt(pts, 0.95).wilsonLower).toBe(lower);
+    expect(chooseAccuracyThreshold(pts, 0.9, 1)).toBeNull();
+  });
+
   it("百分位", () => {
     const v = Array.from({ length: 100 }, (_, i) => i + 1);
     expect(percentile(v, 0.5)).toBe(50);
@@ -284,6 +297,50 @@ describe("evaluateJev / buildJevCalibration", () => {
       );
     const e = evaluateJev(records);
     expect(e.medium.confirmed).toBe(false);
+    expect(
+      buildJevCalibration(
+        e,
+        { id: "d", version: "1", tuningSize: 1, heldOutSize: 1 },
+        "x"
+      )
+    ).toBeNull();
+  });
+
+  it("held-out も最小件数がなければ確認済みにしない", () => {
+    const records = dataset()
+      .filter((r) => r.provider === "jev")
+      // held-out はカテゴリごとに 1 件だけ（9 件 < 30）
+      .filter(
+        (r, i, all) =>
+          r.split === "tuning" ||
+          all.findIndex((x) => x.split === "heldout" && x.label === r.label) ===
+            i
+      );
+    const e = evaluateJev(records);
+    expect(e.medium.tuning).not.toBeNull();
+    expect(e.medium.confirmed).toBe(false);
+    expect(e.calibratable).toBe(false);
+  });
+
+  it("held-out にないカテゴリがあれば per-category は不合格", () => {
+    const records = dataset().filter(
+      (r) =>
+        r.provider === "jev" && !(r.split === "heldout" && r.label === "team")
+    );
+    const check = evaluateJev(records).checks.find(
+      (c) => c.id === "per-category"
+    );
+    expect(check?.pass).toBe(false);
+    expect(check?.detail).toContain("team");
+  });
+
+  it("応答のモデルが複数あれば較正を作らない", () => {
+    const records = dataset()
+      .filter((r) => r.provider === "jev")
+      .map((r, i) => (i === 0 ? { ...r, model: "jev-1.14.0" } : r));
+    const e = evaluateJev(records);
+    expect(e.jev.models).toEqual(["jev-1.13.0", "jev-1.14.0"]);
+    expect(e.jev.model).toBeUndefined();
     expect(
       buildJevCalibration(
         e,

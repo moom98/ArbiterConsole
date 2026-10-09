@@ -11,6 +11,7 @@
  * - 出力（docs/progress/evaluations/<run>/）: records.json（本文なし）、report.md、
  *   較正の候補 calibration.candidate.json（作れた場合のみ）。較正の登録は人が行う（テストで一致を確認）
  */
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -41,6 +42,8 @@ import { readLlmConfig } from "@/lib/infrastructure/llm/server/config";
 import { geminiGenerateJson } from "@/lib/infrastructure/llm/server/gemini-client";
 import { toUpstreamError } from "@/lib/infrastructure/llm/server/generate";
 import { createJevEvaluate } from "@/lib/infrastructure/llm/server/jev-client";
+import { buildJevClassificationQuestions } from "@/lib/infrastructure/llm/server/jev-questions";
+import { CLASSIFIER_SYSTEM_PROMPT } from "@/lib/infrastructure/llm/server/prompts";
 
 const ROOT = process.cwd();
 const DATASET_PATH = join(
@@ -51,6 +54,20 @@ const KEY_DIR = join(homedir(), ".config", "arbiter-console");
 const TIMEOUT_MS = { jev: 3_000, gemini: 30_000 } as const;
 const CONCURRENCY = { jev: 4, gemini: 2 } as const;
 const MAX_ATTEMPTS = 3;
+
+/**
+ * 実行の条件（meta.json）。EVAL_REUSE はこれが一致する記録だけを再利用する
+ * （説明・ラベル・モデルを変えた後に古い応答を新しい条件で採点しない）
+ */
+interface RunMeta {
+  dataset: { id: string; version: string; sha256: string };
+  providers: Partial<
+    Record<"jev" | "gemini", { model: string; requestSha256: string }>
+  >;
+}
+
+const sha256 = (text: string) =>
+  createHash("sha256").update(text).digest("hex");
 
 interface Dataset {
   id: string;
@@ -294,15 +311,65 @@ it(
       typesafeApiKey,
     };
 
-    // EVAL_REUSE=<以前の実行のディレクトリ>: そのプロバイダーの記録があれば再利用し、API を呼ばない
-    // （集計・しきい値の規則を変えた後の再計算や、Gemini だけを後から追加する場合）
-    const reused: EvalRecord[] = process.env.EVAL_REUSE
+    // 今回の条件。リクエストのハッシュは、プロバイダーに送る固定部分（質問・プロンプト）
+    const datasetText = readFileSync(DATASET_PATH, "utf8");
+    const conditions: RunMeta["providers"] = {
+      jev: {
+        model: config.jevModel,
+        requestSha256: sha256(
+          JSON.stringify(buildJevClassificationQuestions())
+        ),
+      },
+      gemini: {
+        model: config.classifierModel,
+        requestSha256: sha256(CLASSIFIER_SYSTEM_PROMPT),
+      },
+    };
+    const meta: RunMeta = {
+      dataset: {
+        id: dataset.id,
+        version: dataset.version,
+        sha256: sha256(datasetText),
+      },
+      providers: {},
+    };
+
+    console.log(
+      `[eval] conditions ${JSON.stringify({ dataset: meta.dataset, conditions })}`
+    );
+
+    // EVAL_REUSE=<以前の実行のディレクトリ>: 条件（meta.json）が一致するプロバイダーの記録を
+    // 再利用し、API を呼ばない（集計の規則を変えた後の再計算や、Gemini だけを後から追加する場合）
+    const reuseDir = process.env.EVAL_REUSE;
+    const reusedMeta: RunMeta | undefined =
+      reuseDir && existsSync(join(reuseDir, "meta.json"))
+        ? (JSON.parse(
+            readFileSync(join(reuseDir, "meta.json"), "utf8")
+          ) as RunMeta)
+        : undefined;
+    if (reuseDir && !reusedMeta)
+      throw new Error(
+        `${reuseDir}/meta.json がない（条件を確認できないため再利用しない）`
+      );
+    if (reusedMeta && reusedMeta.dataset.sha256 !== meta.dataset.sha256)
+      throw new Error("評価データが変わっているため再利用しない");
+    const reused: EvalRecord[] = reuseDir
       ? (JSON.parse(
-          readFileSync(join(process.env.EVAL_REUSE, "records.json"), "utf8")
+          readFileSync(join(reuseDir, "records.json"), "utf8")
         ) as EvalRecord[])
       : [];
     const itemIds = new Set(items.map((i) => i.id));
-    const reuse = (provider: EvalProvider) => {
+    const reuse = (provider: "jev" | "gemini") => {
+      const prior = reusedMeta?.providers[provider];
+      if (!prior) return null;
+      const now = conditions[provider]!;
+      if (
+        prior.model !== now.model ||
+        prior.requestSha256 !== now.requestSha256
+      ) {
+        console.log(`[eval] ${provider}: 条件が変わったため再利用しない`);
+        return null;
+      }
       const rs = reused.filter(
         (r) => r.provider === provider && itemIds.has(r.id)
       );
@@ -352,6 +419,9 @@ it(
     }
 
     const createdAt = new Date().toISOString();
+    for (const provider of ["jev", "gemini"] as const)
+      if (records.some((r) => r.provider === provider))
+        meta.providers[provider] = conditions[provider];
     const evaluation = evaluateJev(records);
     const outDir = join(
       ROOT,
@@ -359,6 +429,10 @@ it(
       `classifier-${createdAt.slice(0, 19).replace(/[:T]/g, "-")}`
     );
     mkdirSync(outDir, { recursive: true });
+    writeFileSync(
+      join(outDir, "meta.json"),
+      JSON.stringify(meta, null, 2) + "\n"
+    );
     writeFileSync(
       join(outDir, "records.json"),
       JSON.stringify(records, null, 2) + "\n"

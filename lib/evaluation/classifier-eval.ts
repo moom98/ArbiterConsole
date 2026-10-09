@@ -145,7 +145,8 @@ export function statsAt(
     threshold,
     support: above.length,
     accuracy: above.length === 0 ? NaN : correct / above.length,
-    wilsonLower: round(wilsonLowerBound(correct, above.length)),
+    // 判定に使うため丸めない（丸めは表示だけ）
+    wilsonLower: wilsonLowerBound(correct, above.length),
   };
 }
 
@@ -257,6 +258,10 @@ export function probabilitySumDrift(records: readonly EvalRecord[]): {
 // 受け入れ判定としきい値（jev-classifier-design §9.3）
 // ---------------------------------------------------------------------------
 
+/** 評価するカテゴリ（fair-play は外部AIに送らないため含めない） */
+export const EVAL_CATEGORIES: readonly IncidentCategory[] =
+  INCIDENT_CATEGORIES.filter((c) => c !== "fair-play");
+
 export const ACCEPTANCE = {
   /** held-out の正解率: Jev ≥ Gemini − 0.02 */
   maxAccuracyGapToGemini: 0.02,
@@ -268,7 +273,7 @@ export const ACCEPTANCE = {
   prefillTarget: 0.8,
   /** subtype: p ≥ T の正解率（表示だけのため medium と同じ水準） */
   subtypeTarget: 0.9,
-  /** tuning でしきい値を選ぶ最小の件数（カテゴリ。少ない件数の偶然で決めない） */
+  /** tuning でしきい値を選ぶ・held-out で確認する最小の件数（カテゴリ。少ない件数の偶然で決めない） */
   minCategorySupport: 30,
   /** 同じく subtype */
   minSubtypeSupport: 10,
@@ -301,13 +306,17 @@ function threshold(
   return {
     tuning: chosen,
     heldout: h,
-    confirmed: h.support > 0 && h.accuracy >= target,
+    // held-out も同じ最小件数を求める（1 件の正解だけで確認済みにしない）
+    confirmed: h.support >= minSupport && h.accuracy >= target,
   };
 }
 
 export interface ProviderSummary {
   provider: EvalProvider;
+  /** 応答のモデル（すべて同じ場合のみ。複数あれば undefined） */
   model?: string;
+  /** 応答に現れたモデル（実行中に解決が変わったかの確認） */
+  models: string[];
   n: number;
   statusCounts: Record<EvalRecord["status"], number>;
   accuracy: { all: number; tuning: number; heldout: number };
@@ -330,11 +339,15 @@ export function summarizeProvider(
         : []
       : []
   );
+  const models = Array.from(
+    new Set(rs.flatMap((r) => (r.model ? [r.model] : [])))
+  ).sort();
   const statusCounts = { ok: 0, rejected: 0, "not-sent": 0, error: 0 };
   for (const r of rs) statusCounts[r.status]++;
   return {
     provider,
-    model: rs.find((r) => r.model)?.model,
+    model: models.length === 1 ? models[0] : undefined,
+    models,
     n: rs.length,
     statusCounts,
     accuracy: {
@@ -418,13 +431,17 @@ export function evaluateJev(records: readonly EvalRecord[]): JevEvaluation {
   const weak = Object.entries(jev.perCategoryHeldout).filter(
     ([, v]) => v.accuracy < ACCEPTANCE.minPerCategoryAccuracy
   );
+  // 評価するカテゴリ（fair-play 以外）がすべて held-out にあること（欠けを素通りさせない）
+  const absent = EVAL_CATEGORIES.filter((c) => !jev.perCategoryHeldout[c]);
   checks.push({
     id: "per-category",
-    pass: weak.length === 0,
+    pass: weak.length === 0 && absent.length === 0,
     detail:
-      weak.length === 0
-        ? `すべてのカテゴリが ${pct(ACCEPTANCE.minPerCategoryAccuracy)} 以上`
-        : weak.map(([c, v]) => `${c} ${pct(v.accuracy)}`).join(", "),
+      absent.length > 0
+        ? `held-out にないカテゴリ: ${absent.join(", ")}`
+        : weak.length === 0
+          ? `すべてのカテゴリが ${pct(ACCEPTANCE.minPerCategoryAccuracy)} 以上`
+          : weak.map(([c, v]) => `${c} ${pct(v.accuracy)}`).join(", "),
   });
   checks.push({
     id: "t-medium",
@@ -488,7 +505,9 @@ export function buildJevCalibration(
     !evaluation.calibratable ||
     !medium.tuning ||
     !prefill.tuning ||
-    !jev.model
+    // 応答のモデルが1つでなければ作らない（実行中に解決が変わると別のモデルの応答が混ざる）
+    !jev.model ||
+    jev.models.length !== 1
   )
     return null;
   const metrics: Record<string, number> = {

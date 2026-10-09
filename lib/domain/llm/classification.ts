@@ -18,8 +18,9 @@ export const INCIDENT_CATEGORIES: readonly IncidentCategory[] = [
 ];
 
 /**
- * カテゴリの説明（Gemini の分類プロンプトと Jev の choice の criteria で共有する。
- * jev-classifier-design §5.1）。文言を変えると Gemini のプロンプトも変わる
+ * カテゴリの説明（Jev の choice の criteria。jev-classifier-design §5.1, §18.3）。
+ * J3 で tuning の誤りから改めた。Gemini は評価するまで GEMINI_CATEGORY_DESCRIPTIONS（従来の文言）を使う。
+ * 文言を変えた場合は評価をやり直し、較正を作り直す
  */
 export const INCIDENT_CATEGORY_DESCRIPTIONS: Readonly<
   Record<IncidentCategory, string>
@@ -39,6 +40,28 @@ export const INCIDENT_CATEGORY_DESCRIPTIONS: Readonly<
   "fair-play": "フェアプレー（不正の疑い、検査拒否等）",
   "tournament-admin":
     "大会運営（遅刻・不戦、バイ、ペアリング、得点・順位の登録、盤の割り当て、会場等）",
+};
+
+/**
+ * Gemini の分類プロンプトのカテゴリの説明（J3 以前の文言のまま固定）。J3 の改訂は Jev でしか
+ * 評価していないため、本番の Gemini の分類を測定なしに変えない（jev-classifier-design §18.3）。
+ * Gemini でも評価したら INCIDENT_CATEGORY_DESCRIPTIONS に揃える
+ */
+export const GEMINI_CATEGORY_DESCRIPTIONS: Readonly<
+  Record<IncidentCategory, string>
+> = {
+  "illegal-move":
+    "違法手（両手で指した、手を指さずに時計を押した、昇格の駒を置かずに時計を押した等）",
+  "board-piece": "盤・駒（駒の落下・ずれ、初期配置の誤り等）",
+  "clock-time": "時計・時間（フラッグ・時間切れ、時計の故障、押し忘れ等）",
+  "game-result": "対局結果（結果の争い、記録・署名の誤り等）",
+  draw: "ドロー（同一局面、50手・75手、ステイルメイト、合意等）",
+  scoresheet: "棋譜・記録用紙",
+  "player-behavior":
+    "選手の行動・電子機器（スマートフォン、スマートウォッチ、離席、会話、騒音、喫煙、妨害等）",
+  team: "団体戦（キャプテン、ボード順等）",
+  "fair-play": "フェアプレー（不正の疑い、検査拒否等）",
+  "tournament-admin": "大会運営（遅刻、不戦、ペアリング等）",
 };
 
 const MAX_ITEMS = 5;

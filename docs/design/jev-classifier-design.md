@@ -509,10 +509,15 @@ The default stays `gemini`. With the default environment, the classify route, it
 
 - **Category thresholds use the Wilson 95 % lower bound** of the accuracy of the `p ≥ t` set, not the point estimate (same idea as presence). With the point estimate, run 1 chose t = 0.4 ("everything") because overall accuracy was just above 90 %, and it failed on held-out.
 - **A threshold is never below its target** (`T_medium ≥ 0.9`, `T_prefill ≥ 0.8`). The cumulative accuracy lets many high-probability correct answers hide low-probability errors (v2 chose 0.37 although held-out answers with p < 0.7 were right about 40 % of the time). A single answer with p = 0.4 cannot be shown as "≥ 90 %".
+  - **Caveat (review):** this floor was added **after seeing the v2 held-out results**, and the same held-out records were rescored. The held-out confirmation of the floor is therefore **not independent**. The rule only moves toward safety, and the tuning set alone supports the thresholds (p ≥ 0.9: 100 %, n = 203; p ≥ 0.8: 98.7 %, n = 228). A fresh held-out set (v3) would give an independent check (§18.6).
+- Held-out confirmation needs the same minimum support as tuning. Wilson bounds are compared unrounded. A calibration is written only when every Jev answer came from one resolved model. The per-category check fails when a category is missing from held-out.
+- Each run writes `meta.json` (dataset hash, model and request hash per provider). `EVAL_REUSE` only reuses records whose conditions match.
 - Minimum support: 30 tuning answers for category thresholds, 10 for the subtype. **`T_subtype`** uses target 0.9 on items whose category was right.
 - **`needsTournamentRules`** is not labelled, so it gets no threshold (domain rule only).
 - **Presence has no dataset yet** (fact-model §5.2 needs ≥ 250/160 positives per fact), so `presence` is empty and every fact stays "missing". `canOfferFactPresenceCheck` now requires a calibrated threshold for at least one target fact, so the J2-2 card stays hidden (no send that cannot change the screen).
-- **Category descriptions** (`INCIDENT_CATEGORY_DESCRIPTIONS`, shared with the Gemini prompt) were clarified from **tuning errors only**: game-result vs scoresheet (result sheet vs move record), draw (insufficient material), player-behavior (repeated draw offers, asking to resign), team (team points, substitutions), tournament-admin (byes, standings, board assignment). **This changes the Gemini classify prompt on the next deploy**; the prompt hash test was updated on purpose.
+- **Category descriptions** for Jev (`INCIDENT_CATEGORY_DESCRIPTIONS`) were clarified from **tuning errors only**: game-result vs scoresheet (result sheet vs move record), draw (insufficient material), player-behavior (repeated draw offers, asking to resign), team (team points, substitutions), tournament-admin (byes, standings, board assignment).
+  - **The Gemini prompt keeps the old wording** (`GEMINI_CATEGORY_DESCRIPTIONS`; the prompt hash test is unchanged). The new wording was evaluated on Jev only, and production uses Gemini. This splits the shared constant of §5.1 until Gemini is evaluated with the new wording. Deploying J3 therefore changes nothing in production.
+  - The Gemini comparison measures production Gemini (old wording) against Jev (new wording).
 
 ### 18.4 Results (run `classifier-v2-run1`, rescored as `classifier-v2-run1-rescored`)
 
@@ -527,17 +532,19 @@ The default stays `gemini`. With the default environment, the classify route, it
 - **Gate (§9.3): not accepted yet.**
   - accuracy vs Gemini: **not measured** (needs `gemini.key`);
   - per category ≥ 80 %: **fails for player-behavior (60 %)**. Jev puts behaviour that mentions the clock or time (talking about the opponent's time, a hand on the clock, pressing the neighbour's clock) into clock-time. The other categories are 86.7–100 %. The held-out set is now seen, so this was not tuned further;
-  - T_medium, T_prefill, p95 < 1 s, no failures: pass.
+  - T_medium, T_prefill, p95 < 1 s, no failures: pass. The subtype held-out check is a point estimate (100 %, n = 24, Wilson 0.86). It is accepted because the subtype is display only.
 - **Guard finding:** about a third of first-draft synthetic reports were stopped by the known-vocabulary layer (L3v). Team reports that mention 主将/キャプテン/チーム/監督/メンバー are uncertain or blocked, so most captain-related reports never reach any external AI. The team accuracy above covers only reports without those words. Revisit with external-ai-data-protection §8.1 (false-positive rate).
 
 ### 18.5 What the calibration changes
 
 - Only when `LLM_CLASSIFIER_PROVIDER=jev`: answers with p ≥ 0.9 show "medium" without alternatives, p ≥ 0.8 show the "このカテゴリで続ける" button, the subtype is shown at p ≥ 0.9. Below that, the top-3 chips (§7). Jev answers from any other model (alias or new version) stay uncalibrated.
-- Production uses `gemini`, so deploying J3 changes only the Gemini prompt wording (§18.3).
+- Production uses `gemini` with an unchanged prompt, so deploying J3 changes nothing in production.
 
 ### 18.6 Remaining for the production switch
 
 1. Put a Gemini key in `~/.config/arbiter-console/gemini.key` and run `EVAL_REUSE=docs/progress/evaluations/classifier-v2-run1-rescored EVAL_PROVIDERS=jev,gemini,keyword npx vitest run --config vitest.eval.config.ts` (Jev is reused; only Gemini is called, 405 requests).
-2. Decide on player-behavior: either accept the switch with this known weakness (the arbiter always confirms the category; top-2 is 99 %), or improve the descriptions and evaluate on a **new** held-out set (v3).
+2. **User decision:**
+   - player-behavior: either accept the switch with this known weakness (the arbiter always confirms the category; top-2 is 99 %), or improve the descriptions and evaluate on a **new** held-out set (v3);
+   - whether the non-independent confirmation of the threshold floor (§18.3) is acceptable, or v3 should confirm it.
 3. Then `npx wrangler secret put TYPESAFE_API_KEY`, set `LLM_CLASSIFIER_PROVIDER=jev` (wrangler.jsonc `vars` or a secret), deploy, and check production.
 

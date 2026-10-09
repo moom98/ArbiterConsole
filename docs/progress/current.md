@@ -1,6 +1,6 @@
 # Current Progress
 
-**Last updated:** 2026-10-10 (PR #11 merged and deployed; J3 in progress on `feature/j3-eval`)
+**Last updated:** 2026-10-10 (PR #11 merged and deployed; J3 done on `feature/j3-eval` except the Gemini comparison and the production switch)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
@@ -19,13 +19,13 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
 
 **J2 (2026-10-09): done** on branch `feature/fact-catalog` (restarted from `main` at `56b0228` after PRs #8/#9 were merged). See `milestones/j2-classifier-ui-presence-recording.md`. It holds:
 - J2-1: the classification UI (§7) and `/api/llm/providers`, so the preview names the real destination (409 `provider-changed` on a mismatch);
-- J2-2: the optional fact-presence check that only reorders DT questions. **It is hidden until J3 registers a calibration**;
+- J2-2: the optional fact-presence check that only reorders DT questions. **It stays hidden until a calibration has a presence threshold for a target fact** (J3's calibration has none);
 - J2-3: **DT-011** (FIDE 8.4 recording obligation for scoresheet "記入していない／遅れている" in Standard), `game.record-state` as record-only, and facts keeping the shared daily cap.
 - **Merged via PR #10** (`1fc8f5b`). The J2-3 review (FIX FIRST: "遅れている" ignored FIDE 8.1.3) is fixed in a follow-up PR from `feature/fact-catalog`. The user asked to deploy after merging; deploy once the follow-up is merged.
 
 **Deployed 2026-10-10:** `main` at `466ae58` (PRs #8–#11), version `7263f6cc-fba3-4cc2-9ce6-d05938bba4d8`, from a clean worktree (`npm ci`, tsc clean, 83 files / 1634 tests). Production checks: all pages 200 (`/` → 307 `/home`), `sw.js` and `manifest.json` 200, `/api/llm/{reason,classify,facts,providers}` 401 without the token. Secrets present: `GEMINI_API_KEY`, `LLM_ACCESS_TOKEN` (no `TYPESAFE_API_KEY` yet).
 
-**J3 (in progress, branch `feature/j3-eval`, worktree `.claude/worktrees/j3`):** see "J3 status" below.
+**J3 (branch `feature/j3-eval`, worktree `.claude/worktrees/j3`):** done except the Gemini comparison and the production switch. See "J3 status" below.
 
 ## J3 status (2026-10-10)
 
@@ -37,7 +37,7 @@ Summary: `milestones/j3-classifier-evaluation.md`; design: jev-classifier-design
   - Jev runs;
   - calibration `jev-1.13.0`: medium 0.9, prefill 0.8, subtype 0.9, presence empty;
   - Wilson threshold rule with a floor at the target;
-  - clarified category descriptions (**changes the Gemini prompt on the next deploy**);
+  - clarified category descriptions **for Jev only**. The Gemini prompt is unchanged (`GEMINI_CATEGORY_DESCRIPTIONS`), so deploying J3 changes nothing in production;
   - the presence card needs a calibrated presence threshold.
 - **Results:**
   - Jev held-out 90.4 %, top-2 99.3 %, p95 259 ms;
@@ -47,7 +47,7 @@ Summary: `milestones/j3-classifier-evaluation.md`; design: jev-classifier-design
   - **Gemini not compared** (no local key; the user must create `~/.config/arbiter-console/gemini.key`, chmod 600);
   - player-behavior 60 % on held-out.
 - **Production is not switched.** It still uses `gemini`. Steps for the switch: jev-classifier-design §18.6.
-- Review: a separate reviewer agent was run on `origin/main...feature/j3-eval`. See the milestone file for the verdict and fixes.
+- Review: a separate reviewer gave FIX FIRST. All 8 points are fixed; see the milestone file. Methodology caveat: the threshold floor was added after seeing the v2 held-out, so its held-out confirmation is not independent (design §18.3).
 - **Guard finding:** L3v blocks many plain reports, and team reports mentioning 主将/キャプテン/チーム/監督/メンバー.
 
 ## Completed work

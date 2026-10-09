@@ -1,4 +1,4 @@
-# Classifier evaluation (2026-10-09T22:17:08.803Z)
+# Classifier evaluation (2026-10-09T22:25:18.273Z)
 
 Dataset: `classification-eval-ja` v2, 405 of 405 items (synthetic; sent through protectIncidentText, route classify).
 
@@ -39,9 +39,9 @@ Dataset: `classification-eval-ja` v2, 405 of 405 items (synthetic; sent through 
 
 ## Thresholds
 
-- T_medium (target 90%): {"tuning":{"threshold":0.9,"support":203,"accuracy":1,"wilsonLower":0.9814},"heldout":{"threshold":0.9,"support":94,"accuracy":0.9893617021276596,"wilsonLower":0.9422},"confirmed":true}
-- T_prefill (target 80%): {"tuning":{"threshold":0.8,"support":228,"accuracy":0.9868421052631579,"wilsonLower":0.962},"heldout":{"threshold":0.8,"support":113,"accuracy":0.9734513274336283,"wilsonLower":0.9248},"confirmed":true}
-- T_subtype (target 90%): {"tuning":{"threshold":0.9,"support":40,"accuracy":1,"wilsonLower":0.9124},"heldout":{"threshold":0.9,"support":24,"accuracy":1,"wilsonLower":0.862},"confirmed":true}
+- T_medium (target 90%): {"tuning":{"threshold":0.9,"support":203,"accuracy":1,"wilsonLower":0.9814273337665149},"heldout":{"threshold":0.9,"support":94,"accuracy":0.9893617021276596,"wilsonLower":0.9421756818388972},"confirmed":true}
+- T_prefill (target 80%): {"tuning":{"threshold":0.8,"support":228,"accuracy":0.9868421052631579,"wilsonLower":0.9620350252457206},"heldout":{"threshold":0.8,"support":113,"accuracy":0.9734513274336283,"wilsonLower":0.9248390354028833},"confirmed":true}
+- T_subtype (target 90%): {"tuning":{"threshold":0.9,"support":40,"accuracy":1,"wilsonLower":0.9123754607496077},"heldout":{"threshold":0.9,"support":24,"accuracy":1,"wilsonLower":0.8620194241710247},"confirmed":true}
 
 ## Reliability (Jev, held-out, chosen category)
 

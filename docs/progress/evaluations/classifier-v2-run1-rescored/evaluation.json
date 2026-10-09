@@ -2,6 +2,9 @@
   "jev": {
     "provider": "jev",
     "model": "jev-1.13.0",
+    "models": [
+      "jev-1.13.0"
+    ],
     "n": 405,
     "statusCounts": {
       "ok": 405,
@@ -60,6 +63,7 @@
   },
   "keyword": {
     "provider": "keyword",
+    "models": [],
     "n": 405,
     "statusCounts": {
       "ok": 313,
@@ -120,13 +124,13 @@
       "threshold": 0.9,
       "support": 203,
       "accuracy": 1,
-      "wilsonLower": 0.9814
+      "wilsonLower": 0.9814273337665149
     },
     "heldout": {
       "threshold": 0.9,
       "support": 94,
       "accuracy": 0.9893617021276596,
-      "wilsonLower": 0.9422
+      "wilsonLower": 0.9421756818388972
     },
     "confirmed": true
   },
@@ -135,13 +139,13 @@
       "threshold": 0.8,
       "support": 228,
       "accuracy": 0.9868421052631579,
-      "wilsonLower": 0.962
+      "wilsonLower": 0.9620350252457206
     },
     "heldout": {
       "threshold": 0.8,
       "support": 113,
       "accuracy": 0.9734513274336283,
-      "wilsonLower": 0.9248
+      "wilsonLower": 0.9248390354028833
     },
     "confirmed": true
   },
@@ -150,13 +154,13 @@
       "threshold": 0.9,
       "support": 40,
       "accuracy": 1,
-      "wilsonLower": 0.9124
+      "wilsonLower": 0.9123754607496077
     },
     "heldout": {
       "threshold": 0.9,
       "support": 24,
       "accuracy": 1,
-      "wilsonLower": 0.862
+      "wilsonLower": 0.8620194241710247
     },
     "confirmed": true
   },

@@ -1270,7 +1270,6 @@ export const FACT_USAGES: readonly FactUsage[] = [
   },
   // 設定と手数から求めるだけで質問しない（求められない場合は ss.move-number を尋ねる）
   { factId: "ss.current-period", category: "scoresheet", level: "optional" },
-
   {
     factId: "ss.move-number",
     category: "scoresheet",

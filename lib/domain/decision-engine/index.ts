@@ -511,6 +511,7 @@ export class DecisionEngine {
         return this.finish(
           incident,
           new RecordingObligationTree(this.providers, rulesVersion).evaluate({
+            issue: incident.subtype,
             facts: incident.scoresheetFacts ?? {},
             timeControl: ruleset.timeControl,
           }),

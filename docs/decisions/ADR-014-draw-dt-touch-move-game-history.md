@@ -163,7 +163,11 @@ A new domain service, `assessMatePossibility(position)`, replaces both the count
 - **Amendment (J2-3, 2026-10-09): the tree is DT-011** (`lib/domain/decision-trees/dt-011-recording-obligation.ts`; DT-008 to DT-010 are retired numbers). Scoresheet incidents first ask the issue (`ss.issue`); "記入していない" and "遅れている" in Standard go to DT-011, every other issue and Rapid/Blitz stay outside the trees (AI reference / CA).
   - The remaining time is asked as "under 5:00 / 5:00 or more / unknown" rather than as a duration, because 8.4 only needs the comparison.
   - The increment comes from the time control. When all periods agree on "30 s or more", no period is asked; when they differ, the arbiter picks the period from a list built from the profile (one tap) instead of typing the move number. With no or an unconfirmed time control, the increment itself is asked (30 s or more / under 30 s / delay / unknown).
-  - An increment of 30 s or more gives "recording required" without asking the clock. Any unknown answer, an unknown period or a delay gives "consult the CA". No penalty is applied automatically (12.9).
+  - **"遅れている" checks 8.1.3 first** (review fix): if only the latest move of each player is unrecorded (a one-move lag, whichever player is on move), there is no violation. Otherwise the 8.4 check follows; if it gives "required" while it is unknown which moves are missing, the result is "consult the CA".
+  - An increment of 30 s or more gives "recording required" without asking the clock. The clock is asked first; the period or increment is asked only when the clock was (or may have been) below 5:00 in the period, in the next round, or in the same round shown only after 「はい／わからない」 to "below 5:00 earlier in the period". A delay, or an answer left unknown that the result depends on, gives "consult the CA" (an unknown that cannot change the result, e.g. an unknown period when the clock was never below 5:00, does not). No penalty is applied automatically (12.9).
+  - The exempt result names the 8.5.1 / 8.5.2 steps after a flag falls.
+  - The answer 「わからない」 to the issue is stored as subtype `unknown`: the incident leaves the tree for good (note → AI reference / CA) and is not asked again; it is not sent as a subtype to the AI.
+  - Like the other trees, DT-011 runs before the fair-play check of the uncovered path. It never calls the LLM, so nothing leaks, but a fair-play mention in a scoresheet description shows no fair-play escalation.
 
 ## Consequences
 

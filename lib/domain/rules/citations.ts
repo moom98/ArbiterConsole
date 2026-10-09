@@ -234,6 +234,21 @@ export const CITATIONS = {
     29,
     "In the course of play each player is required to record his/her own moves and those of his/her opponent in the correct manner, move after move, as clearly and legibly as possible, in one of the following ways:"
   ),
+  FIDE_8_1_3: fide(
+    "8.1.3",
+    29,
+    "A player may reply to his/her opponent’s move before recording it, if he/she so wishes. He/She must record his/her previous move before making another."
+  ),
+  FIDE_8_5_1: fide(
+    "8.5.1",
+    30,
+    "If neither player keeps score under Article 8.4, the arbiter or an assistant should try to be present and keep score. In this case, immediately after a flag has fallen the arbiter shall pause the chessclock. Then both players shall update their scoresheets, using the arbiter’s or the opponent’s scoresheet."
+  ),
+  FIDE_8_5_2: fide(
+    "8.5.2",
+    30,
+    "If only one player has not kept score under Article 8.4, he/she must, as soon as either flag has fallen, update his/her scoresheet completely before moving a piece on the chessboard. Provided it is that player’s move, he/she may use his/her opponent’s scoresheet, but must return it before making a move."
+  ),
   FIDE_8_4: fide(
     "8.4",
     29,

@@ -5,7 +5,11 @@ import {
   type RecordingObligationTreeInput,
 } from "@/lib/domain/decision-trees/dt-011-recording-obligation";
 import { DecisionEngine } from "@/lib/domain/decision-engine";
-import { applyIncidentAnswers } from "@/lib/domain/follow-up";
+import {
+  QUESTIONS,
+  applyIncidentAnswers,
+  isQuestionVisible,
+} from "@/lib/domain/follow-up";
 import {
   assessRecordingObligation,
   recordingIncrement,
@@ -36,8 +40,14 @@ const MIXED: TimeControl = {
 };
 const INCOMPLETE: TimeControl = { ...SINGLE_0, periodsIncomplete: true };
 
-function run(input: RecordingObligationTreeInput) {
-  return new RecordingObligationTree(fixedProviders()).evaluate(input);
+function run(
+  input: Omit<RecordingObligationTreeInput, "issue"> &
+    Partial<Pick<RecordingObligationTreeInput, "issue">>
+) {
+  return new RecordingObligationTree(fixedProviders()).evaluate({
+    issue: "not-writing",
+    ...input,
+  });
 }
 function ids(r: ReturnType<typeof run>) {
   return r.status === "needs-input" ? r.questions.map((q) => q.id) : [];
@@ -67,26 +77,81 @@ describe("DT-011 questions", () => {
     ]);
   });
 
-  it("mixed periods: asks the period with options built from the time control", () => {
-    const r = run({ facts: {}, timeControl: MIXED });
-    expect(ids(r)).toEqual([
+  it("mixed periods: the clock first; the period only when below five is possible", () => {
+    expect(ids(run({ facts: {}, timeControl: MIXED }))).toEqual([
       "recordingBelowFiveNow",
       "recordingBelowFiveInPeriod",
-      "recordingPeriod",
     ]);
+    const r = run({ facts: { belowFiveNow: true }, timeControl: MIXED });
+    expect(ids(r)).toEqual(["recordingPeriod"]);
     if (r.status !== "needs-input") throw new Error("expected");
-    expect(r.questions[2].options.map((o) => o.label)).toEqual([
+    expect(r.questions[0].options.map((o) => o.label)).toEqual([
       "第1ピリオド（1〜40手目・加算0秒）",
       "第2ピリオド（41手目以降・加算30秒）",
       "わからない・確認できない",
     ]);
   });
 
-  it("no or incomplete time control: asks the increment", () => {
-    expect(ids(run({ facts: {} }))).toContain("recordingIncrement");
-    expect(ids(run({ facts: {}, timeControl: INCOMPLETE }))).toContain(
+  it("no or incomplete time control: asks the increment after the clock", () => {
+    expect(ids(run({ facts: {} }))).not.toContain("recordingIncrement");
+    expect(ids(run({ facts: { belowFiveNow: true } }))).toEqual([
+      "recordingIncrement",
+    ]);
+    expect(
+      ids(run({ facts: { belowFiveNow: true }, timeControl: INCOMPLETE }))
+    ).toEqual(["recordingIncrement"]);
+  });
+
+  it("5:00 or more now: the increment shows only if the clock went below five earlier", () => {
+    const r = run({ facts: { belowFiveNow: false } });
+    expect(ids(r)).toEqual([
+      "recordingBelowFiveInPeriod",
+      "recordingIncrement",
+    ]);
+    if (r.status !== "needs-input") throw new Error("expected");
+    const round = r.questions;
+    const visible = (answers: Record<string, string>) =>
+      round
+        .filter((q) => isQuestionVisible(q, answers, round))
+        .map((q) => q.id);
+    expect(visible({ recordingBelowFiveInPeriod: "false" })).toEqual([
+      "recordingBelowFiveInPeriod",
+    ]);
+    expect(visible({ recordingBelowFiveInPeriod: "true" })).toContain(
       "recordingIncrement"
     );
+  });
+
+  it("behind: 'both latest moves only' hides the whole time chain", () => {
+    const r = run({ issue: "behind", facts: {}, timeControl: SINGLE_0 });
+    if (r.status !== "needs-input") throw new Error("expected");
+    const round = r.questions;
+    const visible = (answers: Record<string, string>) =>
+      round
+        .filter((q) => isQuestionVisible(q, answers, round))
+        .map((q) => q.id);
+    expect(
+      visible({
+        recordingOnlyLastMoves: "true",
+        recordingBelowFiveNow: "false",
+      })
+    ).toEqual(["recordingOnlyLastMoves"]);
+    expect(
+      visible({
+        recordingOnlyLastMoves: "false",
+        recordingBelowFiveNow: "false",
+      })
+    ).toEqual([
+      "recordingOnlyLastMoves",
+      "recordingBelowFiveNow",
+      "recordingBelowFiveInPeriod",
+    ]);
+  });
+
+  it("8.1.3 option covers a one-move lag in either order", () => {
+    const label = QUESTIONS.recordingOnlyLastMoves.options[0].label;
+    expect(label).toMatch(/双方の最新の手/);
+    expect(label).toMatch(/どちらの手番でも/);
   });
 });
 
@@ -162,6 +227,140 @@ describe("DT-011 decisions", () => {
   });
 });
 
+describe("DT-011: behind (8.1.3)", () => {
+  it("asks 'only the last moves?' first; the time questions show only for other answers", () => {
+    const r = run({ issue: "behind", facts: {}, timeControl: SINGLE_0 });
+    expect(ids(r)).toEqual([
+      "recordingOnlyLastMoves",
+      "recordingBelowFiveNow",
+      "recordingBelowFiveInPeriod",
+    ]);
+    if (r.status !== "needs-input") throw new Error("expected");
+    expect(r.questions[1].showWhen).toEqual({
+      questionId: "recordingOnlyLastMoves",
+      values: ["false", "unknown"],
+    });
+    // 5分を下回ったかは、残り時間の質問に続く（元の表示条件のまま）
+    expect(r.questions[2].showWhen?.questionId).toBe("recordingBelowFiveNow");
+    expect(articles(r)).toContain("FIDE 8.1.3");
+  });
+
+  it("only the last moves: no violation, even with a 30 s increment", () => {
+    const r = run({
+      issue: "behind",
+      facts: { onlyLastMoves: true },
+      timeControl: SINGLE_30,
+    });
+    expect(r.decision.intervention).toBe("no-intervention");
+    expect(articles(r)).toContain("FIDE 8.1.3");
+  });
+
+  it("one move behind in 90+30 is never 'intervene immediately'", () => {
+    const r = run({ issue: "behind", facts: {}, timeControl: SINGLE_30 });
+    expect(ids(r)).toEqual(["recordingOnlyLastMoves"]);
+  });
+
+  it("older moves missing and no exemption: recording required", () => {
+    const r = run({
+      issue: "behind",
+      facts: { onlyLastMoves: false },
+      timeControl: SINGLE_30,
+    });
+    expect(r.decision.intervention).toBe("immediate");
+    expect(articles(r)).toEqual(
+      expect.arrayContaining(["FIDE 8.1.3", "FIDE 12.9"])
+    );
+  });
+
+  it("unknown which moves are missing and no exemption: consult the CA", () => {
+    const r = run({
+      issue: "behind",
+      facts: { onlyLastMoves: "unknown" },
+      timeControl: SINGLE_30,
+    });
+    expect(r.decision.kind).toBe("manual-review");
+    expect(r.decision.conclusion).toMatch(/8\.1\.3/);
+  });
+
+  it("unknown which moves are missing but exempt (8.4): exempt", () => {
+    const r = run({
+      issue: "behind",
+      facts: { onlyLastMoves: "unknown", belowFiveNow: true },
+      timeControl: SINGLE_0,
+    });
+    expect(r.decision.intervention).toBe("no-intervention");
+  });
+});
+
+describe("DT-011: more cases", () => {
+  it("the exempt result names the 8.5 steps", () => {
+    const r = run({ facts: { belowFiveNow: true }, timeControl: SINGLE_0 });
+    expect(articles(r)).toEqual(
+      expect.arrayContaining(["FIDE 8.5.1", "FIDE 8.5.2"])
+    );
+    expect(r.decision.actions.join()).toMatch(/8\.5\.2/);
+  });
+
+  it("never below five in the period: no period or increment question", () => {
+    for (const timeControl of [MIXED, undefined]) {
+      const r = run({
+        facts: { belowFiveNow: false, belowFiveInPeriod: false },
+        timeControl,
+      });
+      expect(r.status).toBe("decided");
+      expect(r.decision.intervention).toBe("immediate");
+    }
+    const unknownNow = run({
+      facts: { belowFiveNow: "unknown", belowFiveInPeriod: false },
+      timeControl: SINGLE_0,
+    });
+    expect(unknownNow.decision.intervention).toBe("immediate");
+  });
+
+  it("increment boundary from settings: 29 s can be exempt, 30 s cannot", () => {
+    const tc = (incrementSeconds: number): TimeControl => ({
+      periods: [{ minutes: 90, incrementSeconds }],
+    });
+    expect(
+      run({ facts: { belowFiveNow: true }, timeControl: tc(29) }).decision
+        .intervention
+    ).toBe("no-intervention");
+    expect(
+      run({ facts: { belowFiveNow: true }, timeControl: tc(30) }).decision
+        .intervention
+    ).toBe("immediate");
+  });
+
+  it("several periods all under 30 s: the period is not asked", () => {
+    const r = run({
+      facts: { belowFiveNow: true },
+      timeControl: {
+        periods: [
+          { moves: 40, minutes: 90, incrementSeconds: 10 },
+          { minutes: 30, incrementSeconds: 10 },
+        ],
+      },
+    });
+    expect(r.decision.intervention).toBe("no-intervention");
+  });
+
+  it("a delay with an increment of 30 s or more: recording required", () => {
+    const r = run({
+      facts: {},
+      timeControl: { ...SINGLE_30, delaySeconds: 5 },
+    });
+    expect(r.decision.intervention).toBe("immediate");
+  });
+
+  it("a stored period out of range is asked again", () => {
+    const r = run({
+      facts: { belowFiveNow: true, period: 7 },
+      timeControl: MIXED,
+    });
+    expect(ids(r)).toContain("recordingPeriod");
+  });
+});
+
 describe("DT-011 in the engine", () => {
   function incident(overrides: Partial<Incident> = {}): Incident {
     return {
@@ -229,6 +428,38 @@ describe("DT-011 in the engine", () => {
       },
     });
     expect(rapid.decision.treeId).toBeUndefined();
+  });
+
+  it("Blitz stays outside the tree", () => {
+    const r = engine().processIncident({
+      incident: incident({
+        subtype: "not-writing",
+        description: "書いていない",
+      }),
+      ruleset: {
+        competitionType: "blitz",
+        supervisionRegime: "competition-rules",
+        rulesVersion: "FIDE-2023",
+      },
+    });
+    expect(r.decision.treeId).toBeUndefined();
+  });
+
+  it("a stored scoresheet incident with a description but no issue is asked the issue", () => {
+    const r = engine().processIncident({
+      incident: incident({ description: "棋譜をつけていない" }),
+      ruleset: { competitionType: "standard", rulesVersion: "FIDE-2023" },
+    });
+    expect(r.followUpQuestions.map((q) => q.id)).toEqual(["scoresheetIssue"]);
+  });
+
+  it("the period answer is limited to the profile maximum", () => {
+    expect(
+      applyIncidentAnswers(incident(), { recordingPeriod: "6" }).scoresheetFacts
+    ).toBeUndefined();
+    expect(
+      applyIncidentAnswers(incident(), { recordingPeriod: "5" }).scoresheetFacts
+    ).toEqual({ period: 5 });
   });
 
   it("ignores invalid answers", () => {

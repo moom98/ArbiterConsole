@@ -12,7 +12,8 @@
     "prebuild": "node scripts/copy-runtime-assets.mjs",
     "cf:build": "node scripts/check-cf-env.mjs && opennextjs-cloudflare build",
     "cf:preview": "npm run cf:build && opennextjs-cloudflare preview",
-    "cf:deploy": "npm run cf:build && opennextjs-cloudflare deploy"
+    "cf:deploy": "npm run cf:build && opennextjs-cloudflare deploy",
+    "eval:classifier": "node scripts/eval-classifier.mjs"
   },
   "dependencies": {
     "@google/genai": "2.27.0",

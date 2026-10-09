@@ -1,0 +1,13 @@
+{
+  "dataset": {
+    "id": "classification-eval-ja",
+    "version": "2",
+    "sha256": "1b123a4b1c2657b26bc784076b3c41e3427f067b20fa4688179c041f33de451f"
+  },
+  "providers": {
+    "jev": {
+      "model": "jev-1.13.0",
+      "requestSha256": "7f023628b893181607857f8c3d664dcd2928fd136875727379d898a05cb364d0"
+    }
+  }
+}

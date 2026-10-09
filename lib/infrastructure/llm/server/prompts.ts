@@ -1,6 +1,6 @@
 import {
   INCIDENT_CATEGORIES,
-  INCIDENT_CATEGORY_DESCRIPTIONS,
+  GEMINI_CATEGORY_DESCRIPTIONS,
 } from "@/lib/domain/llm/classification";
 import {
   LLM_INTERVENTIONS,
@@ -44,7 +44,7 @@ export const CLASSIFIER_SYSTEM_PROMPT = `あなたはチェス大会のアービ
 
 カテゴリ（category）:
 ${INCIDENT_CATEGORIES.map(
-  (c) => `- ${c}: ${INCIDENT_CATEGORY_DESCRIPTIONS[c]}`
+  (c) => `- ${c}: ${GEMINI_CATEGORY_DESCRIPTIONS[c]}`
 ).join("\n")}
 
 subtype（該当する場合のみ）:

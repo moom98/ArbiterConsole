@@ -1,0 +1,28 @@
+{
+  "model": "jev-1.13.0",
+  "dataset": {
+    "id": "classification-eval-ja",
+    "version": "2",
+    "tuningSize": 270,
+    "heldOutSize": 135
+  },
+  "createdAt": "2026-10-09T17:53:21.035Z",
+  "category": {
+    "medium": 0.37,
+    "prefill": 0.37
+  },
+  "presence": {},
+  "metrics": {
+    "heldoutAccuracy": 0.9037,
+    "heldoutMediumAccuracy": 0.9104,
+    "heldoutMediumSupport": 134,
+    "heldoutPrefillAccuracy": 0.9104,
+    "heldoutPrefillSupport": 134,
+    "latencyP95Ms": 259,
+    "probabilitySumMaxAbsDrift": 0.01,
+    "heldoutTop2Accuracy": 0.9926,
+    "heldoutSubtypeAccuracy": 1,
+    "heldoutSubtypeSupport": 27
+  },
+  "subtype": 0.71
+}

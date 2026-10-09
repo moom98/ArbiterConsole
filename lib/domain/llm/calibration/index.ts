@@ -1,4 +1,5 @@
 import type { FactId } from "@/lib/domain/facts/types";
+import { JEV_1_13_0_CALIBRATION } from "./jev-1.13.0";
 
 /**
  * Jev の較正データ（しきい値）。モデルごと（fact-model.md §5, jev-classifier-design §5.4）。
@@ -32,10 +33,12 @@ export interface JevCalibration {
 }
 
 /**
- * 登録済みの較正。**評価（J3）前のため空**。空の間はすべて未較正モードで動く。
+ * 登録済みの較正。登録のないモデルは未較正モードで動く。
  * 追加するときは評価スクリプトの出力（calibration/<model>.json）から作り、テストで一致を確認する
  */
-export const JEV_CALIBRATIONS: readonly JevCalibration[] = [];
+export const JEV_CALIBRATIONS: readonly JevCalibration[] = [
+  JEV_1_13_0_CALIBRATION,
+];
 
 const isThreshold = (v: unknown): v is number =>
   typeof v === "number" && Number.isFinite(v) && v > 0 && v <= 1;

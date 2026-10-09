@@ -1,0 +1,254 @@
+{
+  "jev": {
+    "provider": "jev",
+    "model": "jev-1.13.0",
+    "n": 405,
+    "statusCounts": {
+      "ok": 405,
+      "rejected": 0,
+      "not-sent": 0,
+      "error": 0
+    },
+    "accuracy": {
+      "all": 0.928395061728395,
+      "tuning": 0.9407407407407408,
+      "heldout": 0.9037037037037037
+    },
+    "top2Heldout": 0.9925925925925926,
+    "perCategoryHeldout": {
+      "illegal-move": {
+        "n": 15,
+        "accuracy": 0.8666666666666667
+      },
+      "board-piece": {
+        "n": 15,
+        "accuracy": 1
+      },
+      "clock-time": {
+        "n": 15,
+        "accuracy": 1
+      },
+      "game-result": {
+        "n": 15,
+        "accuracy": 0.9333333333333333
+      },
+      "draw": {
+        "n": 15,
+        "accuracy": 0.9333333333333333
+      },
+      "scoresheet": {
+        "n": 15,
+        "accuracy": 0.9333333333333333
+      },
+      "player-behavior": {
+        "n": 15,
+        "accuracy": 0.6
+      },
+      "team": {
+        "n": 15,
+        "accuracy": 0.8666666666666667
+      },
+      "tournament-admin": {
+        "n": 15,
+        "accuracy": 1
+      }
+    },
+    "latency": {
+      "p50": 169,
+      "p95": 259
+    }
+  },
+  "keyword": {
+    "provider": "keyword",
+    "n": 405,
+    "statusCounts": {
+      "ok": 313,
+      "rejected": 0,
+      "not-sent": 0,
+      "error": 92
+    },
+    "accuracy": {
+      "all": 0.6246913580246913,
+      "tuning": 0.662962962962963,
+      "heldout": 0.5481481481481482
+    },
+    "perCategoryHeldout": {
+      "illegal-move": {
+        "n": 15,
+        "accuracy": 0.13333333333333333
+      },
+      "board-piece": {
+        "n": 15,
+        "accuracy": 0.26666666666666666
+      },
+      "clock-time": {
+        "n": 15,
+        "accuracy": 0.7333333333333333
+      },
+      "game-result": {
+        "n": 15,
+        "accuracy": 0.4666666666666667
+      },
+      "draw": {
+        "n": 15,
+        "accuracy": 0.6666666666666666
+      },
+      "scoresheet": {
+        "n": 15,
+        "accuracy": 0.8666666666666667
+      },
+      "player-behavior": {
+        "n": 15,
+        "accuracy": 0.26666666666666666
+      },
+      "team": {
+        "n": 15,
+        "accuracy": 1
+      },
+      "tournament-admin": {
+        "n": 15,
+        "accuracy": 0.5333333333333333
+      }
+    },
+    "latency": {
+      "p50": null,
+      "p95": null
+    }
+  },
+  "medium": {
+    "tuning": {
+      "threshold": 0.37,
+      "support": 270,
+      "accuracy": 0.9407407407407408,
+      "wilsonLower": 0.9059
+    },
+    "heldout": {
+      "threshold": 0.37,
+      "support": 134,
+      "accuracy": 0.9104477611940298,
+      "wilsonLower": 0.85
+    },
+    "confirmed": true
+  },
+  "prefill": {
+    "tuning": {
+      "threshold": 0.37,
+      "support": 270,
+      "accuracy": 0.9407407407407408,
+      "wilsonLower": 0.9059
+    },
+    "heldout": {
+      "threshold": 0.37,
+      "support": 134,
+      "accuracy": 0.9104477611940298,
+      "wilsonLower": 0.85
+    },
+    "confirmed": true
+  },
+  "subtype": {
+    "tuning": {
+      "threshold": 0.71,
+      "support": 45,
+      "accuracy": 1,
+      "wilsonLower": 0.9213
+    },
+    "heldout": {
+      "threshold": 0.71,
+      "support": 27,
+      "accuracy": 1,
+      "wilsonLower": 0.8754
+    },
+    "confirmed": true
+  },
+  "sumDrift": {
+    "n": 405,
+    "maxAbs": 0.01,
+    "min": -0.01,
+    "max": 0
+  },
+  "reliabilityHeldout": [
+    {
+      "from": 0,
+      "to": 0.5,
+      "n": 3,
+      "meanP": 0.39666666666666667,
+      "accuracy": 0
+    },
+    {
+      "from": 0.5,
+      "to": 0.7,
+      "n": 11,
+      "meanP": 0.6218181818181819,
+      "accuracy": 0.45454545454545453
+    },
+    {
+      "from": 0.7,
+      "to": 0.8,
+      "n": 8,
+      "meanP": 0.7525,
+      "accuracy": 0.875
+    },
+    {
+      "from": 0.8,
+      "to": 0.9,
+      "n": 19,
+      "meanP": 0.8442105263157896,
+      "accuracy": 0.8947368421052632
+    },
+    {
+      "from": 0.9,
+      "to": 0.95,
+      "n": 7,
+      "meanP": 0.9257142857142858,
+      "accuracy": 0.8571428571428571
+    },
+    {
+      "from": 0.95,
+      "to": 0.99,
+      "n": 19,
+      "meanP": 0.9726315789473686,
+      "accuracy": 1
+    },
+    {
+      "from": 0.99,
+      "to": 1,
+      "n": 68,
+      "meanP": 0.9970588235294119,
+      "accuracy": 1
+    }
+  ],
+  "checks": [
+    {
+      "id": "accuracy-vs-gemini",
+      "pass": false,
+      "detail": "Gemini の結果がない（比較できない）"
+    },
+    {
+      "id": "per-category",
+      "pass": false,
+      "detail": "player-behavior 60%"
+    },
+    {
+      "id": "t-medium",
+      "pass": true,
+      "detail": "T=0.37 (tuning 94.1%, n=270; held-out 91%, n=134)"
+    },
+    {
+      "id": "t-prefill",
+      "pass": true,
+      "detail": "T=0.37 (tuning 94.1%, n=270; held-out 91%, n=134)"
+    },
+    {
+      "id": "latency-p95",
+      "pass": true,
+      "detail": "p50 169 ms / p95 259 ms"
+    },
+    {
+      "id": "no-failures",
+      "pass": true,
+      "detail": "ok 405, rejected 0, not-sent 0, error 0"
+    }
+  ],
+  "accepted": false,
+  "calibratable": true
+}

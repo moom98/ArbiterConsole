@@ -264,9 +264,10 @@ describe("parseLlmClassification – Jev probabilistic shape", () => {
 });
 
 describe("Jev calibration registry", () => {
-  it("is empty until the evaluation (J3) produces a calibration", () => {
-    expect(JEV_CALIBRATIONS).toEqual([]);
-    expect(findJevCalibration("jev-1.13.0")).toBeUndefined();
+  it("holds the J3 calibration for the pinned model only", () => {
+    expect(JEV_CALIBRATIONS.map((c) => c.model)).toEqual(["jev-1.13.0"]);
+    expect(findJevCalibration("jev-1.13.0")?.model).toBe("jev-1.13.0");
+    expect(findJevCalibration("jev-9.9.9")).toBeUndefined();
   });
 
   it("every registered calibration is valid", () => {

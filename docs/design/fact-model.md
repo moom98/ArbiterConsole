@@ -479,6 +479,8 @@ interface JevCalibration {
 - at least as many reports that do **not** state it. These must include reports where the fact could only be inferred, and reports that state a near-miss, for example "clock pressed by the opponent" against `im.clock-pressed`.
 - Facts are added to the dataset in priority order (blocking first). A fact without data stays "always missing".
 
+> **J3 (2026-10-10):** the category thresholds also use the Wilson lower bound and are never below their target; presence has no dataset yet, so the first calibration (`jev-1.13.0`) has an empty `presence`. See jev-classifier-design §18.3.
+
 **Category thresholds** (`medium` and `prefill`) are unchanged. They use accuracy, because a wrong category is corrected by the arbiter at the first screen: they tune on the tuning set and confirm on the held-out set.
 
 - The calibration file records the dataset version, the per-fact precision and its Wilson bound, the support and the recall.

@@ -139,6 +139,23 @@ describe("prepareFactPresenceCheck (application)", () => {
     expect(canOfferFactPresenceCheck(INPUT, [])).toBe(false);
   });
 
+  it("is not offered when no calibration has a threshold for a target fact (J3: category-only calibration)", () => {
+    expect(
+      canOfferFactPresenceCheck(INPUT, [{ ...CALIBRATION, presence: {} }])
+    ).toBe(false);
+    // 対象外の fact のしきい値だけでは提案しない
+    expect(
+      canOfferFactPresenceCheck(INPUT, [
+        { ...CALIBRATION, presence: { "im.clock-pressed": 0.9 } },
+      ])
+    ).toBe(false);
+    expect(
+      canOfferFactPresenceCheck(INPUT, [
+        { ...CALIBRATION, presence: { "ct.event": 0.9 } },
+      ])
+    ).toBe(true);
+  });
+
   it("calibrated: present facts map to their questions; the rest are missing", async () => {
     const step = await prepareFactPresenceCheck(INPUT, {
       ...deps(async () => ({
@@ -166,7 +183,8 @@ describe("prepareFactPresenceCheck (application)", () => {
       deps(async () => ({
         ok: true,
         result: { provider: "jev", presence: { "ct.event": 0.99 } },
-        model: "jev-1.13.0",
+        // 登録されていないモデル（未較正）
+        model: "jev-9.9.9",
       }))
     );
     if (step.status !== "needs-confirmation") throw new Error(step.status);

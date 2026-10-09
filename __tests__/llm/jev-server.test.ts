@@ -179,7 +179,9 @@ function sentBody(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>, i = 0) {
 // ---------------------------------------------------------------------------
 
 describe("Gemini classifier prompt (moved descriptions)", () => {
-  it("is byte-identical to the prompt before J1c", () => {
+  // J3 の説明の改訂は Jev でしか評価していないため、Gemini のプロンプトは J1c 以前のまま
+  // （jev-classifier-design §18.3）。Gemini で評価してから変える
+  it("is byte-identical to the prompt before J1c (J3 descriptions are Jev-only)", () => {
     expect(
       createHash("sha256").update(CLASSIFIER_SYSTEM_PROMPT).digest("hex")
     ).toBe("db61a1302f2fc8fde7e27f14d4e1e368798596459171f8853b7e8c1efa78e847");

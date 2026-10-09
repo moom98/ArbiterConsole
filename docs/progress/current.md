@@ -26,6 +26,10 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
 **Deployed 2026-10-10:** `main` at `466ae58` (PRs #8–#11), version `7263f6cc-fba3-4cc2-9ce6-d05938bba4d8`, from a clean worktree (`npm ci`, tsc clean, 83 files / 1634 tests). Production checks: all pages 200 (`/` → 307 `/home`), `sw.js` and `manifest.json` 200, `/api/llm/{reason,classify,facts,providers}` 401 without the token. Secrets present: `GEMINI_API_KEY`, `LLM_ACCESS_TOKEN` (no `TYPESAFE_API_KEY` yet).
 
 **J3 (branch `feature/j3-eval`, worktree `.claude/worktrees/j3`):** done except the Gemini comparison and the production switch. See "J3 status" below.
+- **PR #12** to `main` is open; the user merges it. The re-review verdict is MERGE. Merging and deploying change nothing in production.
+- **Waiting on the user:**
+  - create `~/.config/arbiter-console/gemini.key` (chmod 600), so the Gemini comparison can run with `EVAL_REUSE=docs/progress/evaluations/classifier-v2-run1-rescored`;
+  - decide on player-behavior and on the threshold-floor caveat (design §18.6).
 
 ## J3 status (2026-10-10)
 

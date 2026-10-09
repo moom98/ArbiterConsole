@@ -4,8 +4,8 @@
  * - DT が求めた質問のうち、カタログの fact に対応し、判定してよいものだけを Jev に尋ねる
  * - 送る前に送信内容を示し、アービターが確認してから送る（D13）。任意の操作で、送らなくても
  *   質問にはそのまま回答できる
- * - 結果は**質問の並べ方にだけ**使う（記載なし → 先、記載あり → 後）。質問を省略せず、値も埋めない
- *   （ADR-002, ADR-013）。失敗・未較正・不正な応答はすべて「記載なし」（全部を尋ねる）
+ * - 結果は**質問の並べ方にだけ**使う（記載ありと判定されなかった → 先、記載あり → 後）。質問を
+ *   省略せず、値も埋めない（ADR-002, ADR-013）。失敗・未較正・不正な応答では並べ替えない
  */
 import type { IncidentCategory } from "@/lib/domain/entities";
 import { presenceTargets } from "@/lib/domain/facts";
@@ -18,7 +18,10 @@ import {
   parseFactPresence,
   type FactPresence,
 } from "@/lib/domain/llm/presence";
-import type { JevCalibration } from "@/lib/domain/llm/calibration";
+import {
+  JEV_CALIBRATIONS,
+  type JevCalibration,
+} from "@/lib/domain/llm/calibration";
 import type { ExternalAiPreview } from "@/lib/domain/llm/types";
 import { browserIsOnline } from "@/lib/infrastructure/llm/llm-api-client";
 import {
@@ -27,8 +30,11 @@ import {
 } from "./external-ai-guard";
 
 export interface FactPresenceOutcome {
-  /** 質問 id → 記載の有無（判定した質問だけ） */
-  byQuestion: Partial<Record<IncidentQuestionId, FactPresence>>;
+  /**
+   * 質問 id → 記載の有無（判定した質問だけ）。較正済みの正しい応答の場合だけ。
+   * 失敗・未較正・不正な応答では undefined（並べ替えない。「記載なし」とも示さない）
+   */
+  byQuestion?: Partial<Record<IncidentQuestionId, FactPresence>>;
   /** 表示する注意（失敗・未較正など） */
   notice?: string;
 }
@@ -59,7 +65,7 @@ export interface FactPresenceDeps extends ExternalAiGuardDeps {
 }
 
 export const UNCALIBRATED_NOTICE =
-  "AIの判定はまだ較正されていないため、すべて「記載なし」として並べています";
+  "このAIの判定はまだ較正されていないため、並べ替えていません。すべての質問に回答してください";
 
 function targetsOf(input: FactPresenceInput) {
   // フェアプレーは送らない（L0 もガードで止めるが、確認自体を提案しない）
@@ -76,10 +82,14 @@ function targetsOf(input: FactPresenceInput) {
 
 /**
  * 記載の確認を提案するか（端末内だけで決める。通信しない）。
- * 画面はこれが true のときだけ「AIで報告文の記載を確認（任意）」を出し、タップされてから準備する
+ * 画面はこれが true のときだけ「AIで報告文の記載を確認（任意）」を出し、タップされてから準備する。
+ * 較正が1つも登録されていない間（J3 まで）は、結果を使えないため提案しない（効果のない送信をしない）
  */
-export function canOfferFactPresenceCheck(input: FactPresenceInput): boolean {
-  return targetsOf(input).length > 0;
+export function canOfferFactPresenceCheck(
+  input: FactPresenceInput,
+  calibrations: readonly JevCalibration[] = JEV_CALIBRATIONS
+): boolean {
+  return calibrations.length > 0 && targetsOf(input).length > 0;
 }
 
 export async function prepareFactPresenceCheck(
@@ -123,25 +133,24 @@ export async function prepareFactPresenceCheck(
       const res = await guarded.send();
       if (!res.ok)
         return {
-          byQuestion: {},
           notice: `記載の確認に失敗しました（${res.error.message}）。すべての質問に回答してください`,
         };
       const parsed = parseFactPresence(res.result, {
         model: res.model,
-        requestedFactIds: factIds,
+        requestedFactIds: guarded.factIds,
         calibrations: deps.calibrations,
       });
+      if (!parsed.valid)
+        return {
+          notice:
+            "AIの応答を解釈できないため、並べ替えていません。すべての質問に回答してください",
+        };
+      if (!parsed.calibrated) return { notice: UNCALIBRATED_NOTICE };
       const byQuestion: Partial<Record<IncidentQuestionId, FactPresence>> = {};
       for (const t of targets)
-        byQuestion[t.questionId] = parsed.byFact[t.factId];
-      return {
-        byQuestion,
-        notice: !parsed.valid
-          ? "AIの応答を解釈できないため、すべて「記載なし」として並べています"
-          : !parsed.calibrated
-            ? UNCALIBRATED_NOTICE
-            : undefined,
-      };
+        if (guarded.factIds.includes(t.factId))
+          byQuestion[t.questionId] = parsed.byFact[t.factId];
+      return { byQuestion };
     },
   };
 }

@@ -86,7 +86,8 @@ describe("/api/llm/providers", () => {
   });
 
   it("uses its own bucket: using up providers leaves classify available", async () => {
-    // このファイル内だけで使う上限（既定のリミッターはプロセス内で共有される）
+    // 既定のリミッターはモジュール内で `${route}:${上限}` ごとに共有される。この上限（2）は
+    // このテストだけが使う（watch モードで再実行すると providers:2 の枠が残るため、ファイルごと再実行する）
     const env = {
       GEMINI_API_KEY: "g",
       LLM_RATE_LIMIT_CLASSIFY_PER_MINUTE: "2",

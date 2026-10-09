@@ -104,22 +104,22 @@ Represents a chess tournament with its configuration and regulations.
 ```typescript
 interface Tournament {
   // Identity
-  id: string;                          // UUID
-  name: string;                        // e.g., "全日本選手権 2026"
-  date: Date;                          // Start date
+  id: string; // UUID
+  name: string; // e.g., "全日本選手権 2026"
+  date: Date; // Start date
 
   // Competition Configuration
-  competitionType: CompetitionType;    // 'standard' | 'rapid' | 'blitz'
+  competitionType: CompetitionType; // 'standard' | 'rapid' | 'blitz'
   timeControl: TimeControl;
-  defaultTime: number;                 // Minutes until default loss
+  defaultTime: number; // Minutes until default loss
 
   // Rapid-specific
-  rapidRulesType?: RapidRulesType;     // 'A4' | 'A5' (if rapid)
+  rapidRulesType?: RapidRulesType; // 'A4' | 'A5' (if rapid)
 
   // Format
-  format: TournamentFormat;            // 'individual' | 'team'
-  teamSize?: number;                   // If team tournament
-  fixedBoardOrder: boolean;            // FBO requirement
+  format: TournamentFormat; // 'individual' | 'team'
+  teamSize?: number; // If team tournament
+  fixedBoardOrder: boolean; // FBO requirement
 
   // Rounds
   totalRounds: number;
@@ -129,28 +129,28 @@ interface Tournament {
   regulations: TournamentRegulation[]; // Links to custom rules
 
   // Equipment
-  clockModel?: string;                 // e.g., "DGT 2010"
+  clockModel?: string; // e.g., "DGT 2010"
 
   // Metadata
   createdAt: Date;
   updatedAt: Date;
-  status: TournamentStatus;            // 'draft' | 'active' | 'completed'
+  status: TournamentStatus; // 'draft' | 'active' | 'completed'
 }
 
-type CompetitionType = 'standard' | 'rapid' | 'blitz';
+type CompetitionType = "standard" | "rapid" | "blitz";
 
-type RapidRulesType = 'A4' | 'A5';
+type RapidRulesType = "A4" | "A5";
 
-type TournamentFormat = 'individual' | 'team';
+type TournamentFormat = "individual" | "team";
 
-type TournamentStatus = 'draft' | 'active' | 'completed' | 'cancelled';
+type TournamentStatus = "draft" | "active" | "completed" | "cancelled";
 
 interface TimeControl {
-  baseTimeMinutes: number;             // e.g., 30
-  incrementSeconds?: number;           // e.g., 30 (Fischer)
-  delaySeconds?: number;               // e.g., 5 (Bronstein)
-  moveThreshold?: number;              // e.g., 40 moves
-  additionalTimeMinutes?: number;      // e.g., 30 (after move 40)
+  baseTimeMinutes: number; // e.g., 30
+  incrementSeconds?: number; // e.g., 30 (Fischer)
+  delaySeconds?: number; // e.g., 5 (Bronstein)
+  moveThreshold?: number; // e.g., 40 moves
+  additionalTimeMinutes?: number; // e.g., 30 (after move 40)
 }
 
 // Per §7: Time control determines competition type
@@ -161,11 +161,11 @@ function deriveCompetitionType(tc: TimeControl): CompetitionType {
     (tc.incrementSeconds ? (tc.incrementSeconds * 60) / 60 : 0);
 
   if (estimatedMinutesAt60Moves >= 60) {
-    return 'standard';
+    return "standard";
   } else if (estimatedMinutesAt60Moves >= 10) {
-    return 'rapid';
+    return "rapid";
   } else {
-    return 'blitz';
+    return "blitz";
   }
 }
 ```
@@ -193,25 +193,25 @@ interface TournamentRegulation {
   category: RegulationCategory;
 
   // Content
-  title: string;                       // e.g., "電子機器持ち込み規則"
-  description: string;                 // Full text
-  overrides?: string[];                // FIDE article numbers it overrides
+  title: string; // e.g., "電子機器持ち込み規則"
+  description: string; // Full text
+  overrides?: string[]; // FIDE article numbers it overrides
 
   // Searchability
-  keywords: string[];                  // For RAG search
-  embeddings?: number[];               // Vector representation
+  keywords: string[]; // For RAG search
+  embeddings?: number[]; // Vector representation
 
   // Metadata
   createdAt: Date;
 }
 
 type RegulationCategory =
-  | 'electronic-devices'
-  | 'draw-offers'
-  | 'captain-rules'
-  | 'default-time'
-  | 'scoresheet'
-  | 'other';
+  | "electronic-devices"
+  | "draw-offers"
+  | "captain-rules"
+  | "default-time"
+  | "scoresheet"
+  | "other";
 ```
 
 ### 3.3 Round
@@ -225,7 +225,7 @@ interface Round {
   // Identity
   id: string;
   tournamentId: string;
-  roundNumber: number;                 // 1-indexed
+  roundNumber: number; // 1-indexed
 
   // Timing
   scheduledStartTime: Date;
@@ -240,19 +240,19 @@ interface Round {
   postRoundChecklist: ChecklistItem[];
 
   // Games
-  games: Game[];                       // All games in this round
+  games: Game[]; // All games in this round
 }
 
 type RoundStatus =
-  | 'pending'        // Not started
-  | 'pre-setup'      // Arbiter setting up boards
-  | 'ready'          // Setup complete, waiting to start
-  | 'active'         // Games in progress
-  | 'completed';     // All games finished
+  | "pending" // Not started
+  | "pre-setup" // Arbiter setting up boards
+  | "ready" // Setup complete, waiting to start
+  | "active" // Games in progress
+  | "completed"; // All games finished
 
 interface ChecklistItem {
   id: string;
-  label: string;                       // e.g., "全Clockが開始されているか"
+  label: string; // e.g., "全Clockが開始されているか"
   completed: boolean;
   completedAt?: Date;
   notes?: string;
@@ -296,15 +296,15 @@ interface Game {
   result?: GameResult;
 
   // Time tracking
-  whiteTimeRemaining?: number;         // Seconds
-  blackTimeRemaining?: number;         // Seconds
+  whiteTimeRemaining?: number; // Seconds
+  blackTimeRemaining?: number; // Seconds
   moveCount?: number;
 
   // Incidents
-  incidents: Incident[];               // All incidents for this game
+  incidents: Incident[]; // All incidents for this game
 
   // Scoresheet
-  scoresheetId?: string;               // Link to scoresheet image/data
+  scoresheetId?: string; // Link to scoresheet image/data
 
   // Metadata
   startedAt?: Date;
@@ -312,18 +312,18 @@ interface Game {
 }
 
 type GameStatus =
-  | 'pending'        // Not started
-  | 'active'         // In progress
-  | 'completed'      // Finished
-  | 'defaulted';     // One or both players defaulted
+  | "pending" // Not started
+  | "active" // In progress
+  | "completed" // Finished
+  | "defaulted"; // One or both players defaulted
 
 type GameResult =
-  | '1-0'            // White wins
-  | '0-1'            // Black wins
-  | '1/2-1/2'        // Draw
-  | '0-0'            // Double forfeit
-  | 'white-default'  // White defaulted
-  | 'black-default'; // Black defaulted
+  | "1-0" // White wins
+  | "0-1" // Black wins
+  | "1/2-1/2" // Draw
+  | "0-0" // Double forfeit
+  | "white-default" // White defaulted
+  | "black-default"; // Black defaulted
 ```
 
 > **Implementation (Milestone 6):** `Game` keeps `tournamentId` + `round` (number) + optional
@@ -345,15 +345,15 @@ interface Player {
   name: string;
 
   // Chess-specific
-  rating?: number;                     // FIDE rating
-  title?: string;                      // GM, IM, FM, etc.
+  rating?: number; // FIDE rating
+  title?: string; // GM, IM, FM, etc.
 
   // Team tournament (§22)
   teamId?: string;
-  boardAssignment?: number;            // For FBO
+  boardAssignment?: number; // For FBO
 
   // Penalty tracking (§25)
-  penalties: Penalty[];                // All penalties across tournament
+  penalties: Penalty[]; // All penalties across tournament
 
   // Anti-cheating notes (§23)
   fairPlayNotes?: FairPlayNote[];
@@ -362,7 +362,7 @@ interface Player {
 interface FairPlayNote {
   id: string;
   timestamp: Date;
-  observation: string;                 // e.g., "頻繁なトイレ利用"
+  observation: string; // e.g., "頻繁なトイレ利用"
   arbiterName: string;
   escalated: boolean;
 }
@@ -387,58 +387,58 @@ interface Incident {
 
   // Classification (§11)
   category: IncidentCategory;
-  subtype?: string;                    // e.g., "両手によるキャスリング"
+  subtype?: string; // e.g., "両手によるキャスリング"
 
   // Description
-  description: string;                 // Arbiter's input (text or voice)
-  arbiterObserved: boolean;            // vs. player claim
-  claimingPlayer?: PlayerColor;        // If player claim
+  description: string; // Arbiter's input (text or voice)
+  arbiterObserved: boolean; // vs. player claim
+  claimingPlayer?: PlayerColor; // If player claim
 
   // Decision (§13)
-  decision?: Decision;                 // Null if unresolved
+  decision?: Decision; // Null if unresolved
 
   // Escalation
   escalatedToCA: boolean;
   escalationNotes?: string;
 
   // Metadata
-  reportedBy: string;                  // Arbiter name/ID
+  reportedBy: string; // Arbiter name/ID
   resolvedAt?: Date;
 }
 
 type IncidentCategory =
-  | 'illegal-move'                     // 1. 違法手・着手
-  | 'board-piece-issue'                // 2. 駒・盤面の異常
-  | 'clock-time'                       // 3. 時計・時間
-  | 'game-result'                      // 4. 終局・勝敗
-  | 'draw'                             // 5. Draw
-  | 'scoresheet'                       // 6. 棋譜
-  | 'player-behavior'                  // 7. プレーヤーの行動
-  | 'team'                             // 8. チーム戦
-  | 'fair-play'                        // 9. Fair Play / Anti-Cheating
-  | 'tournament-admin';                // 10. その他・大会運営
+  | "illegal-move" // 1. 違法手・着手
+  | "board-piece-issue" // 2. 駒・盤面の異常
+  | "clock-time" // 3. 時計・時間
+  | "game-result" // 4. 終局・勝敗
+  | "draw" // 5. Draw
+  | "scoresheet" // 6. 棋譜
+  | "player-behavior" // 7. プレーヤーの行動
+  | "team" // 8. チーム戦
+  | "fair-play" // 9. Fair Play / Anti-Cheating
+  | "tournament-admin"; // 10. その他・大会運営
 
-type PlayerColor = 'white' | 'black';
+type PlayerColor = "white" | "black";
 
 // Subtype examples (category-specific)
 type IllegalMoveSubtype =
-  | 'general'
-  | 'king-in-check'
-  | 'check-not-resolved'
-  | 'no-move-clock-pressed'
-  | 'two-hands'
-  | 'promotion-issue'
-  | 'castling-illegal';
+  | "general"
+  | "king-in-check"
+  | "check-not-resolved"
+  | "no-move-clock-pressed"
+  | "two-hands"
+  | "promotion-issue"
+  | "castling-illegal";
 
 type DrawSubtype =
-  | 'agreement'
-  | 'offer'
-  | 'threefold-repetition'
-  | 'fivefold-repetition'
-  | '50-move-rule'
-  | '75-move-rule'
-  | 'stalemate'
-  | 'dead-position';
+  | "agreement"
+  | "offer"
+  | "threefold-repetition"
+  | "fivefold-repetition"
+  | "50-move-rule"
+  | "75-move-rule"
+  | "stalemate"
+  | "dead-position";
 ```
 
 ### 3.7 Decision
@@ -450,10 +450,10 @@ The output of the Decision Support system.
 ```typescript
 interface Decision {
   // Summary
-  conclusion: string;                  // e.g., "Blackの1回目のIllegal Move"
+  conclusion: string; // e.g., "Blackの1回目のIllegal Move"
 
   // Actions (§13: "今すぐ行うこと")
-  actions: string[];                   // e.g., ["時計を止める", "局面を戻す"]
+  actions: string[]; // e.g., ["時計を止める", "局面を戻す"]
 
   // Intervention guidance (§13)
   intervention: InterventionType;
@@ -470,26 +470,26 @@ interface Decision {
   escalationReason?: string;
 
   // Metadata
-  generatedBy: DecisionSource;         // 'decision-tree' | 'llm'
+  generatedBy: DecisionSource; // 'decision-tree' | 'llm'
   generatedAt: Date;
 }
 
 type InterventionType =
-  | 'immediate'                        // 今すぐ介入
-  | 'wait-for-claim'                   // Playerの申立てを待つ
-  | 'consult-ca'                       // CAへ確認
-  | 'undetermined';                    // 判断不能
+  | "immediate" // 今すぐ介入
+  | "wait-for-claim" // Playerの申立てを待つ
+  | "consult-ca" // CAへ確認
+  | "undetermined"; // 判断不能
 
 type ConfidenceLevel =
-  | 'high'                             // Decision Tree or clear FIDE rule
-  | 'medium'                           // LLM with strong citations
-  | 'low'                              // LLM uncertain or conflicting rules
-  | 'none';                            // Cannot determine
+  | "high" // Decision Tree or clear FIDE rule
+  | "medium" // LLM with strong citations
+  | "low" // LLM uncertain or conflicting rules
+  | "none"; // Cannot determine
 
 type DecisionSource =
-  | 'decision-tree'                    // Deterministic logic
-  | 'llm'                              // AI reasoning
-  | 'hybrid';                          // Tree + LLM
+  | "decision-tree" // Deterministic logic
+  | "llm" // AI reasoning
+  | "hybrid"; // Tree + LLM
 ```
 
 ### 3.8 Penalty
@@ -510,25 +510,25 @@ interface Penalty {
   type: PenaltyType;
 
   // Time adjustment
-  timeAdjustmentSeconds?: number;      // Positive = add time, Negative = reduce
-  targetPlayer?: PlayerColor;          // For opponent time addition
+  timeAdjustmentSeconds?: number; // Positive = add time, Negative = reduce
+  targetPlayer?: PlayerColor; // For opponent time addition
 
   // Description
-  description: string;                 // Human-readable
+  description: string; // Human-readable
 
   // Metadata
   appliedAt: Date;
-  appliedBy: string;                   // Arbiter name/ID
+  appliedBy: string; // Arbiter name/ID
 }
 
 type PenaltyType =
-  | 'warning'
-  | 'time-addition-opponent'           // 相手への時間加算
-  | 'time-reduction-self'              // 当該Playerの時間減算
-  | 'point-adjustment'                 // Point変更
-  | 'game-loss'                        // Game Loss
-  | 'round-exclusion'                  // Round exclusion
-  | 'tournament-exclusion';            // Tournament exclusion
+  | "warning"
+  | "time-addition-opponent" // 相手への時間加算
+  | "time-reduction-self" // 当該Playerの時間減算
+  | "point-adjustment" // Point変更
+  | "game-loss" // Game Loss
+  | "round-exclusion" // Round exclusion
+  | "tournament-exclusion"; // Tournament exclusion
 
 // Per §16: Illegal Move penalties in Standard
 // 1st offense: opponent +2min
@@ -537,18 +537,22 @@ function getIllegalMovePenalty(
   offenseCount: number,
   competitionType: CompetitionType
 ): Penalty[] {
-  if (competitionType === 'standard') {
+  if (competitionType === "standard") {
     if (offenseCount === 1) {
-      return [{
-        type: 'time-addition-opponent',
-        timeAdjustmentSeconds: 120,
-        description: '相手に2分追加'
-      }];
+      return [
+        {
+          type: "time-addition-opponent",
+          timeAdjustmentSeconds: 120,
+          description: "相手に2分追加",
+        },
+      ];
     } else if (offenseCount >= 2) {
-      return [{
-        type: 'game-loss',
-        description: '2回目の違法手によりGame Loss'
-      }];
+      return [
+        {
+          type: "game-loss",
+          description: "2回目の違法手によりGame Loss",
+        },
+      ];
     }
   }
   // Rapid rules differ (§17)
@@ -566,50 +570,50 @@ Represents a source document of chess rules.
 interface RuleSource {
   // Identity
   id: string;
-  name: string;                        // e.g., "FIDE Laws of Chess"
+  name: string; // e.g., "FIDE Laws of Chess"
 
   // Version management (§30)
-  version: string;                     // e.g., "2023 Edition"
+  version: string; // e.g., "2023 Edition"
   publishedDate: Date;
   effectiveDate: Date;
-  status: RuleStatus;                  // 'active' | 'superseded'
+  status: RuleStatus; // 'active' | 'superseded'
 
   // Source type & priority (§6)
   sourceType: RuleSourceType;
-  priority: number;                    // Higher = higher priority
+  priority: number; // Higher = higher priority
 
   // Tournament linkage
-  tournamentId?: string;               // If tournament-specific
+  tournamentId?: string; // If tournament-specific
 
   // Content
   articles: Article[];
 
   // Metadata
-  sourceUrl?: string;                  // Official source link
-  language: string;                    // 'ja' | 'en'
+  sourceUrl?: string; // Official source link
+  language: string; // 'ja' | 'en'
 }
 
 type RuleStatus =
-  | 'active'                           // Current, use for rulings
-  | 'superseded'                       // Replaced by newer version
-  | 'draft';                           // Not yet effective
+  | "active" // Current, use for rulings
+  | "superseded" // Replaced by newer version
+  | "draft"; // Not yet effective
 
 type RuleSourceType =
-  | 'tournament'                       // Tournament-specific (priority 4)
-  | 'jcf'                              // JCF regulations (priority 3)
-  | 'fide'                             // FIDE Laws of Chess (priority 2)
-  | 'commentary';                      // Interpretations (priority 1)
+  | "tournament" // Tournament-specific (priority 4)
+  | "jcf" // JCF regulations (priority 3)
+  | "fide" // FIDE Laws of Chess (priority 2)
+  | "commentary"; // Interpretations (priority 1)
 
 // Per §6: Rule priority
-function getRulePriority(
-  source: RuleSource,
-  tournamentId: string
-): number {
-  if (source.sourceType === 'tournament' && source.tournamentId === tournamentId) {
+function getRulePriority(source: RuleSource, tournamentId: string): number {
+  if (
+    source.sourceType === "tournament" &&
+    source.tournamentId === tournamentId
+  ) {
     return 4;
-  } else if (source.sourceType === 'jcf') {
+  } else if (source.sourceType === "jcf") {
     return 3;
-  } else if (source.sourceType === 'fide') {
+  } else if (source.sourceType === "fide") {
     return 2;
   } else {
     return 1;
@@ -627,22 +631,22 @@ Represents a specific rule article from a source.
 interface Article {
   // Identity
   id: string;
-  sourceId: string;                    // Links to RuleSource
+  sourceId: string; // Links to RuleSource
 
   // Reference
-  articleNumber: string;               // e.g., "7.5.4", "12.9"
-  page?: number;                       // Page in source document
+  articleNumber: string; // e.g., "7.5.4", "12.9"
+  page?: number; // Page in source document
 
   // Content
-  title?: string;                      // e.g., "Illegal Moves"
-  content: string;                     // Full text
+  title?: string; // e.g., "Illegal Moves"
+  content: string; // Full text
 
   // Search optimization
-  keywords: string[];                  // For full-text search
-  embeddings?: number[];               // Vector for semantic search
+  keywords: string[]; // For full-text search
+  embeddings?: number[]; // Vector for semantic search
 
   // Related articles
-  relatedArticles?: string[];          // Article IDs
+  relatedArticles?: string[]; // Article IDs
 
   // Metadata
   language: string;
@@ -659,18 +663,18 @@ A reference to a rule used in a decision.
 interface RuleCitation {
   // Source reference
   sourceId: string;
-  sourceName: string;                  // e.g., "FIDE Laws of Chess"
+  sourceName: string; // e.g., "FIDE Laws of Chess"
 
   // Article reference
   articleId: string;
-  articleNumber: string;               // e.g., "7.5.4"
+  articleNumber: string; // e.g., "7.5.4"
   page?: number;
 
   // Excerpt
-  text: string;                        // Relevant quote from article
+  text: string; // Relevant quote from article
 
   // Context
-  relevance: string;                   // Why this rule applies
+  relevance: string; // Why this rule applies
 }
 
 // Example citation display (§29):
@@ -713,13 +717,13 @@ interface IllegalMoveInput extends DecisionTreeInput {
   moveDescription: string;
 
   // Critical factors (§12: 追加確認質問)
-  clockPressed: boolean;               // 時計を押したか
-  opponentMoved: boolean;              // 相手が次の手を指したか
-  arbiterObserved: boolean;            // アービター自身が目撃したか
-  endEvent?: GameEndEvent;             // 対局を終わらせた出来事（ADR-014 §3。旧 gameEnded: boolean）
+  clockPressed: boolean; // 時計を押したか
+  opponentMoved: boolean; // 相手が次の手を指したか
+  arbiterObserved: boolean; // アービター自身が目撃したか
+  endEvent?: GameEndEvent; // 対局を終わらせた出来事（ADR-014 §3。旧 gameEnded: boolean）
 
   // History
-  playerIncidentCount: number;         // この選手の今回の対局での違法手回数
+  playerIncidentCount: number; // この選手の今回の対局での違法手回数
 }
 ```
 
@@ -759,9 +763,9 @@ interface GameContext {
   applicableRegulations: TournamentRegulation[];
 
   // History
-  gameIncidents: Incident[];           // All incidents in this game
-  whitePlayerPenalties: Penalty[];     // White's penalties this game
-  blackPlayerPenalties: Penalty[];     // Black's penalties this game
+  gameIncidents: Incident[]; // All incidents in this game
+  whitePlayerPenalties: Penalty[]; // White's penalties this game
+  blackPlayerPenalties: Penalty[]; // Black's penalties this game
 }
 ```
 
@@ -772,16 +776,16 @@ Input for rule search.
 ```typescript
 interface RuleSearchQuery {
   // Query
-  text: string;                        // User input
+  text: string; // User input
 
   // Filters
-  tournamentId?: string;               // Scope to tournament rules
-  sourceTypes?: RuleSourceType[];      // Filter by source type
-  competitionType?: CompetitionType;   // Filter by competition type
+  tournamentId?: string; // Scope to tournament rules
+  sourceTypes?: RuleSourceType[]; // Filter by source type
+  competitionType?: CompetitionType; // Filter by competition type
 
   // Options
-  maxResults: number;                  // Default: 10
-  includeSuperseded: boolean;          // Default: false
+  maxResults: number; // Default: 10
+  includeSuperseded: boolean; // Default: false
 }
 ```
 
@@ -793,17 +797,17 @@ Output from rule search.
 interface RuleSearchResult {
   articles: ScoredArticle[];
   totalResults: number;
-  searchMethod: SearchMethod;          // 'vector' | 'fulltext' | 'hybrid'
+  searchMethod: SearchMethod; // 'vector' | 'fulltext' | 'hybrid'
 }
 
 interface ScoredArticle {
   article: Article;
   source: RuleSource;
-  score: number;                       // Relevance score (0-1)
-  matchedKeywords?: string[];          // For highlighting
+  score: number; // Relevance score (0-1)
+  matchedKeywords?: string[]; // For highlighting
 }
 
-type SearchMethod = 'vector' | 'fulltext' | 'hybrid';
+type SearchMethod = "vector" | "fulltext" | "hybrid";
 ```
 
 ---
@@ -874,10 +878,7 @@ class PenaltyCalculator {
 ```typescript
 class RulePriorityResolver {
   // Per §6: Resolve conflicts between rules
-  resolveConflict(
-    articles: Article[],
-    tournamentId: string
-  ): Article | null;  // null if cannot auto-resolve
+  resolveConflict(articles: Article[], tournamentId: string): Article | null; // null if cannot auto-resolve
 
   // Check if CA escalation needed
   requiresCAEscalation(articles: Article[]): boolean;
@@ -889,15 +890,9 @@ class RulePriorityResolver {
 ```typescript
 class IncidentCounter {
   // Per §25: Track penalty history
-  countIllegalMoves(
-    playerId: string,
-    gameId: string
-  ): number;
+  countIllegalMoves(playerId: string, gameId: string): number;
 
-  getPenaltyHistory(
-    playerId: string,
-    gameId: string
-  ): Penalty[];
+  getPenaltyHistory(playerId: string, gameId: string): Penalty[];
 }
 ```
 
@@ -1054,19 +1049,19 @@ All domain models will have corresponding Zod schemas for runtime validation.
 Example:
 
 ```typescript
-import { z } from 'zod';
+import { z } from "zod";
 
 const TournamentSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
   date: z.date(),
-  competitionType: z.enum(['standard', 'rapid', 'blitz']),
+  competitionType: z.enum(["standard", "rapid", "blitz"]),
   timeControl: z.object({
     baseTimeMinutes: z.number().min(1),
     incrementSeconds: z.number().optional(),
     delaySeconds: z.number().optional(),
     moveThreshold: z.number().optional(),
-    additionalTimeMinutes: z.number().optional()
+    additionalTimeMinutes: z.number().optional(),
   }),
   // ... (full schema)
 });
@@ -1088,13 +1083,16 @@ type Tournament = z.infer<typeof TournamentSchema>;
 ## Appendix: Future Extensions
 
 ### Multi-Arbiter Collaboration
+
 - Add `ArbiterSession` entity for concurrent access
 - Add `IncidentAssignment` for delegation
 
 ### Swiss Pairing Integration
+
 - Add `PairingResult` entity
 - Link `Round.pairingMethod` to Swiss system
 
 ### FIDE Rating Calculation
+
 - Add `RatingCalculation` entity
 - Store pre/post-tournament ratings

@@ -11,6 +11,7 @@
  * - 対応表（PlaceholderMap）はリクエストごとに作り、メモリ内だけで使う（送信・保存しない）
  */
 import type { IncidentCategory, RuleSourceType } from "@/lib/domain/entities";
+import { getFactDefinition } from "@/lib/domain/facts/catalog";
 import type {
   ClassifierProvider,
   ExternalAiPreview,
@@ -244,7 +245,10 @@ export async function prepareFactPresence(
   options: IncidentTextOptions = {},
   deps: ExternalAiGuardDeps = {}
 ): Promise<
-  NotSent | ProviderUnknown | PresenceUnavailable | PendingSend<LlmApiResponse>
+  | NotSent
+  | ProviderUnknown
+  | PresenceUnavailable
+  | (PendingSend<LlmApiResponse> & { factIds: readonly string[] })
 > {
   const ids = Array.from(new Set(factIds)).slice(0, LLM_LIMITS.maxFactIds);
   if (ids.length === 0) return { status: "unavailable" };
@@ -269,12 +273,16 @@ export async function prepareFactPresence(
       destination: `報告文の記載の確認（${CLASSIFIER_PROVIDER_LABELS.jev}）`,
       fields: [
         { label: "送る記述（名前・日時などは置き換え済み）", text: narrative },
+        {
+          label: `確認する事実（${ids.length}件。カタログのコードだけを送ります。質問文・回答は送りません）`,
+          text: ids
+            .map((id) => `${id}: ${getFactDefinition(id)?.question ?? id}`)
+            .join("\n"),
+        },
       ],
-      notes: [
-        `確認する事実: ${ids.length}件（カタログのコードだけを送ります。質問文・回答は送りません）`,
-        "結果は質問の並び順にだけ使います。回答はアービターが選びます",
-      ],
+      notes: ["結果は質問の並び順にだけ使います。回答はアービターが選びます"],
     },
+    factIds: ids,
     send: () => callOf(deps)("facts", { narrative, factIds: ids }, deps),
   };
 }

@@ -391,7 +391,7 @@ See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §6.
 
 ### 4.1 When
 
-> **Implemented differently (J2-2, D13):** the check is not automatic. Every external send needs the arbiter's confirmation, so the result screen offers an optional 「AIで報告文の記載を確認（任意）」 and checks all mapped questions of the current round in one request. See jev-classifier-design §16.
+> **Implemented differently (J2-2, D13):** the check is not automatic. Every external send needs the arbiter's confirmation, so the result screen offers an optional 「AIで報告文の記載を確認（任意）」 and checks all mapped questions of the current round in one request. It is offered only once a calibration is registered (J3), and only a calibrated, valid answer reorders the questions; the headings are 「先に確認してください — 報告に記載ありと判定されなかった事実」 and 「報告に記載あり（続く質問を含む） — 内容を選んでください」. See jev-classifier-design §16.
 
 - A check runs **each time the set of required, unanswered facts changes**: after the category is confirmed, and after each DT round or fact-plan update.
 - Only the **new** required facts with `presenceCheckable: true` are checked. One Jev request answers them all in parallel (about 100 ms).

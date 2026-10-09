@@ -24,6 +24,26 @@ describe("presenceTargets", () => {
     ]);
   });
 
+  it("touch move: maps the observed facts; skips computed values and local-only facts", () => {
+    const ids = presenceTargets("illegal-move", "touch-move", [
+      "touchHow",
+      "touchPromotion", // tch.special は値を計算で渡す（キャスリングの記載で「昇格あり」にしない）
+      "touchedPieces",
+      "touchFen",
+    ]).map((t) => t.questionId);
+    expect(ids).toContain("touchHow");
+    expect(ids).not.toContain("touchPromotion");
+    expect(ids).not.toContain("touchFen");
+  });
+
+  it("illegal move: the subtype question maps to im.action", () => {
+    expect(
+      presenceTargets("illegal-move", undefined, ["subtype"]).map(
+        (t) => t.factId
+      )
+    ).toEqual(["im.action"]);
+  });
+
   it("returns nothing for a category without usages", () => {
     expect(presenceTargets("fair-play", undefined, ["situationNote"])).toEqual(
       []

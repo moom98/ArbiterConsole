@@ -294,13 +294,15 @@ export default function ReportPage() {
     setDescription("");
     setExternalAiOptOut(false);
     setSelectedGame(null);
+    setPresence(null);
     reset();
   };
 
   const incidentQuestions = followUpQuestions.filter(
     (q) => q.scope === "incident"
   );
-  const incidentQuestionsKey = incidentQuestions.map((q) => q.id).join("|");
+  // 記載の有無は Incident と質問の組ごと（別の報告・別のラウンドの結果を使わない）
+  const incidentQuestionsKey = `${currentIncident?.id ?? ""}:${incidentQuestions.map((q) => q.id).join("|")}`;
   const contextQuestions = followUpQuestions.filter(
     (q) => q.scope === "game-context"
   );
@@ -731,7 +733,7 @@ export default function ReportPage() {
               {incidentQuestions.length > 0 && currentIncident && (
                 <div className="mb-4">
                   <FactPresenceCheck
-                    key={`${currentIncident.id}:${incidentQuestionsKey}`}
+                    key={incidentQuestionsKey}
                     input={{
                       category: currentIncident.category,
                       subtype: currentIncident.subtype,

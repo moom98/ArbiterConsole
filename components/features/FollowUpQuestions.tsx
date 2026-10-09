@@ -18,9 +18,12 @@ interface FollowUpQuestionsProps {
   presence?: Readonly<Partial<Record<string, "present" | "missing">>>;
 }
 
+/** 記載ありと判定されなかった質問（判定していない質問を含む） */
 export const PRESENCE_MISSING_HEADING =
-  "報告に書かれていない事実 — 確認してください";
-export const PRESENCE_PRESENT_HEADING = "報告に記載あり — 内容を選んでください";
+  "先に確認してください — 報告に記載ありと判定されなかった事実";
+/** 記載ありと判定された質問と、それに続く質問 */
+export const PRESENCE_PRESENT_HEADING =
+  "報告に記載あり（続く質問を含む） — 内容を選んでください";
 
 function initialAnswers(questions: FollowUpQuestion[]): Record<string, string> {
   const out: Record<string, string> = {};

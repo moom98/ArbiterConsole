@@ -25,33 +25,41 @@ This document specifies the **AI and RAG architecture** for Arbiter Console. The
 ### From Product Requirements
 
 **§5.1: Rule Sources**
+
 - A. JCF NA Seminar Materials
 - B. FIDE Laws of Chess (current version only)
 - C. Tournament-specific regulations
 
 **§6: Rule Priority**
+
 ```
 大会固有規定 > JCF規則 > FIDE Laws > 補足資料
 ```
+
 **Critical**: AI cannot override registered rules with general knowledge.
 
 **§14: AI Constraints**
+
 - **Must**: Cite sources, ask clarifying questions, state uncertainty
 - **Must NOT**: Invent rules, speculate, use "たぶん" without sources
 
 **§28: Rule Search**
+
 - Full-text search OR natural language search
 - Results include: article number, content, source, page, related articles
 
 **§29: Source Display**
+
 - Format: `FIDE Laws of Chess 7.5.4`
 - User can open source to view full text
 
 **§30: Version Management**
+
 - Old rules must not mix with current rules
 - Track: name, version, published date, effective date, status
 
 **§31: Offline Requirements**
+
 - Rule本文検索 must work offline
 - AI自然言語解析 may require internet, but basic search must be offline
 
@@ -162,6 +170,7 @@ This document specifies the **AI and RAG architecture** for Arbiter Console. The
 **Input**: PDF or text files (FIDE Laws, JCF materials, tournament regulations)
 
 **Processing Pipeline**:
+
 ```
 1. Document Upload
    → User uploads PDF/text via admin interface
@@ -197,6 +206,7 @@ This document specifies the **AI and RAG architecture** for Arbiter Console. The
 ```
 
 **Storage Schema** (IndexedDB via Dexie.js):
+
 ```typescript
 // Per domain-model.md
 interface RuleSource {
@@ -205,23 +215,23 @@ interface RuleSource {
   version: string;
   publishedDate: Date;
   effectiveDate: Date;
-  status: 'active' | 'superseded' | 'draft';
-  sourceType: 'tournament' | 'jcf' | 'fide' | 'commentary';
-  priority: number;  // Derived from sourceType + tournamentId
-  tournamentId?: string;  // If tournament-specific
-  language: 'ja' | 'en';
+  status: "active" | "superseded" | "draft";
+  sourceType: "tournament" | "jcf" | "fide" | "commentary";
+  priority: number; // Derived from sourceType + tournamentId
+  tournamentId?: string; // If tournament-specific
+  language: "ja" | "en";
   sourceUrl?: string;
   // Blob storage
-  documentBlob?: Blob;  // Original PDF
+  documentBlob?: Blob; // Original PDF
 }
 
 interface Article {
   id: string;
   sourceId: string;
-  articleNumber: string;  // e.g., "7.5.4"
+  articleNumber: string; // e.g., "7.5.4"
   page?: number;
   title?: string;
-  content: string;  // Full text
+  content: string; // Full text
   keywords: string[];
   language: string;
 }
@@ -229,8 +239,8 @@ interface Article {
 interface ArticleEmbedding {
   id: string;
   articleId: string;
-  embedding: number[];  // 384-dim vector
-  model: string;  // "all-MiniLM-L6-v2"
+  embedding: number[]; // 384-dim vector
+  model: string; // "all-MiniLM-L6-v2"
   generatedAt: Date;
 }
 ```
@@ -240,6 +250,7 @@ interface ArticleEmbedding {
 **Chosen Model**: `Xenova/all-MiniLM-L6-v2`
 
 **Rationale**:
+
 - ✅ **Multilingual**: Supports Japanese and English
 - ✅ **Small size**: ~23MB, loads quickly in browser
 - ✅ **Fast inference**: ~50-100ms per query on modern devices
@@ -247,10 +258,12 @@ interface ArticleEmbedding {
 - ✅ **Good quality**: Semantic similarity performs well for rule matching
 
 **Alternative Considered**: `intfloat/multilingual-e5-small`
+
 - Slightly better quality, but slower inference
 - Rejected for performance reasons (§33)
 
 **Embedding Dimensions**: 384
+
 - Small enough for fast search (cosine similarity on 384-dim vectors is ~0.1ms)
 - IndexedDB storage: ~1.5KB per article
 
@@ -259,18 +272,19 @@ interface ArticleEmbedding {
 **Problem**: FIDE publishes new versions of Laws of Chess. Old tournaments may use old rules.
 
 **Solution**:
+
 ```typescript
 interface RuleSourceVersion {
   sourceId: string;
-  version: string;  // "2023", "2025", etc.
+  version: string; // "2023", "2025", etc.
   effectiveDate: Date;
-  status: 'active' | 'superseded';
+  status: "active" | "superseded";
 }
 
 // When searching, filter by status
 function getActiveRules(tournamentDate: Date): RuleSource[] {
-  return ruleSources.filter(source => {
-    if (source.status === 'superseded') return false;
+  return ruleSources.filter((source) => {
+    if (source.status === "superseded") return false;
     if (source.effectiveDate > tournamentDate) return false;
     return true;
   });
@@ -278,6 +292,7 @@ function getActiveRules(tournamentDate: Date): RuleSource[] {
 ```
 
 **UI**:
+
 - Admin interface shows all versions with status badges
 - Active rules: Green badge "現行"
 - Superseded rules: Gray badge "旧版"
@@ -292,6 +307,7 @@ function getActiveRules(tournamentDate: Date): RuleSource[] {
 **Algorithm**: Cosine similarity between query embedding and article embeddings
 
 **Process**:
+
 ```typescript
 class VectorSearch {
   private model: TransformersModel;
@@ -300,8 +316,8 @@ class VectorSearch {
   async initialize() {
     // Load model (cached in browser after first load)
     this.model = await pipeline(
-      'feature-extraction',
-      'Xenova/all-MiniLM-L6-v2'
+      "feature-extraction",
+      "Xenova/all-MiniLM-L6-v2"
     );
 
     // Load all embeddings from IndexedDB
@@ -315,32 +331,33 @@ class VectorSearch {
   ): Promise<ScoredArticle[]> {
     // 1. Generate query embedding
     const queryEmbedding = await this.model(query, {
-      pooling: 'mean',
-      normalize: true
+      pooling: "mean",
+      normalize: true,
     });
 
     // 2. Apply filters (source type, tournament, competition type)
     let candidates = this.articleEmbeddings;
     if (filters?.sourceTypes) {
-      candidates = await this.filterBySourceType(candidates, filters.sourceTypes);
+      candidates = await this.filterBySourceType(
+        candidates,
+        filters.sourceTypes
+      );
     }
     if (filters?.tournamentId) {
-      candidates = await this.filterByTournament(candidates, filters.tournamentId);
+      candidates = await this.filterByTournament(
+        candidates,
+        filters.tournamentId
+      );
     }
 
     // 3. Compute cosine similarity
-    const scored = candidates.map(embedding => ({
+    const scored = candidates.map((embedding) => ({
       articleId: embedding.articleId,
-      score: this.cosineSimilarity(
-        queryEmbedding.data,
-        embedding.embedding
-      )
+      score: this.cosineSimilarity(queryEmbedding.data, embedding.embedding),
     }));
 
     // 4. Sort by score and take top-K
-    const topResults = scored
-      .sort((a, b) => b.score - a.score)
-      .slice(0, topK);
+    const topResults = scored.sort((a, b) => b.score - a.score).slice(0, topK);
 
     // 5. Fetch full articles
     return await this.hydrateArticles(topResults);
@@ -361,6 +378,7 @@ class VectorSearch {
 ```
 
 **Performance**:
+
 - Query embedding generation: ~100ms
 - Cosine similarity (1000 articles): ~10ms
 - Total: <200ms (well under §33's 3s target)
@@ -370,12 +388,14 @@ class VectorSearch {
 **Library**: Lunr.js (lightweight, offline-capable)
 
 **Index Fields**:
+
 - `articleNumber` (boost: 3.0) - Highest priority
 - `title` (boost: 2.0)
 - `content` (boost: 1.0)
 - `keywords` (boost: 1.5)
 
 **Process**:
+
 ```typescript
 class FullTextSearch {
   private index: lunr.Index;
@@ -383,20 +403,20 @@ class FullTextSearch {
   async initialize() {
     const articles = await db.articles.toArray();
 
-    this.index = lunr(function() {
-      this.ref('id');
-      this.field('articleNumber', { boost: 3 });
-      this.field('title', { boost: 2 });
-      this.field('content', { boost: 1 });
-      this.field('keywords', { boost: 1.5 });
+    this.index = lunr(function () {
+      this.ref("id");
+      this.field("articleNumber", { boost: 3 });
+      this.field("title", { boost: 2 });
+      this.field("content", { boost: 1 });
+      this.field("keywords", { boost: 1.5 });
 
-      articles.forEach(article => {
+      articles.forEach((article) => {
         this.add({
           id: article.id,
           articleNumber: article.articleNumber,
           title: article.title,
           content: article.content,
-          keywords: article.keywords.join(' ')
+          keywords: article.keywords.join(" "),
         });
       });
     });
@@ -404,16 +424,17 @@ class FullTextSearch {
 
   search(query: string, topK: number = 10): ScoredArticle[] {
     const results = this.index.search(query);
-    return results.slice(0, topK).map(result => ({
+    return results.slice(0, topK).map((result) => ({
       articleId: result.ref,
       score: result.score,
-      matchedKeywords: Object.keys(result.matchData.metadata)
+      matchedKeywords: Object.keys(result.matchData.metadata),
     }));
   }
 }
 ```
 
 **Special Handling**:
+
 - Article number queries (e.g., "7.5.5") → exact match, highest priority
 - Japanese tokenization: Use built-in Lunr stemmer (basic support)
 - English tokenization: Standard Lunr pipeline
@@ -437,7 +458,7 @@ class HybridSearch {
     // Run both searches in parallel
     const [vectorResults, textResults] = await Promise.all([
       this.vectorSearch.search(query, topK * 2, filters),
-      this.fullTextSearch.search(query, topK * 2)
+      this.fullTextSearch.search(query, topK * 2),
     ]);
 
     // Merge and re-score
@@ -456,17 +477,17 @@ class HybridSearch {
     const scoreMap = new Map<string, ScoredArticle>();
 
     // Add vector results (weight: 0.6)
-    vectorResults.forEach(result => {
+    vectorResults.forEach((result) => {
       scoreMap.set(result.articleId, {
         ...result,
         vectorScore: result.score,
         textScore: 0,
-        combinedScore: result.score * 0.6
+        combinedScore: result.score * 0.6,
       });
     });
 
     // Add/merge text results (weight: 0.4)
-    textResults.forEach(result => {
+    textResults.forEach((result) => {
       const existing = scoreMap.get(result.articleId);
       if (existing) {
         existing.textScore = result.score;
@@ -477,7 +498,7 @@ class HybridSearch {
           ...result,
           vectorScore: 0,
           textScore: result.score,
-          combinedScore: result.score * 0.4
+          combinedScore: result.score * 0.4,
         });
       }
     });
@@ -488,10 +509,12 @@ class HybridSearch {
 ```
 
 **Rationale for Weights**:
+
 - Vector (0.6): Better for semantic queries ("違法手のペナルティは？")
 - Text (0.4): Better for article lookups ("7.5.5") and exact keywords
 
 **Adaptive Strategy**:
+
 - If query matches article number pattern → boost text weight to 0.8
 - If query is long natural language → boost vector weight to 0.8
 
@@ -502,6 +525,7 @@ class HybridSearch {
 **Requirement**: `Tournament > JCF > FIDE > Commentary`
 
 **Implementation**:
+
 ```typescript
 class RulePriorityResolver {
   applyPriority(
@@ -509,23 +533,26 @@ class RulePriorityResolver {
     tournamentId: string
   ): ScoredArticle[] {
     // 1. Assign priority scores
-    const withPriority = articles.map(article => {
+    const withPriority = articles.map((article) => {
       const source = article.source;
       let priorityBoost = 0;
 
-      if (source.sourceType === 'tournament' && source.tournamentId === tournamentId) {
-        priorityBoost = 1000;  // Highest
-      } else if (source.sourceType === 'jcf') {
+      if (
+        source.sourceType === "tournament" &&
+        source.tournamentId === tournamentId
+      ) {
+        priorityBoost = 1000; // Highest
+      } else if (source.sourceType === "jcf") {
         priorityBoost = 100;
-      } else if (source.sourceType === 'fide') {
+      } else if (source.sourceType === "fide") {
         priorityBoost = 10;
       } else {
-        priorityBoost = 1;  // Commentary
+        priorityBoost = 1; // Commentary
       }
 
       return {
         ...article,
-        priorityScore: article.combinedScore + priorityBoost
+        priorityScore: article.combinedScore + priorityBoost,
       };
     });
 
@@ -538,7 +565,7 @@ class RulePriorityResolver {
     const groups = this.groupBySimilarity(articles);
 
     for (const group of groups) {
-      const sources = new Set(group.map(a => a.source.sourceType));
+      const sources = new Set(group.map((a) => a.source.sourceType));
 
       // If multiple source types in same topic group → potential conflict
       if (sources.size > 1) {
@@ -548,8 +575,8 @@ class RulePriorityResolver {
           return {
             hasConflict: true,
             conflictingArticles: group,
-            recommendation: 'consult-ca',
-            reason: '複数の規定が関係するためCAへの確認が必要です。'
+            recommendation: "consult-ca",
+            reason: "複数の規定が関係するためCAへの確認が必要です。",
           };
         }
       }
@@ -561,6 +588,7 @@ class RulePriorityResolver {
 ```
 
 **Edge Case Handling**:
+
 - **No tournament rules**: Use JCF > FIDE
 - **Tournament rules override FIDE**: Explicitly show "大会規則により異なる処置" in decision
 - **JCF and FIDE agree**: Cite both for stronger justification
@@ -572,17 +600,18 @@ class RulePriorityResolver {
 > **Note (ADR-007):** The LLM provider is now **Google Gemini**, called only through the server Route Handlers `app/api/llm/*`. The API key is never sent to the browser. Claude/Anthropic references below are historical. See [ADR-007](../decisions/ADR-007-gemini-llm-via-server-route.md).
 >
 > **As implemented (Milestone 5):**
+>
 > - Models: `GEMINI_MODEL_REASONING` (default `gemini-flash-latest`) and `GEMINI_MODEL_CLASSIFIER` (default `gemini-flash-lite-latest`), with structured output via `responseJsonSchema`. Citation `articleId` is restricted to the IDs of the articles that were sent.
 > - Retrieval (§5) runs on the client (`lib/application/llm-assist.ts` since J1a-2; it was `lib/infrastructure/llm/llm-assist-port.ts`). Up to 8 articles, each truncated to 4,000 characters, are sent to `/api/llm/reason`, through the external-AI guard and only after the arbiter confirms the de-identified payload ([external-ai-data-protection.md](./external-ai-data-protection.md) §11).
 > - Output validation (§7.3) is `lib/domain/llm/output-validator.ts` (pure). Citations use the Rule.id instead of sourceName and articleNumber. Quotes must match the article text that was sent. Confidence `high` is capped to `medium`.
 > - Prompt caching (§7.4) is not used.
-
 
 ### 7.1 Model Selection
 
 **Primary Model**: Claude Sonnet 4.5 (claude-sonnet-4-5-20250929)
 
 **Rationale**:
+
 - ✅ Long context window (200K tokens) - can include many articles
 - ✅ Excellent instruction-following - respects citation requirements
 - ✅ Structured outputs - JSON mode for Decision schema
@@ -592,6 +621,7 @@ class RulePriorityResolver {
 **Secondary Model (for classification)**: Claude Haiku 4 (claude-haiku-4-20250514)
 
 **Rationale**:
+
 - ✅ Faster (~2-3s vs. 5-10s)
 - ✅ Cheaper (~1/10 cost of Sonnet)
 - ✅ Sufficient for simple classification tasks
@@ -599,6 +629,7 @@ class RulePriorityResolver {
 ### 7.2 Prompt Engineering
 
 **System Prompt Template** (for LLM Reasoner):
+
 ```
 あなたはチェス大会のアービター支援システムです。あなたの役割は：
 
@@ -660,6 +691,7 @@ Incident情報：
 ```
 
 **Few-Shot Examples** (included in prompt):
+
 ```json
 // Good example
 {
@@ -702,7 +734,7 @@ Incident情報：
 interface ValidationResult {
   valid: boolean;
   reason?: string;
-  fixes?: Partial<Decision>;  // Auto-corrections if possible
+  fixes?: Partial<Decision>; // Auto-corrections if possible
 }
 
 class LLMOutputValidator {
@@ -714,7 +746,7 @@ class LLMOutputValidator {
     if (decision.penalties.length > 0 && decision.sources.length === 0) {
       return {
         valid: false,
-        reason: "Penalties without sources"
+        reason: "Penalties without sources",
       };
     }
 
@@ -727,61 +759,70 @@ class LLMOutputValidator {
       if (!article) {
         return {
           valid: false,
-          reason: `Article ${source.articleNumber} not found in ${source.sourceName}`
+          reason: `Article ${source.articleNumber} not found in ${source.sourceName}`,
         };
       }
 
       // Rule 2b: Cited article must be in retrieved set (prevent hallucination)
-      const wasRetrieved = retrievedArticles.some(a =>
-        a.articleNumber === source.articleNumber
+      const wasRetrieved = retrievedArticles.some(
+        (a) => a.articleNumber === source.articleNumber
       );
       if (!wasRetrieved) {
         return {
           valid: false,
-          reason: `Article ${source.articleNumber} was not in retrieved context`
+          reason: `Article ${source.articleNumber} was not in retrieved context`,
         };
       }
     }
 
     // Rule 3: Low confidence must trigger CA escalation
-    if (['low', 'none'].includes(decision.confidence)) {
+    if (["low", "none"].includes(decision.confidence)) {
       if (!decision.escalationRecommended) {
         // Auto-fix: Enable escalation
         return {
           valid: true,
           fixes: {
             escalationRecommended: true,
-            escalationReason: 'Low confidence in ruling'
-          }
+            escalationReason: "Low confidence in ruling",
+          },
         };
       }
     }
 
     // Rule 4: No speculative language
     const speculativeWords = [
-      'たぶん', 'おそらく', 'と思われる', 'かもしれない',
-      'probably', 'likely', 'seems', 'appears'
+      "たぶん",
+      "おそらく",
+      "と思われる",
+      "かもしれない",
+      "probably",
+      "likely",
+      "seems",
+      "appears",
     ];
     const allText = [
       decision.conclusion,
       ...decision.actions,
-      decision.escalationReason || ''
-    ].join(' ');
+      decision.escalationReason || "",
+    ].join(" ");
 
-    if (speculativeWords.some(word => allText.includes(word))) {
+    if (speculativeWords.some((word) => allText.includes(word))) {
       return {
         valid: false,
-        reason: "Speculative language detected (たぶん, probably, etc.)"
+        reason: "Speculative language detected (たぶん, probably, etc.)",
       };
     }
 
     // Rule 5: Intervention must match escalation
-    if (decision.escalationRecommended && decision.intervention !== 'consult-ca') {
+    if (
+      decision.escalationRecommended &&
+      decision.intervention !== "consult-ca"
+    ) {
       return {
         valid: true,
         fixes: {
-          intervention: 'consult-ca'
-        }
+          intervention: "consult-ca",
+        },
       };
     }
 
@@ -793,8 +834,9 @@ class LLMOutputValidator {
     articleNumber: string
   ): Promise<Article | null> {
     const sources = await db.ruleSources
-      .where('name').equals(sourceName)
-      .and(s => s.status === 'active')
+      .where("name")
+      .equals(sourceName)
+      .and((s) => s.status === "active")
       .toArray();
 
     for (const source of sources) {
@@ -810,6 +852,7 @@ class LLMOutputValidator {
 ```
 
 **Fallback on Validation Failure**:
+
 ```typescript
 async function llmReasoningWithValidation(
   incident: Incident,
@@ -825,13 +868,13 @@ async function llmReasoningWithValidation(
     return {
       conclusion: "裁定を確定できません。",
       actions: ["CAへ確認してください。"],
-      intervention: 'consult-ca',
+      intervention: "consult-ca",
       penalties: [],
       sources: [],
-      confidence: 'none',
+      confidence: "none",
       escalationRecommended: true,
       escalationReason: `LLM出力検証失敗: ${validation.reason}`,
-      generatedBy: 'llm'
+      generatedBy: "llm",
     };
   }
 
@@ -843,11 +886,13 @@ async function llmReasoningWithValidation(
 ### 7.4 Cost & Performance Optimization
 
 **Estimated Costs** (per incident):
+
 - Haiku classification: ~$0.001 (1K input + 200 output tokens)
 - Sonnet reasoning: ~$0.02 (10K input + 1K output tokens)
 - Average per incident: ~$0.015
 
 **Optimization Strategies**:
+
 1. **Prompt Caching** (Claude feature):
    - Cache system prompt + rule articles (changes rarely)
    - Only pay for new incident descriptions
@@ -866,6 +911,7 @@ async function llmReasoningWithValidation(
    - Queue requests if limit exceeded
 
 **Performance Targets** (per §33):
+
 - LLM classification (Haiku): <5s
 - LLM reasoning (Sonnet): <10s
 - Total end-to-end (with RAG): <12s
@@ -877,6 +923,7 @@ async function llmReasoningWithValidation(
 **Requirement**: Display sources as `FIDE Laws of Chess 7.5.4`
 
 **Implementation**:
+
 ```typescript
 class CitationFormatter {
   format(citation: RuleCitation): string {
@@ -901,11 +948,12 @@ class CitationFormatter {
 ```
 
 **UI Display**:
+
 ```tsx
 // In DecisionSupportCard component
 <div className="sources">
   <h4>根拠</h4>
-  {decision.sources.map(source => (
+  {decision.sources.map((source) => (
     <div key={source.articleId} className="citation">
       <button onClick={() => openArticle(source.articleId)}>
         {formatCitation(source)}
@@ -923,6 +971,7 @@ class CitationFormatter {
 ```
 
 **User Can Open Source** (§29):
+
 - Click citation → modal with full article text
 - Highlight cited portion
 - Show article context (previous/next articles)
@@ -945,6 +994,7 @@ class CitationFormatter {
 ### 9.2 Graceful Degradation
 
 **When offline and incident requires LLM**:
+
 ```typescript
 async function handleIncidentOffline(incident: Incident): Promise<Decision> {
   // Try to route to Decision Tree
@@ -957,20 +1007,21 @@ async function handleIncidentOffline(incident: Incident): Promise<Decision> {
     conclusion: "この事象は詳細な分析が必要です。",
     actions: [
       "「ルール検索」タブで関連規則を確認してください。",
-      "インターネット接続を確認するか、CAへ相談してください。"
+      "インターネット接続を確認するか、CAへ相談してください。",
     ],
-    intervention: 'consult-ca',
+    intervention: "consult-ca",
     penalties: [],
     sources: [],
-    confidence: 'none',
+    confidence: "none",
     escalationRecommended: true,
-    escalationReason: 'オフライン環境のため詳細分析ができません',
-    generatedBy: 'offline-fallback'
+    escalationReason: "オフライン環境のため詳細分析ができません",
+    generatedBy: "offline-fallback",
   };
 }
 ```
 
 **Network Status Detection**:
+
 ```typescript
 class NetworkStatus {
   isOnline(): boolean {
@@ -979,9 +1030,9 @@ class NetworkStatus {
 
   async testAPIAccess(): Promise<boolean> {
     try {
-      await fetch('https://api.anthropic.com/v1/health', {
-        method: 'HEAD',
-        timeout: 3000
+      await fetch("https://api.anthropic.com/v1/health", {
+        method: "HEAD",
+        timeout: 3000,
       });
       return true;
     } catch {
@@ -992,6 +1043,7 @@ class NetworkStatus {
 ```
 
 **UI Indicator**:
+
 - Status bar shows: "オンライン" (green) or "オフライン" (yellow)
 - If offline: "一部機能（AI分析）が制限されています"
 
@@ -1002,52 +1054,59 @@ class NetworkStatus {
 ### 10.1 RAG Testing
 
 **Unit Tests**:
+
 ```typescript
-describe('VectorSearch', () => {
-  it('should return articles with high semantic similarity', async () => {
-    const query = '違法手のペナルティ';
+describe("VectorSearch", () => {
+  it("should return articles with high semantic similarity", async () => {
+    const query = "違法手のペナルティ";
     const results = await vectorSearch.search(query, 5);
 
-    expect(results[0].article.articleNumber).toBe('7.5.5');
+    expect(results[0].article.articleNumber).toBe("7.5.5");
     expect(results[0].score).toBeGreaterThan(0.7);
   });
 
-  it('should filter by source type', async () => {
-    const results = await vectorSearch.search(
-      'illegal move',
-      5,
-      { sourceTypes: ['fide'] }
-    );
+  it("should filter by source type", async () => {
+    const results = await vectorSearch.search("illegal move", 5, {
+      sourceTypes: ["fide"],
+    });
 
-    expect(results.every(r => r.source.sourceType === 'fide')).toBe(true);
+    expect(results.every((r) => r.source.sourceType === "fide")).toBe(true);
   });
 });
 
-describe('FullTextSearch', () => {
-  it('should prioritize exact article number matches', async () => {
-    const results = await fullTextSearch.search('7.5.5', 5);
+describe("FullTextSearch", () => {
+  it("should prioritize exact article number matches", async () => {
+    const results = await fullTextSearch.search("7.5.5", 5);
 
-    expect(results[0].article.articleNumber).toBe('7.5.5');
-    expect(results[0].score).toBeGreaterThan(5.0);  // High boost
+    expect(results[0].article.articleNumber).toBe("7.5.5");
+    expect(results[0].score).toBeGreaterThan(5.0); // High boost
   });
 });
 
-describe('RulePriorityResolver', () => {
-  it('should prioritize tournament rules over FIDE', async () => {
+describe("RulePriorityResolver", () => {
+  it("should prioritize tournament rules over FIDE", async () => {
     const articles = [
-      { source: { sourceType: 'fide' }, score: 0.9 },
-      { source: { sourceType: 'tournament', tournamentId: 'T1' }, score: 0.6 }
+      { source: { sourceType: "fide" }, score: 0.9 },
+      { source: { sourceType: "tournament", tournamentId: "T1" }, score: 0.6 },
     ];
 
-    const sorted = resolver.applyPriority(articles, 'T1');
+    const sorted = resolver.applyPriority(articles, "T1");
 
-    expect(sorted[0].source.sourceType).toBe('tournament');
+    expect(sorted[0].source.sourceType).toBe("tournament");
   });
 
-  it('should detect conflicting rules', () => {
+  it("should detect conflicting rules", () => {
     const articles = [
-      { articleNumber: '11.1', content: 'Use is prohibited', source: { sourceType: 'fide' } },
-      { articleNumber: '§3', content: 'Use is permitted', source: { sourceType: 'tournament' } }
+      {
+        articleNumber: "11.1",
+        content: "Use is prohibited",
+        source: { sourceType: "fide" },
+      },
+      {
+        articleNumber: "§3",
+        content: "Use is permitted",
+        source: { sourceType: "tournament" },
+      },
     ];
 
     const conflict = resolver.detectConflicts(articles);
@@ -1060,39 +1119,38 @@ describe('RulePriorityResolver', () => {
 ### 10.2 LLM Testing
 
 **Mock Tests** (no actual API calls):
+
 ```typescript
-describe('LLMReasoner', () => {
-  it('should cite all sources in output', async () => {
-    const mockArticles = [
-      { id: '1', articleNumber: '7.5.5', content: '...' }
-    ];
+describe("LLMReasoner", () => {
+  it("should cite all sources in output", async () => {
+    const mockArticles = [{ id: "1", articleNumber: "7.5.5", content: "..." }];
 
     const decision = await reasoner.analyze(incident, context, mockArticles);
 
     expect(decision.sources.length).toBeGreaterThan(0);
-    expect(decision.sources[0].articleNumber).toBe('7.5.5');
+    expect(decision.sources[0].articleNumber).toBe("7.5.5");
   });
 });
 
-describe('LLMOutputValidator', () => {
-  it('should reject output without sources', async () => {
+describe("LLMOutputValidator", () => {
+  it("should reject output without sources", async () => {
     const invalidDecision = {
-      conclusion: 'Game Loss',
-      penalties: [{ type: 'game-loss' }],
-      sources: []  // ❌ Invalid
+      conclusion: "Game Loss",
+      penalties: [{ type: "game-loss" }],
+      sources: [], // ❌ Invalid
     };
 
     const result = await validator.validate(invalidDecision, []);
 
     expect(result.valid).toBe(false);
-    expect(result.reason).toContain('without sources');
+    expect(result.reason).toContain("without sources");
   });
 
-  it('should reject output citing non-existent articles', async () => {
+  it("should reject output citing non-existent articles", async () => {
     const invalidDecision = {
       sources: [
-        { articleNumber: '99.99.99', sourceName: 'FIDE Laws' }  // ❌ Doesn't exist
-      ]
+        { articleNumber: "99.99.99", sourceName: "FIDE Laws" }, // ❌ Doesn't exist
+      ],
     };
 
     const result = await validator.validate(invalidDecision, []);
@@ -1100,10 +1158,10 @@ describe('LLMOutputValidator', () => {
     expect(result.valid).toBe(false);
   });
 
-  it('should auto-fix low confidence without escalation', async () => {
+  it("should auto-fix low confidence without escalation", async () => {
     const decision = {
-      confidence: 'low',
-      escalationRecommended: false  // Should be true
+      confidence: "low",
+      escalationRecommended: false, // Should be true
     };
 
     const result = await validator.validate(decision, []);
@@ -1117,19 +1175,21 @@ describe('LLMOutputValidator', () => {
 ### 10.3 Integration Tests
 
 ```typescript
-describe('End-to-End RAG Flow', () => {
-  it('should process illegal move incident correctly', async () => {
+describe("End-to-End RAG Flow", () => {
+  it("should process illegal move incident correctly", async () => {
     const incident = {
-      description: '黒が両手でキャスリングした',
-      category: 'illegal-move'
+      description: "黒が両手でキャスリングした",
+      category: "illegal-move",
     };
 
     const decision = await decisionEngine.processIncident(incident, context);
 
-    expect(decision.conclusion).toContain('Illegal Move');
+    expect(decision.conclusion).toContain("Illegal Move");
     expect(decision.penalties.length).toBeGreaterThan(0);
     expect(decision.sources.length).toBeGreaterThan(0);
-    expect(decision.sources.some(s => s.articleNumber === '7.5.5')).toBe(true);
+    expect(decision.sources.some((s) => s.articleNumber === "7.5.5")).toBe(
+      true
+    );
   });
 });
 ```

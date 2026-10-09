@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   canOfferFactPresenceCheck,
   prepareFactPresenceCheck,
@@ -13,8 +13,10 @@ import { ExternalAiSendConfirmation } from "./ExternalAiSendConfirmation";
 interface FactPresenceCheckProps {
   input: FactPresenceInput;
   disabled?: boolean;
-  /** 判定の結果（質問の並べ方にだけ使う） */
-  onResult: (byQuestion: FactPresenceOutcome["byQuestion"]) => void;
+  /** 判定の結果（質問の並べ方にだけ使う）。較正済みの正しい応答の場合だけ呼ぶ */
+  onResult: (
+    byQuestion: NonNullable<FactPresenceOutcome["byQuestion"]>
+  ) => void;
 }
 
 type Pending = Extract<FactPresenceStep, { status: "needs-confirmation" }>;
@@ -33,10 +35,21 @@ export function FactPresenceCheck({
   const [pending, setPending] = useState<Pending | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  /** 判定結果で並べ替えた */
+  const [applied, setApplied] = useState(false);
   /** 画面を離れた後・新しい要求の後に届いた古い応答を捨てる */
   const requestIdRef = useRef(0);
+  useEffect(
+    () => () => {
+      requestIdRef.current++;
+    },
+    []
+  );
 
   if (!canOfferFactPresenceCheck(input)) return null;
+
+  const FAILED =
+    "記載の確認に失敗しました。並べ替えていません。すべての質問に回答してください";
 
   const handleOpen = async () => {
     const id = ++requestIdRef.current;
@@ -51,6 +64,8 @@ export function FactPresenceCheck({
           step.notice ??
             "記載の確認はできません。すべての質問に回答してください"
         );
+    } catch {
+      if (id === requestIdRef.current) setNotice(FAILED);
     } finally {
       if (id === requestIdRef.current) setLoading(false);
     }
@@ -66,7 +81,16 @@ export function FactPresenceCheck({
       setPending(null);
       setDone(true);
       setNotice(outcome.notice ?? null);
-      onResult(outcome.byQuestion);
+      // 判定できた場合だけ並べ替える（失敗・未較正では「記載なし」とも示さない）
+      if (outcome.byQuestion) {
+        setApplied(true);
+        onResult(outcome.byQuestion);
+      }
+    } catch {
+      if (id !== requestIdRef.current) return;
+      setPending(null);
+      setDone(true);
+      setNotice(FAILED);
     } finally {
       if (id === requestIdRef.current) setLoading(false);
     }
@@ -107,7 +131,7 @@ export function FactPresenceCheck({
           confirmLabel="確認して記載を確認"
         />
       )}
-      {done && (
+      {applied && (
         <p role="status" className="text-gray-700">
           記載の確認に合わせて質問を並べ替えました。回答はアービターが選んでください。
         </p>

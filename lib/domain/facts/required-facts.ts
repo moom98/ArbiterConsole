@@ -122,7 +122,8 @@ export interface PresenceTarget {
 
 /**
  * DT が求めた質問のうち、Jev で「報告文に明示されているか」を判定できるものと、その fact。
- * 対応する fact がない質問・端末内だけの fact・設定から求める fact は含めない。
+ * 対応する fact がない質問・端末内だけの fact・設定から求める fact・値を計算で渡す fact
+ * （dtValues: "computed"）は含めない。
  * 同じ fact に複数の質問が対応する場合は、fact を1回だけ尋ねる（全質問に結果を使う）
  */
 export function presenceTargets(
@@ -135,7 +136,8 @@ export function presenceTargets(
     const usage = usagesFor(category, subtype).find((u) =>
       u.dtQuestionIds?.includes(questionId)
     );
-    if (!usage) continue;
+    // 値を計算で質問へ渡す fact（例: tch.special → 昇格の質問）は、記載の有無が質問と一致しない
+    if (!usage || usage.dtValues === "computed") continue;
     const definition = getFactDefinition(usage.factId);
     if (
       !definition?.presenceCheckable ||

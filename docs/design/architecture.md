@@ -107,6 +107,7 @@ Arbiter Console is an **offline-first, mobile-optimized Decision Support system*
 **Technology:** Next.js 14 App Router + React 18 + Digital Agency Design System
 
 **Responsibilities:**
+
 - Render UI components (buttons, forms, cards)
 - Handle user interactions (taps, voice input)
 - Display Decision Support results
@@ -114,11 +115,13 @@ Arbiter Console is an **offline-first, mobile-optimized Decision Support system*
 - Show loading states and errors
 
 **Constraints:**
+
 - **NO business logic** in React components (per `.claude/rules/frontend.md`)
 - **NO direct API calls** (use Application Layer services)
 - **NO chess rule evaluation** (delegate to Domain Layer)
 
 **Key Components:**
+
 - `IncidentReportForm`: Capture incident details
 - `DecisionSupportCard`: Display ruling recommendations
 - `RoundChecklistView`: Arbiter's pre/post-round tasks
@@ -130,12 +133,14 @@ Arbiter Console is an **offline-first, mobile-optimized Decision Support system*
 **Technology:** Zustand (state management)
 
 **Responsibilities:**
+
 - Manage global application state
 - Coordinate between UI and Domain Layer
 - Handle async operations (API calls, DB queries)
 - Persist state to IndexedDB (via Zustand middleware)
 
 **Key Stores:**
+
 - `useTournamentStore`: Current tournament, rounds, games
 - `useIncidentStore`: Active incident, history
 - `useDecisionStore`: Current decision support output
@@ -143,6 +148,7 @@ Arbiter Console is an **offline-first, mobile-optimized Decision Support system*
 - `useSettingsStore`: User preferences, clock model
 
 **State Flow Example:**
+
 ```typescript
 // User reports incident
 1. UI calls: incidentStore.reportIncident(description, gameId)
@@ -157,6 +163,7 @@ Arbiter Console is an **offline-first, mobile-optimized Decision Support system*
 **Technology:** Pure TypeScript (framework-agnostic)
 
 **Responsibilities:**
+
 - Implement chess arbitration rules
 - Execute Decision Trees
 - Coordinate LLM-based reasoning
@@ -166,6 +173,7 @@ Arbiter Console is an **offline-first, mobile-optimized Decision Support system*
 **Core Modules:**
 
 #### DecisionEngine (Orchestrator)
+
 ```typescript
 class DecisionEngine {
   async processIncident(
@@ -186,16 +194,17 @@ class DecisionEngine {
   private hasDeterministicTree(category: IncidentCategory): boolean {
     // Per §35: High-frequency, high-risk incidents use Decision Trees
     return [
-      'illegal-move',
-      'flag-fall',
-      'draw-claim-threefold',
-      'draw-claim-50move'
+      "illegal-move",
+      "flag-fall",
+      "draw-claim-threefold",
+      "draw-claim-50move",
     ].includes(category);
   }
 }
 ```
 
 #### Decision Trees
+
 ```typescript
 // Example: Illegal Move Decision Tree (Standard)
 class IllegalMoveStandardTree {
@@ -224,27 +233,30 @@ class IllegalMoveStandardTree {
     return {
       conclusion: `${input.playerColor}の1回目のIllegal Move。`,
       actions: [
-        '時計を止める',
-        '局面をIllegal Move直前へ戻す',
+        "時計を止める",
+        "局面をIllegal Move直前へ戻す",
         `${input.opponentColor}に2分追加`,
-        `${input.playerColor}に正しい手を指させる`
+        `${input.playerColor}に正しい手を指させる`,
       ],
-      intervention: 'immediate',
-      penalties: [{
-        type: 'time-addition',
-        player: input.opponentColor,
-        timeSeconds: 120
-      }],
+      intervention: "immediate",
+      penalties: [
+        {
+          type: "time-addition",
+          player: input.opponentColor,
+          timeSeconds: 120,
+        },
+      ],
       sources: [
-        { article: 'FIDE Laws 7.5.4', page: null },
-        { article: 'JCF NA Seminar p.48', page: 48 }
-      ]
+        { article: "FIDE Laws 7.5.4", page: null },
+        { article: "JCF NA Seminar p.48", page: 48 },
+      ],
     };
   }
 }
 ```
 
 #### LLM-based Reasoning
+
 ```typescript
 class LLMReasoner {
   async analyzeIncident(
@@ -255,8 +267,8 @@ class LLMReasoner {
     const prompt = this.buildPrompt(incident, context, retrievedRules);
 
     const response = await claudeAPI.messages.create({
-      model: 'claude-sonnet-4.5',
-      messages: [{ role: 'user', content: prompt }],
+      model: "claude-sonnet-4.5",
+      messages: [{ role: "user", content: prompt }],
       tools: [this.ruleLookupTool],
       // Per §14: AI constraints
       system: `
@@ -266,7 +278,7 @@ class LLMReasoner {
         - If uncertain, recommend CA escalation
         - Never speculate or use "probably"
         - Cite article numbers for all rulings
-      `
+      `,
     });
 
     return this.parseStructuredOutput(response);
@@ -275,6 +287,7 @@ class LLMReasoner {
 ```
 
 #### Rule Retrieval
+
 ```typescript
 class RuleRetrieval {
   async search(query: string, context: GameContext): Promise<RuleArticle[]> {
@@ -300,11 +313,14 @@ class RuleRetrieval {
   }
 
   private getPriority(article: RuleArticle, tournamentId: string): number {
-    if (article.sourceType === 'tournament' && article.tournamentId === tournamentId) {
+    if (
+      article.sourceType === "tournament" &&
+      article.tournamentId === tournamentId
+    ) {
       return 4;
-    } else if (article.sourceType === 'jcf') {
+    } else if (article.sourceType === "jcf") {
       return 3;
-    } else if (article.sourceType === 'fide') {
+    } else if (article.sourceType === "fide") {
       return 2;
     } else {
       return 1; // Commentary
@@ -314,6 +330,7 @@ class RuleRetrieval {
 ```
 
 **Domain Constraints:**
+
 - Per `.claude/rules/domain.md`:
   - NO React dependencies
   - ALL rulings must cite sources
@@ -325,6 +342,7 @@ class RuleRetrieval {
 **Technology:** Dexie.js, Claude API, Transformers.js, Web Speech API, Service Worker
 
 **Responsibilities:**
+
 - Persist data to IndexedDB
 - Call external APIs (Claude)
 - Generate embeddings (Transformers.js)
@@ -334,6 +352,7 @@ class RuleRetrieval {
 **Key Modules:**
 
 #### Database (Dexie.js)
+
 ```typescript
 // Schema defined in ADR-001
 class ArbiterDatabase extends Dexie {
@@ -351,6 +370,7 @@ class ArbiterDatabase extends Dexie {
 ```
 
 #### AI Client
+
 ```typescript
 class ClaudeClient {
   async classifyIncident(description: string): Promise<Classification> {
@@ -366,13 +386,17 @@ class ClaudeClient {
 ```
 
 #### Vector Search (Offline)
+
 ```typescript
 class LocalVectorSearch {
   private model: TransformersModel;
 
   async initialize() {
     // Load embedding model (runs in browser via WebAssembly)
-    this.model = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    this.model = await pipeline(
+      "feature-extraction",
+      "Xenova/all-MiniLM-L6-v2"
+    );
   }
 
   async search(query: string, topK: number): Promise<ScoredArticle[]> {
@@ -380,14 +404,12 @@ class LocalVectorSearch {
     const allEmbeddings = await db.embeddings.toArray();
 
     // Cosine similarity
-    const scored = allEmbeddings.map(e => ({
+    const scored = allEmbeddings.map((e) => ({
       article: e,
-      score: this.cosineSimilarity(queryEmbedding, e.embedding)
+      score: this.cosineSimilarity(queryEmbedding, e.embedding),
     }));
 
-    return scored
-      .sort((a, b) => b.score - a.score)
-      .slice(0, topK);
+    return scored.sort((a, b) => b.score - a.score).slice(0, topK);
   }
 }
 ```
@@ -399,6 +421,7 @@ class LocalVectorSearch {
 ### 4.1 Service Worker Caching
 
 **Cached Assets:**
+
 - Next.js static files (HTML, CSS, JS)
 - Digital Agency Design System fonts
 - Rule documents (PDFs stored as blobs in IndexedDB)
@@ -406,21 +429,22 @@ class LocalVectorSearch {
 - Decision Tree logic
 
 **Cache Strategy:**
+
 ```javascript
 // next.config.js with next-pwa
 module.exports = withPWA({
   pwa: {
-    dest: 'public',
+    dest: "public",
     register: true,
     skipWaiting: true,
     runtimeCaching: [
       {
         urlPattern: /^https:\/\/api\.anthropic\.com\/.*/i,
-        handler: 'NetworkOnly', // Never cache AI API calls
+        handler: "NetworkOnly", // Never cache AI API calls
       },
       {
         urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
-        handler: 'CacheFirst',
+        handler: "CacheFirst",
       },
     ],
   },
@@ -430,30 +454,33 @@ module.exports = withPWA({
 ### 4.2 Data Synchronization
 
 **Offline-First Pattern:**
+
 1. All writes go to IndexedDB immediately
 2. Background sync queue uploads changes when online
 3. Conflict resolution: Last-write-wins (arbiters rarely collaborate on same incident)
 
 **Sync Flow:**
+
 ```typescript
 class SyncService {
   async syncIncidentLogs() {
     if (!navigator.onLine) return;
 
     const unsyncedIncidents = await db.incidents
-      .where('syncStatus')
-      .equals('pending')
+      .where("syncStatus")
+      .equals("pending")
       .toArray();
 
     for (const incident of unsyncedIncidents) {
       await this.uploadIncident(incident);
-      await db.incidents.update(incident.id, { syncStatus: 'synced' });
+      await db.incidents.update(incident.id, { syncStatus: "synced" });
     }
   }
 }
 ```
 
 **Per §31: Offline-capable features:**
+
 - ✅ Tournament Profile (stored locally)
 - ✅ Rule search (vector + full-text, both local)
 - ✅ Incident Log (local DB)
@@ -462,6 +489,7 @@ class SyncService {
 - ❌ LLM-based reasoning (requires Claude API)
 
 **Graceful Degradation:**
+
 - If offline and incident requires LLM:
   - Show: "この事象は詳細な分析が必要です。インターネット接続を確認するか、CAへ相談してください。"
   - Allow: Manual rule search and incident logging
@@ -472,20 +500,21 @@ class SyncService {
 
 **Per §35: High-frequency, high-risk → Decision Tree**
 
-| Incident Category       | Handler         | Rationale                                    |
-|-------------------------|-----------------|----------------------------------------------|
-| Illegal Move (Standard) | Decision Tree   | Deterministic (§16), high-frequency          |
-| Illegal Move (Rapid)    | Decision Tree   | Deterministic but different rules (§17)      |
-| Flag Fall               | Decision Tree   | Clear rules (mate material check)            |
-| Threefold Repetition    | Decision Tree   | Position comparison is algorithmic           |
-| 50-move Rule            | Decision Tree   | Countable, deterministic                     |
-| Clock Malfunction       | LLM + RAG       | Context-dependent, many edge cases           |
-| Electronic Device       | LLM + RAG       | Tournament rules vary (§21)                  |
-| Player Behavior         | LLM + RAG       | Subjective, context-dependent                |
-| Team Captain Issue      | LLM + RAG       | Tournament-specific rules (§22)              |
-| Fair Play / Cheating    | LLM + RAG       | Never automate (§23), only assist escalation |
+| Incident Category       | Handler       | Rationale                                    |
+| ----------------------- | ------------- | -------------------------------------------- |
+| Illegal Move (Standard) | Decision Tree | Deterministic (§16), high-frequency          |
+| Illegal Move (Rapid)    | Decision Tree | Deterministic but different rules (§17)      |
+| Flag Fall               | Decision Tree | Clear rules (mate material check)            |
+| Threefold Repetition    | Decision Tree | Position comparison is algorithmic           |
+| 50-move Rule            | Decision Tree | Countable, deterministic                     |
+| Clock Malfunction       | LLM + RAG     | Context-dependent, many edge cases           |
+| Electronic Device       | LLM + RAG     | Tournament rules vary (§21)                  |
+| Player Behavior         | LLM + RAG     | Subjective, context-dependent                |
+| Team Captain Issue      | LLM + RAG     | Tournament-specific rules (§22)              |
+| Fair Play / Cheating    | LLM + RAG     | Never automate (§23), only assist escalation |
 
 **Hybrid Cases:**
+
 - **Draw Offer**: Decision Tree validates claim conditions, LLM helps if ambiguous
 - **Scoresheet Issues**: Decision Tree checks basic errors, LLM interprets handwriting issues
 
@@ -570,14 +599,14 @@ class SyncService {
 
 ## 8. Performance Targets
 
-| Metric                          | Target      | Measurement Point                     |
-|---------------------------------|-------------|---------------------------------------|
-| Decision Tree execution         | <100ms      | From input complete to output ready   |
-| Rule search (local vector)      | <3s         | Query to results displayed            |
-| LLM classification (Haiku)      | <5s         | Incident text to category + questions |
-| LLM reasoning (Sonnet)          | <10s        | Full context to decision output       |
-| Page load (cached)              | <1s         | Tap to interactive                    |
-| Offline incident logging        | <500ms      | Tap "保存" to confirmed save          |
+| Metric                     | Target | Measurement Point                     |
+| -------------------------- | ------ | ------------------------------------- |
+| Decision Tree execution    | <100ms | From input complete to output ready   |
+| Rule search (local vector) | <3s    | Query to results displayed            |
+| LLM classification (Haiku) | <5s    | Incident text to category + questions |
+| LLM reasoning (Sonnet)     | <10s   | Full context to decision output       |
+| Page load (cached)         | <1s    | Tap to interactive                    |
+| Offline incident logging   | <500ms | Tap "保存" to confirmed save          |
 
 ---
 
@@ -616,6 +645,7 @@ class SyncService {
 ```
 
 **Notes:**
+
 - No backend server required for MVP
 - All data stored locally (IndexedDB)
 - Claude API called directly from browser (API key in env, rate-limited)
@@ -652,6 +682,7 @@ class SyncService {
 ### 10.1 Beyond MVP (§36)
 
 Features **NOT** in MVP but architecture supports:
+
 - Swiss Pairing Engine integration (via API or local library)
 - FIDE Rating calculation (add domain service)
 - Tie-break calculation (extend Tournament model)

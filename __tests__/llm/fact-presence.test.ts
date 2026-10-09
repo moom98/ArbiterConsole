@@ -68,7 +68,10 @@ describe("prepareFactPresence (guard)", () => {
     if (r.status !== "needs-confirmation") throw new Error(r.status);
     expect(call).not.toHaveBeenCalled();
     expect(r.preview.destination).toBe("報告文の記載の確認（Jev（TypeSafe））");
-    expect(r.preview.notes[0]).toMatch(/確認する事実: 2件/);
+    // 送る fact のコードと質問文をプレビューに示す（D13）
+    expect(r.preview.fields[1].label).toMatch(/確認する事実（2件/);
+    expect(r.preview.fields[1].text).toContain("ct.event: ");
+    expect(r.factIds).toEqual(["ct.event", "ct.zero-side"]);
     await r.send();
     const [kind, body] = call.mock.calls[0] as unknown as [
       string,
@@ -112,19 +115,28 @@ describe("prepareFactPresence (guard)", () => {
 
 describe("prepareFactPresenceCheck (application)", () => {
   it("offers the check only when a question maps to a presence-checkable fact", () => {
-    expect(canOfferFactPresenceCheck(INPUT)).toBe(true);
+    const cal = [CALIBRATION];
+    expect(canOfferFactPresenceCheck(INPUT, cal)).toBe(true);
     expect(
-      canOfferFactPresenceCheck({
-        ...INPUT,
-        questions: [QUESTIONS.lastPeriod, QUESTIONS.positionFen],
-      })
+      canOfferFactPresenceCheck(
+        {
+          ...INPUT,
+          questions: [QUESTIONS.lastPeriod, QUESTIONS.positionFen],
+        },
+        cal
+      )
     ).toBe(false);
-    expect(canOfferFactPresenceCheck({ ...INPUT, description: "  " })).toBe(
-      false
-    );
-    expect(canOfferFactPresenceCheck({ ...INPUT, category: "fair-play" })).toBe(
-      false
-    );
+    expect(
+      canOfferFactPresenceCheck({ ...INPUT, description: "  " }, cal)
+    ).toBe(false);
+    expect(
+      canOfferFactPresenceCheck({ ...INPUT, category: "fair-play" }, cal)
+    ).toBe(false);
+  });
+
+  it("is not offered while no calibration is registered (no send without effect)", () => {
+    expect(canOfferFactPresenceCheck(INPUT)).toBe(false);
+    expect(canOfferFactPresenceCheck(INPUT, [])).toBe(false);
   });
 
   it("calibrated: present facts map to their questions; the rest are missing", async () => {
@@ -148,7 +160,7 @@ describe("prepareFactPresenceCheck (application)", () => {
     expect(out.notice).toBeUndefined();
   });
 
-  it("uncalibrated (the registry is empty until J3): everything is missing, with a notice", async () => {
+  it("uncalibrated model: nothing is ordered (not even 'missing'), with a notice", async () => {
     const step = await prepareFactPresenceCheck(
       INPUT,
       deps(async () => ({
@@ -159,11 +171,7 @@ describe("prepareFactPresenceCheck (application)", () => {
     );
     if (step.status !== "needs-confirmation") throw new Error(step.status);
     const out = await step.send();
-    expect(out.byQuestion).toEqual({
-      clockTimeSubtype: "missing",
-      flagFallen: "missing",
-    });
-    expect(out.notice).toBe(UNCALIBRATED_NOTICE);
+    expect(out).toEqual({ notice: UNCALIBRATED_NOTICE });
   });
 
   it("a failed or malformed answer orders nothing and says so", async () => {
@@ -176,7 +184,6 @@ describe("prepareFactPresenceCheck (application)", () => {
     );
     if (failed.status !== "needs-confirmation") throw new Error("expected");
     expect(await failed.send()).toEqual({
-      byQuestion: {},
       notice: expect.stringMatching(/記載の確認に失敗しました/),
     });
 
@@ -190,7 +197,7 @@ describe("prepareFactPresenceCheck (application)", () => {
     });
     if (malformed.status !== "needs-confirmation") throw new Error("expected");
     const out = await malformed.send();
-    expect(Object.values(out.byQuestion)).toEqual(["missing", "missing"]);
+    expect(out.byQuestion).toBeUndefined();
     expect(out.notice).toMatch(/解釈できない/);
   });
 

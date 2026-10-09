@@ -2,13 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { QUESTIONS } from "@/lib/domain/follow-up";
 
-const send = vi.fn(async () => ({
-  byQuestion: {
-    clockTimeSubtype: "present" as const,
-    flagFallen: "missing" as const,
-  },
-  notice:
-    "AIの判定はまだ較正されていないため、すべて「記載なし」として並べています",
+type Outcome = {
+  byQuestion?: Record<string, "present" | "missing">;
+  notice?: string;
+};
+const send = vi.fn(async (): Promise<Outcome> => ({
+  byQuestion: { clockTimeSubtype: "present", flagFallen: "missing" },
 }));
 const prepare = vi.fn(async (_input: unknown) => ({
   status: "needs-confirmation" as const,
@@ -20,10 +19,18 @@ const prepare = vi.fn(async (_input: unknown) => ({
   send,
 }));
 
-vi.mock("@/lib/application/fact-presence", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/application/fact-presence")>()),
-  prepareFactPresenceCheck: (input: unknown) => prepare(input),
-}));
+vi.mock("@/lib/application/fact-presence", async (importOriginal) => {
+  const orig =
+    await importOriginal<typeof import("@/lib/application/fact-presence")>();
+  return {
+    ...orig,
+    // 較正が登録された状態として扱う（実際の登録は J3）
+    canOfferFactPresenceCheck: (
+      input: Parameters<typeof orig.canOfferFactPresenceCheck>[0]
+    ) => orig.canOfferFactPresenceCheck(input, [{} as never]),
+    prepareFactPresenceCheck: (input: unknown) => prepare(input),
+  };
+});
 
 import { FactPresenceCheck } from "@/components/features/FactPresenceCheck";
 import {
@@ -61,7 +68,63 @@ describe("FactPresenceCheck", () => {
       clockTimeSubtype: "present",
       flagFallen: "missing",
     });
-    expect(screen.getByText(/較正されていない/)).toBeTruthy();
+  });
+
+  it("uncalibrated or failed: shows the notice only; nothing is reordered", async () => {
+    send.mockImplementationOnce(async () => ({
+      notice: "このAIの判定はまだ較正されていないため、並べ替えていません",
+    }));
+    const onResult = vi.fn();
+    render(<FactPresenceCheck input={INPUT} onResult={onResult} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "AIで報告文の記載を確認（任意）" })
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "確認して記載を確認" })
+    );
+    expect(await screen.findByText(/較正されていない/)).toBeTruthy();
+    expect(onResult).not.toHaveBeenCalled();
+    expect(screen.queryByText(/質問を並べ替えました/)).toBeNull();
+  });
+
+  it("a thrown error is shown as a failure, not swallowed", async () => {
+    send.mockImplementationOnce(async () => {
+      throw new Error("network");
+    });
+    const onResult = vi.fn();
+    render(<FactPresenceCheck input={INPUT} onResult={onResult} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "AIで報告文の記載を確認（任意）" })
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "確認して記載を確認" })
+    );
+    expect(await screen.findByText(/記載の確認に失敗しました/)).toBeTruthy();
+    expect(onResult).not.toHaveBeenCalled();
+  });
+
+  it("a result arriving after unmount is dropped", async () => {
+    let release: () => void = () => {};
+    send.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ byQuestion: { flagFallen: "present" } });
+        })
+    );
+    const onResult = vi.fn();
+    const { unmount } = render(
+      <FactPresenceCheck input={INPUT} onResult={onResult} />
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "AIで報告文の記載を確認（任意）" })
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "確認して記載を確認" })
+    );
+    unmount();
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(onResult).not.toHaveBeenCalled();
   });
 
   it("declining sends nothing and changes nothing", async () => {

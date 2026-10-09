@@ -53,7 +53,7 @@ const known = (v: boolean | "unknown" | undefined): boolean | undefined =>
  * DT-011: 棋譜の記録義務（FIDE Laws 2023 8.1.1 / 8.1.3 / 8.4 / 8.5。ADR-014 §7）。
  * 「記入していない」「遅れている」の報告で、Standard の対局だけを扱う（呼び出し側が確かめる）。
  *
- * - 「遅れている」で、記録していないのが直前の手だけなら違反ではない（8.1.3）
+ * - 「遅れている」で、記録していないのが双方の最新の手だけなら違反ではない（8.1.3）
  * - 加算は大会の持ち時間から求める（単一ピリオド・全ピリオドで「30秒以上か」が同じなら質問しない）。
  *   複数ピリオドで異なる場合はピリオドを、設定がない・不完全な場合は加算を質問する
  * - 加算が30秒以上、またはこのピリオドで5分を下回っていないなら、もう一方は尋ねずに「免除なし」
@@ -70,12 +70,12 @@ export class RecordingObligationTree {
   evaluate(input: RecordingObligationTreeInput): DecisionTreeResult {
     const { facts, timeControl: tc, issue } = input;
 
-    // 1. 遅れている: 直前の手だけなら 8.1.3 の範囲（違反ではない）
+    // 1. 遅れている: 双方の最新の手だけなら 8.1.3 の範囲（違反ではない）
     if (issue === "behind" && facts.onlyLastMoves === true)
       return this.withinLastMoves();
     const askOnlyLastMoves =
       issue === "behind" && facts.onlyLastMoves === undefined;
-    /** 直前の手だけの質問と一緒に尋ねる場合、それ以外の回答のときだけ表示する */
+    /** 双方の最新の手だけの質問と一緒に尋ねる場合、それ以外の回答のときだけ表示する */
     const afterLastMoves = (q: FollowUpQuestion): FollowUpQuestion =>
       askOnlyLastMoves && !q.showWhen
         ? {
@@ -197,7 +197,7 @@ export class RecordingObligationTree {
           escalationRecommended: false,
         });
       case "required":
-        // 遅れている手が直前の手だけかどうか分からない場合、違反かどうかを確定できない
+        // 遅れている手が双方の最新の手だけかどうか分からない場合、違反かどうかを確定できない
         if (issue === "behind" && facts.onlyLastMoves !== false)
           return this.manual(
             `${result.explanation}ただし、記録していないのが双方の最新の手（1手分の遅れ）だけなら違反ではありません（8.1.3）。`,
@@ -237,7 +237,7 @@ export class RecordingObligationTree {
     }
   }
 
-  /** 「遅れている」が直前の手だけ（8.1.3） */
+  /** 「遅れている」が双方の最新の手だけ（8.1.3） */
   private withinLastMoves(): DecisionTreeResult {
     return this.out.decided({
       kind: "recommendation",

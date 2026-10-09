@@ -132,7 +132,7 @@ export type RecordingIncrementAnswer = "at-least-30" | "below-30" | "delay";
 /** DT-011 の構造化された回答（「わからない」は "unknown"） */
 export interface ScoresheetFacts {
   /**
-   * 「遅れている」: 記録していないのが直前の手（自分の最後の手・それに対する相手の手）だけか。
+   * 「遅れている」: 記録していないのが双方の最新の手だけ（1手分の遅れ。どちらの手番でも）か。
    * true なら 8.1.3 の範囲で違反ではない
    */
   onlyLastMoves?: boolean | "unknown";

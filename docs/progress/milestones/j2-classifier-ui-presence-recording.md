@@ -108,6 +108,7 @@
   - The period and increment questions are now asked only when the clock was, or may have been, below 5:00. This needed a second round, or a condition on 「5分を下回ったか」.
   - The 8.5.1 / 8.5.2 action texts now follow the rules more closely.
   - New visibility-chain tests (36 DT-011 tests).
+  - **Final re-review: MERGE.** The comment and doc nits about the old 8.1.3 wording are also fixed.
 
 ## Known issues
 

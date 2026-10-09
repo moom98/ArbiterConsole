@@ -204,11 +204,14 @@ const pct = (v: number | undefined) =>
 
 function summaryRow(s: ProviderSummary | undefined, name: string): string {
   if (!s) return `| ${name} | (未実行) | | | | | |`;
-  return `| ${name} | ${s.model ?? "-"} | ${pct(s.accuracy.tuning)} | ${pct(s.accuracy.heldout)} | ${pct(s.top2Heldout)} | ${s.latency.p50 ?? "-"} / ${s.latency.p95 ?? "-"} ms | ok ${s.statusCounts.ok}, rejected ${s.statusCounts.rejected}, not-sent ${s.statusCounts["not-sent"]}, error ${s.statusCounts.error} |`;
+  return `| ${name} | ${s.model ?? "-"} | ${pct(s.accuracy.tuning)} | ${pct(s.accuracy.heldout)} | ${pct(s.top2Heldout)} | ${ms(s.latency.p50)} / ${ms(s.latency.p95)} | ok ${s.statusCounts.ok}, rejected ${s.statusCounts.rejected}, not-sent ${s.statusCounts["not-sent"]}, error ${s.statusCounts.error} |`;
 }
+
+const ms = (v: number) => (Number.isNaN(v) ? "-" : `${v} ms`);
 
 function renderReport(
   dataset: Dataset,
+  evaluated: number,
   evaluation: JevEvaluation,
   createdAt: string,
   calibrationWritten: boolean
@@ -218,7 +221,7 @@ function renderReport(
   const lines = [
     `# Classifier evaluation (${createdAt})`,
     "",
-    `Dataset: \`${dataset.id}\` v${dataset.version}, ${dataset.items.length} items (synthetic; sent through protectIncidentText, route classify).`,
+    `Dataset: \`${dataset.id}\` v${dataset.version}, ${evaluated} of ${dataset.items.length} items (synthetic; sent through protectIncidentText, route classify).`,
     "",
     "## Summary",
     "",
@@ -360,7 +363,13 @@ it(
       );
     writeFileSync(
       join(outDir, "report.md"),
-      renderReport(dataset, evaluation, createdAt, calibration !== null)
+      renderReport(
+        dataset,
+        items.length,
+        evaluation,
+        createdAt,
+        calibration !== null
+      )
     );
     console.log(
       `[eval] accepted=${evaluation.accepted} calibratable=${evaluation.calibratable} → ${outDir}`

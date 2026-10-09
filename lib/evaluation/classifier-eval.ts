@@ -131,6 +131,8 @@ export interface ThresholdStats {
   /** p ≥ threshold の件数 */
   support: number;
   accuracy: number;
+  /** 正解率の Wilson 95% 下限 */
+  wilsonLower: number;
 }
 
 export function statsAt(
@@ -138,19 +140,20 @@ export function statsAt(
   threshold: number
 ): ThresholdStats {
   const above = points.filter((x) => x.p >= threshold);
+  const correct = above.filter((x) => x.correct).length;
   return {
     threshold,
     support: above.length,
-    accuracy:
-      above.length === 0
-        ? NaN
-        : above.filter((x) => x.correct).length / above.length,
+    accuracy: above.length === 0 ? NaN : correct / above.length,
+    wilsonLower: round(wilsonLowerBound(correct, above.length)),
   };
 }
 
 /**
- * tuning の点から、p ≥ t の正解率が target 以上になる最も低い t を選ぶ（候補は観測された p）。
- * p ≥ t の件数が minSupport 未満なら選ばない。見つからなければ null（しきい値なし）
+ * tuning の点から、p ≥ t の正解率の **Wilson 95% 下限**が target 以上になる最も低い t を選ぶ
+ * （候補は観測された p）。点推定だけで選ぶと、全体の正解率が目標をわずかに超えるだけで最も低い
+ * t（= すべて）が選ばれ、held-out で目標を割りやすい（J3 の初回評価）。fact-model §5.2 の
+ * presence と同じく下限で選ぶ。p ≥ t の件数が minSupport 未満なら選ばない。なければ null
  */
 export function chooseAccuracyThreshold(
   points: readonly ScoredPoint[],
@@ -162,7 +165,7 @@ export function chooseAccuracyThreshold(
     .sort((a, b) => a - b);
   for (const t of candidates) {
     const s = statsAt(points, t);
-    if (s.support >= minSupport && s.accuracy >= target) return s;
+    if (s.support >= minSupport && s.wilsonLower >= target) return s;
   }
   return null;
 }

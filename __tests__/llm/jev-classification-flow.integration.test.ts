@@ -89,7 +89,7 @@ function wiring(answers: unknown) {
 }
 
 describe("Jev classification flow (guard → handler → domain → decision tree)", () => {
-  it("a Jev suggestion (uncalibrated) is low-confidence with candidates, and the decision tree still asks its questions", async () => {
+  it("a calibrated Jev suggestion (jev-1.13.0, p = 0.97) is medium with prefill, and the decision tree still asks its questions", async () => {
     const { upstream, call, deps } = wiring(jevAnswers("illegal-move", 0.97));
     const text = "黒が両手でキャスリングし、その後時計を押した";
     const step = await prepareIncidentClassification(text, {}, deps);
@@ -110,11 +110,11 @@ describe("Jev classification flow (guard → handler → domain → decision tre
       method: "llm",
       provider: "jev",
       probability: 0.97,
-      // 較正前（J3 前）は未較正モード
-      confidence: "low",
-      prefill: false,
+      // J3 の較正（p ≥ 0.9 → medium、≥ 0.8 → プレフィル）。"high" にはならない
+      confidence: "medium",
+      prefill: true,
     });
-    expect(result.classification?.alternatives).toHaveLength(2);
+    expect(result.classification?.alternatives).toBeUndefined();
 
     // アービターがカテゴリを確定した後は決定木が判断する（LLM は呼ばない。ADR-002）
     const assist = vi.fn();

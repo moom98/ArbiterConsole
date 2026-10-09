@@ -183,7 +183,8 @@ describe("prepareFactPresenceCheck (application)", () => {
       deps(async () => ({
         ok: true,
         result: { provider: "jev", presence: { "ct.event": 0.99 } },
-        model: "jev-1.13.0",
+        // 登録されていないモデル（未較正）
+        model: "jev-9.9.9",
       }))
     );
     if (step.status !== "needs-confirmation") throw new Error(step.status);

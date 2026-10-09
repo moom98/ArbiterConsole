@@ -6,7 +6,8 @@
  * 2. scripts/eval/classifier.eval.ts を実行する（Jev・Gemini・端末内のキーワード分類）
  *
  * キー: ~/.config/arbiter-console/typesafe.key（必須）、gemini.key（任意。ない場合は Gemini を比較しない）
- * 環境変数: EVAL_PROVIDERS=jev,gemini,keyword（既定）、EVAL_LIMIT=N（先頭 N 件だけ。較正は作らない）
+ * 環境変数: EVAL_PROVIDERS=jev,gemini,keyword（既定）、EVAL_LIMIT=N（先頭 N 件だけ。較正は作らない）、
+ *   EVAL_REUSE=docs/progress/evaluations/<run>（記録のあるプロバイダーは再利用し、API を呼ばない）
  *
  * 使い方: node scripts/eval-classifier.mjs
  */

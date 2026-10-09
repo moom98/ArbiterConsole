@@ -83,28 +83,36 @@ describe("accuracy / topKAccuracy", () => {
 describe("chooseAccuracyThreshold", () => {
   const many = (n: number, p: number, correct: boolean): ScoredPoint[] =>
     Array.from({ length: n }, () => ({ p, correct }));
-  // p = 0.4 は 10 件すべて不正解、p = 0.6 は 20 件・p = 0.95 は 100 件すべて正解
+  // p = 0.91 は 10 件すべて不正解、p = 0.93 は 20 件・p = 0.97 は 100 件すべて正解
   const pts = [
-    ...many(10, 0.4, false),
-    ...many(20, 0.6, true),
-    ...many(100, 0.95, true),
+    ...many(10, 0.91, false),
+    ...many(20, 0.93, true),
+    ...many(100, 0.97, true),
   ];
 
   it("正解率の Wilson 下限が目標以上になる最も低いしきい値を選ぶ", () => {
-    // p ≥ 0.4: 120/130 = 92.3% だが下限は約 0.864。点推定なら 0.9 で 0.4 が選ばれてしまう
-    expect(statsAt(pts, 0.4).accuracy).toBeGreaterThan(0.9);
-    expect(statsAt(pts, 0.4).wilsonLower).toBeLessThan(0.9);
-    expect(chooseAccuracyThreshold(pts, 0.9, 1)?.threshold).toBe(0.6);
-    expect(chooseAccuracyThreshold(pts, 0.85, 1)?.threshold).toBe(0.4);
+    // p ≥ 0.91: 120/130 = 92.3% だが下限は約 0.864。点推定なら 0.91 が選ばれてしまう
+    expect(statsAt(pts, 0.91).accuracy).toBeGreaterThan(0.9);
+    expect(statsAt(pts, 0.91).wilsonLower).toBeLessThan(0.9);
+    expect(chooseAccuracyThreshold(pts, 0.9, 1)?.threshold).toBe(0.93);
+    expect(chooseAccuracyThreshold(pts, 0.85, 1)?.threshold).toBe(0.91);
+  });
+
+  it("しきい値は目標より低くしない（低い確率の誤りを高い確率の正解で埋め合わせない）", () => {
+    const mixed = [...many(10, 0.4, false), ...many(300, 0.99, true)];
+    // p ≥ 0.4 の正解率 96.8%（下限 0.94）でも 0.4 は選ばない
+    expect(statsAt(mixed, 0.4).wilsonLower).toBeGreaterThan(0.9);
+    expect(chooseAccuracyThreshold(mixed, 0.9, 1)?.threshold).toBe(0.99);
+    expect(chooseAccuracyThreshold(many(200, 0.5, true), 0.9, 1)).toBeNull();
   });
 
   it("件数が足りなければ選ばない", () => {
     expect(chooseAccuracyThreshold(pts, 0.9, 121)).toBeNull();
-    expect(chooseAccuracyThreshold(pts, 0.9, 120)?.threshold).toBe(0.6);
+    expect(chooseAccuracyThreshold(pts, 0.9, 120)?.threshold).toBe(0.93);
   });
 
   it("境界: p がしきい値と等しい点を含む", () => {
-    const s = statsAt(pts, 0.6);
+    const s = statsAt(pts, 0.93);
     expect(s.support).toBe(120);
     expect(s.accuracy).toBe(1);
   });
@@ -114,7 +122,7 @@ describe("chooseAccuracyThreshold", () => {
       chooseAccuracyThreshold([{ p: 0.9, correct: false }], 0.5, 1)
     ).toBeNull();
     // 少ない件数では下限が届かない
-    expect(chooseAccuracyThreshold(many(5, 0.9, true), 0.9, 1)).toBeNull();
+    expect(chooseAccuracyThreshold(many(5, 0.95, true), 0.9, 1)).toBeNull();
   });
 });
 
@@ -193,7 +201,7 @@ describe("統計", () => {
 describe("evaluateJev / buildJevCalibration", () => {
   /**
    * 9 カテゴリ × 各 split 20 件。p ≥ 0.8 は正解、p = 0.5 は不正解（各 2 件）。
-   * p ≥ 0.5 の正解率 90%（下限 約 0.85）→ T_prefill = 0.5、T_medium = 0.8
+   * しきい値は目標未満にしないため T_prefill = 0.8、T_medium = 0.95
    */
   function dataset(): EvalRecord[] {
     const cats = INCIDENT_CATEGORIES.filter((c) => c !== "fair-play");
@@ -221,8 +229,8 @@ describe("evaluateJev / buildJevCalibration", () => {
   it("条件を満たせば受け入れ、しきい値を選ぶ", () => {
     const records = dataset().filter((r) => r.provider === "jev");
     const e = evaluateJev(records);
-    expect(e.medium.tuning?.threshold).toBe(0.8);
-    expect(e.prefill.tuning?.threshold).toBe(0.5);
+    expect(e.medium.tuning?.threshold).toBe(0.95);
+    expect(e.prefill.tuning?.threshold).toBe(0.8);
     expect(e.medium.confirmed).toBe(true);
     expect(e.prefill.confirmed).toBe(true);
     expect(e.calibratable).toBe(true);
@@ -260,7 +268,7 @@ describe("evaluateJev / buildJevCalibration", () => {
     );
     expect(c).not.toBeNull();
     expect(c?.model).toBe("jev-1.13.0");
-    expect(c?.category).toEqual({ medium: 0.8, prefill: 0.5 });
+    expect(c?.category).toEqual({ medium: 0.95, prefill: 0.8 });
     expect(c?.presence).toEqual({});
     expect(c?.needsTournamentRules).toBeUndefined();
     expect(isValidJevCalibration(c!)).toBe(true);

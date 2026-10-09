@@ -153,7 +153,11 @@ export function statsAt(
  * tuning の点から、p ≥ t の正解率の **Wilson 95% 下限**が target 以上になる最も低い t を選ぶ
  * （候補は観測された p）。点推定だけで選ぶと、全体の正解率が目標をわずかに超えるだけで最も低い
  * t（= すべて）が選ばれ、held-out で目標を割りやすい（J3 の初回評価）。fact-model §5.2 の
- * presence と同じく下限で選ぶ。p ≥ t の件数が minSupport 未満なら選ばない。なければ null
+ * presence と同じく下限で選ぶ。p ≥ t の件数が minSupport 未満なら選ばない。なければ null。
+ *
+ * t は target 未満にしない（下限）。累積の正解率は、確率の高い多数の正解で低い確率の誤りを
+ * 埋め合わせられるため、全体の正解率が高いと最も低い t（= すべて）が選ばれる（J3 v2: t = 0.37、
+ * held-out の p < 0.7 の正解率は約 40%）。p = 0.4 の1件を「正解率 90% 以上」とは示せない
  */
 export function chooseAccuracyThreshold(
   points: readonly ScoredPoint[],
@@ -161,7 +165,7 @@ export function chooseAccuracyThreshold(
   minSupport: number
 ): ThresholdStats | null {
   const candidates = Array.from(new Set(points.map((x) => x.p)))
-    .filter((p) => p > 0)
+    .filter((p) => p >= target)
     .sort((a, b) => a - b);
   for (const t of candidates) {
     const s = statsAt(points, t);

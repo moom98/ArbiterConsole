@@ -7,6 +7,7 @@
  *   protectIncidentText（route: classify）を通し、送る形（置き換え・最小化済み）にしてから送る
  * - キーは ~/.config/arbiter-console/{typesafe,gemini}.key から読む（リポジトリ・.env* には置かない）。
  *   キー・上流のエラー本文は出力しない
+ * - EVAL_REUSE=<以前の実行のディレクトリ> で、記録のあるプロバイダーは API を呼ばずに再利用する
  * - 出力（docs/progress/evaluations/<run>/）: records.json（本文なし）、report.md、
  *   較正の候補 calibration.candidate.json（作れた場合のみ）。較正の登録は人が行う（テストで一致を確認）
  */
@@ -293,22 +294,47 @@ it(
       typesafeApiKey,
     };
 
+    // EVAL_REUSE=<以前の実行のディレクトリ>: そのプロバイダーの記録があれば再利用し、API を呼ばない
+    // （集計・しきい値の規則を変えた後の再計算や、Gemini だけを後から追加する場合）
+    const reused: EvalRecord[] = process.env.EVAL_REUSE
+      ? (JSON.parse(
+          readFileSync(join(process.env.EVAL_REUSE, "records.json"), "utf8")
+        ) as EvalRecord[])
+      : [];
+    const itemIds = new Set(items.map((i) => i.id));
+    const reuse = (provider: EvalProvider) => {
+      const rs = reused.filter(
+        (r) => r.provider === provider && itemIds.has(r.id)
+      );
+      return rs.length === items.length ? rs : null;
+    };
+
     const records: EvalRecord[] = [];
     if (providers.includes("keyword")) records.push(...runKeyword(items));
     if (providers.includes("jev")) {
-      if (!typesafeApiKey) throw new Error("typesafe.key がない");
-      console.log(`[eval] jev: ${items.length} items`);
-      records.push(
-        ...(await runProvider(
-          "jev",
-          jevClassifyIncident(createJevEvaluate(fetch)),
-          config,
-          items
-        ))
-      );
+      const prior = reuse("jev");
+      if (prior) {
+        console.log(`[eval] jev: ${prior.length} records reused`);
+        records.push(...prior);
+      } else {
+        if (!typesafeApiKey) throw new Error("typesafe.key がない");
+        console.log(`[eval] jev: ${items.length} items`);
+        records.push(
+          ...(await runProvider(
+            "jev",
+            jevClassifyIncident(createJevEvaluate(fetch)),
+            config,
+            items
+          ))
+        );
+      }
     }
     if (providers.includes("gemini")) {
-      if (!geminiApiKey)
+      const prior = reuse("gemini");
+      if (prior) {
+        console.log(`[eval] gemini: ${prior.length} records reused`);
+        records.push(...prior);
+      } else if (!geminiApiKey)
         console.log("[eval] gemini.key がないため Gemini は実行しない");
       else {
         console.log(

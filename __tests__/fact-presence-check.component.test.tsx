@@ -24,10 +24,20 @@ vi.mock("@/lib/application/fact-presence", async (importOriginal) => {
     await importOriginal<typeof import("@/lib/application/fact-presence")>();
   return {
     ...orig,
-    // 較正が登録された状態として扱う（実際の登録は J3）
+    // 対象の fact のしきい値を持つ較正が登録された状態として扱う
     canOfferFactPresenceCheck: (
       input: Parameters<typeof orig.canOfferFactPresenceCheck>[0]
-    ) => orig.canOfferFactPresenceCheck(input, [{} as never]),
+    ) =>
+      orig.canOfferFactPresenceCheck(input, [
+        {
+          model: "jev-1.13.0",
+          dataset: { id: "t", version: "0", tuningSize: 0, heldOutSize: 0 },
+          createdAt: "2026-10-10",
+          category: { medium: 0.9, prefill: 0.8 },
+          presence: { "ct.event": 0.9, "ct.zero-side": 0.9 },
+          metrics: {},
+        },
+      ]),
     prepareFactPresenceCheck: (input: unknown) => prepare(input),
   };
 });

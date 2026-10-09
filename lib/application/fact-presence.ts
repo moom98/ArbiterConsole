@@ -19,6 +19,7 @@ import {
   type FactPresence,
 } from "@/lib/domain/llm/presence";
 import {
+  isValidJevCalibration,
   JEV_CALIBRATIONS,
   type JevCalibration,
 } from "@/lib/domain/llm/calibration";
@@ -83,13 +84,18 @@ function targetsOf(input: FactPresenceInput) {
 /**
  * 記載の確認を提案するか（端末内だけで決める。通信しない）。
  * 画面はこれが true のときだけ「AIで報告文の記載を確認（任意）」を出し、タップされてから準備する。
- * 較正が1つも登録されていない間（J3 まで）は、結果を使えないため提案しない（効果のない送信をしない）
+ * 対象の fact のどれにも較正済みのしきい値がない間は、結果を使えないため提案しない（効果のない送信をしない）
  */
 export function canOfferFactPresenceCheck(
   input: FactPresenceInput,
   calibrations: readonly JevCalibration[] = JEV_CALIBRATIONS
 ): boolean {
-  return calibrations.length > 0 && targetsOf(input).length > 0;
+  // 較正があっても、対象の fact のしきい値がなければ結果はすべて「記載なし」で並べ替えに
+  // 使えない（J3 の較正はカテゴリだけで presence は空）。その場合も提案しない
+  const thresholds = calibrations.filter(isValidJevCalibration);
+  return targetsOf(input).some((t) =>
+    thresholds.some((c) => c.presence[t.factId] !== undefined)
+  );
 }
 
 export async function prepareFactPresenceCheck(

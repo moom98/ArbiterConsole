@@ -1,6 +1,6 @@
 # Current Progress
 
-**Last updated:** 2026-10-09 (J1c on `feature/j1c-jev-port`, PR #9 open, review MERGE; not deployed)
+**Last updated:** 2026-10-09 (J2 on `feature/fact-catalog`, pushed, no PR yet; not deployed)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
@@ -17,7 +17,13 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
 **J1c (2026-10-09): done** on branch `feature/j1c-jev-port`, which is stacked on `docs/deploy-after-pr7` (PR #8, open). See `milestones/j1c-jev-port.md` and jev-classifier-design §14. It holds the classify port, the Jev client, the calibrated parser and `/api/llm/facts`. The default provider stays `gemini`, so deploying it changes nothing.
 - Pushed. **PR #9** to `main` is open; it also contains the PR #8 docs commit until #8 is merged. Not deployed.
 
-**Next:** J2 (UI and the client call of `/api/llm/facts`), then J3 (evaluation, calibration, production switch). See Next steps.
+**J2 (2026-10-09): done** on branch `feature/fact-catalog` (restarted from `main` at `56b0228` after PRs #8/#9 were merged). See `milestones/j2-classifier-ui-presence-recording.md`. It holds:
+- J2-1: the classification UI (§7) and `/api/llm/providers`, so the preview names the real destination (409 `provider-changed` on a mismatch);
+- J2-2: the optional fact-presence check that only reorders DT questions. **It is hidden until J3 registers a calibration**;
+- J2-3: **DT-011** (FIDE 8.4 recording obligation for scoresheet "記入していない／遅れている" in Standard), `game.record-state` as record-only, and facts keeping the shared daily cap.
+- Pushed; no PR yet (the user asks for PRs). Not deployed (deploying needs the user's go-ahead).
+
+**Next:** J3 (evaluation, calibration, production switch). See Next steps.
 - After the first deploy, 「意味検索用データを作成」 rebuilds every vector once (key `+deid1`).
 `docs/IMPLEMENTATION_STATUS.md` is a stale 2024 snapshot. Use this file and `docs/progress/milestones/` instead.
 
@@ -326,7 +332,7 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
   - `game.record-state` is `conditional` in the catalogue while the DT question is optional; J1c must treat it as a non-blocking record fact.
 - **J1b-7:**
   - The move number is not wired in, so multi-period DT-004 still asks `lastPeriod`.
-  - The 8.4 service (`assessRecordingObligation`) and `deriveTimeControlFacts` have no caller yet (J1c/J2).
+  - The 8.4 service (`assessRecordingObligation`) is used by DT-011 (J2-3). `deriveTimeControlFacts` still has no caller.
   - Existing tournaments show a "confirm periods" banner in the profile form until the arbiter confirms them.
 - **J1b-6:**
   - Switching the subtype away from touch-move leaves stale `touchMoveFacts` on the Incident (ignored by decisions, still stored).
@@ -454,14 +460,14 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
        - Catalogue: `tch.touched` and `tch.claimed-by-opponent` became conditional; new `tch.changed-after`.
      - J1b-7: `TimeControl` periods. **Done 2026-10-08**, on `feature/fact-catalog`. See `milestones/j1b-7-time-control-periods.md`.
    - J1c: **done 2026-10-09** on `feature/j1c-jev-port`. See `milestones/j1c-jev-port.md` and jev-classifier-design §14.
-   - **J2 (next):**
+   - **J2: done 2026-10-09** on `feature/fact-catalog`. See `milestones/j2-classifier-ui-presence-recording.md`. Original scope:
      - the UI of design §7 (percentage, candidate chips, `onPickCategory`);
      - a guard function for `/api/llm/facts` in `external-ai-guard.ts`, with its confirmation (D13), and the grouping in `FollowUpQuestions` (fact-model §4.3);
      - **the classification preview must name the provider actually used** (it says Gemini today);
      - wire `deriveTimeControlFacts` and `assessRecordingObligation`;
      - treat `game.record-state` as a non-blocking record fact;
      - decide whether facts needs its own daily cap.
-   - J3:
+   - **J3 (next):**
      - the Japanese evaluation (`scripts/eval-classifier.mjs`, datasets) and the first calibration in `lib/domain/llm/calibration/`;
      - check the ±0.02 probability-sum tolerance against real responses;
      - then switch production by env: `LLM_CLASSIFIER_PROVIDER=jev` and `wrangler secret put TYPESAFE_API_KEY`.
@@ -476,10 +482,11 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 2. The current work branch is `feature/fact-catalog` (pushed to `origin`, latest J1a-1 at `52d7ebb` or later; `main` has the deployed app). Check `git log --oneline -15` on it, and `git worktree list`.
    - PR #7 (`feature/fact-catalog`) is merged and deployed.
    - J1c is on `feature/j1c-jev-port`. Worktree: `.claude/worktrees/j1c`.
-   - **Next task:** the user merges PR #8 and PR #9. Then J2 (see Next steps), branched from `main`.
+   - PR #8 and PR #9 are merged. J2 is on `feature/fact-catalog` (pushed, no PR yet).
+   - **Next task:** J3 (see Next steps). Before that, the user may want a PR for J2 and a deploy (ask first).
    - The privacy package's reviews used independent reviewer agents that wrote their own synthetic sensitive phrases; keep doing that for any change to `lib/domain/privacy/` (the author's own fixtures say little).
    - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/<slice>-*.md` and update this file.
-   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (73 files / 1444 tests at J1a-3; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
+   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (83 files / 1616 tests at J2-3; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
    - The project tsconfig has no `target` (tsc treats it as ES5): avoid regex-literal flags such as `/u` or `/s` and `matchAll`; use `new RegExp(source, flags)` and `exec` loops, as `lib/domain/privacy/` does.
    - In a nested worktree, run eslint as `npx eslint --no-eslintrc -c .eslintrc.json --ext .ts,.tsx app components lib __tests__`.
 3. Do not edit `docs/requirements/product-requirements.md` for implementation convenience.

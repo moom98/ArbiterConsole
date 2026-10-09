@@ -18,6 +18,11 @@ The user said they will do these later. When a new session starts, check which a
 2. **J3-1 PR:** `feature/fact-catalog` (`efc8336`, the J3-1 evaluation tooling) is pushed but has no PR. The user decides whether to open one; Claude may create it when asked.
 3. **J3-3 (later):** the user runs the evaluation with real keys on their machine. Follow "How to run J3-3" in `milestones/j3-1-eval-tooling.md`.
 
+4. **Safari PDF import fix (2026-10-09):** PDF import failed on Safari/iOS with 「インポートに失敗しました: undefined is not a function (near '...t of e...')」. The cause: pdfjs-dist 6 `getTextContent()` reads a `ReadableStream` with `for await`, which Safari does not implement.
+   - The fix: `lib/infrastructure/pdf/readable-stream-polyfill.ts` adds the missing async iterator before pdf.js loads. It is a no-op where the browser already supports it.
+   - Verification: reproduced in Node with the iterator removed, using the real Arbiters' Manual PDF. It fails without the fix and extracts the text with it.
+   - Status: on `feature/fact-catalog` together with J3-1, in a PR to `main`. After merging, deploy so it reaches the user's phone.
+
 **Claude can continue without the user:** J3-2, the presence dataset (see Next steps). Confirm with the user before starting, because they paused here.
 
 **Current state in one paragraph (2026-10-09):** all work up to the incident-log AI retry was merged into `main` via **PR #7** (`392cd61`) and **deployed** (version `c85907c7-…`). PR #7 holds:

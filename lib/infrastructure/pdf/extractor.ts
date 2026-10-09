@@ -1,4 +1,5 @@
 import type { RuleSourceType } from "@/lib/domain/entities";
+import { ensureReadableStreamAsyncIterator } from "./readable-stream-polyfill";
 
 /**
  * PDF.js worker の配置先（scripts/copy-runtime-assets.mjs が
@@ -114,6 +115,8 @@ export async function extractPagesFromPDF(
   onPage?: (pageNumber: number, totalPages: number) => void
 ): Promise<ExtractedPage[]> {
   // SSR時に pdfjs を評価しないよう動的import。legacy build は対応ブラウザが広い
+  // Safari は ReadableStream の for await に未対応（getTextContent が失敗する）
+  ensureReadableStreamAsyncIterator();
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
   pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_SRC;
 

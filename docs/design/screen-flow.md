@@ -22,37 +22,37 @@ This document defines the **screen structure and navigation flows** for Arbiter 
 
 ### 2.1 Primary Screens (Always Accessible)
 
-| Screen                             | Purpose                      | Key Features                                    | Offline |
-| ---------------------------------- | ---------------------------- | ----------------------------------------------- | ------- |
-| **ホーム** (Home)                  | Tournament dashboard         | Active tournament, quick actions, round status  | ✅      |
-| **トラブル報告** (Incident Report) | Report and resolve incidents | Category selection, NL input, decision support  | ⚠️*     |
-| **ルール検索** (Rule Search)       | Search chess rules           | Vector + full-text search, article view         | ✅      |
-| **履歴** (Incident Log)            | View past incidents          | Filter by game/player, review decisions         | ✅      |
-| **設定** (Settings)                | App configuration            | Tournament profile, clock model, offline status | ✅      |
+| Screen | Purpose | Key Features | Offline |
+|--------|---------|--------------|---------|
+| **ホーム** (Home) | Tournament dashboard | Active tournament, quick actions, round status | ✅ |
+| **トラブル報告** (Incident Report) | Report and resolve incidents | Category selection, NL input, decision support | ⚠️* |
+| **ルール検索** (Rule Search) | Search chess rules | Vector + full-text search, article view | ✅ |
+| **履歴** (Incident Log) | View past incidents | Filter by game/player, review decisions | ✅ |
+| **設定** (Settings) | App configuration | Tournament profile, clock model, offline status | ✅ |
 
 *Decision Trees work offline, LLM reasoning requires internet
 
 ### 2.2 Secondary Screens
 
-| Screen                                       | Purpose                      | Access From                    | Offline |
-| -------------------------------------------- | ---------------------------- | ------------------------------ | ------- |
-| **大会作成** (Create Tournament)             | Setup new tournament         | Home                           | ✅      |
-| **大会詳細** (Tournament Detail)             | View/edit tournament         | Home                           | ✅      |
-| **ラウンドチェックリスト** (Round Checklist) | Pre/post-round tasks         | Home, Tournament Detail        | ✅      |
-| **対局詳細** (Game Detail)                   | View game info + incidents   | Incident Log, Round Checklist  | ✅      |
-| **裁定詳細** (Decision Detail)               | View decision with sources   | Incident Log, Decision Support | ✅      |
-| **Article詳細** (Article View)               | Read full rule text          | Rule Search, Decision Detail   | ✅      |
-| **Clock操作ガイド** (Clock Guide)            | Clock operation instructions | Decision Detail, Settings      | ✅      |
-| **Player質問モード** (Player Q&A)            | Explain rules to players     | Incident Report                | ⚠️      |
-| **ルール資料管理** (Rule Management)         | Upload/manage rule sources   | Settings                       | ⚠️      |
+| Screen | Purpose | Access From | Offline |
+|--------|---------|-------------|---------|
+| **大会作成** (Create Tournament) | Setup new tournament | Home | ✅ |
+| **大会詳細** (Tournament Detail) | View/edit tournament | Home | ✅ |
+| **ラウンドチェックリスト** (Round Checklist) | Pre/post-round tasks | Home, Tournament Detail | ✅ |
+| **対局詳細** (Game Detail) | View game info + incidents | Incident Log, Round Checklist | ✅ |
+| **裁定詳細** (Decision Detail) | View decision with sources | Incident Log, Decision Support | ✅ |
+| **Article詳細** (Article View) | Read full rule text | Rule Search, Decision Detail | ✅ |
+| **Clock操作ガイド** (Clock Guide) | Clock operation instructions | Decision Detail, Settings | ✅ |
+| **Player質問モード** (Player Q&A) | Explain rules to players | Incident Report | ⚠️ |
+| **ルール資料管理** (Rule Management) | Upload/manage rule sources | Settings | ⚠️ |
 
 ### 2.3 Auxiliary Screens
 
-| Screen                            | Purpose                    | Access From             | Offline |
-| --------------------------------- | -------------------------- | ----------------------- | ------- |
-| **オンボーディング** (Onboarding) | First-time setup wizard    | App launch (first time) | ⚠️      |
-| **同期状態** (Sync Status)        | View sync queue, conflicts | Settings                | ✅      |
-| **About**                         | App info, version, credits | Settings                | ✅      |
+| Screen | Purpose | Access From | Offline |
+|--------|---------|-------------|---------|
+| **オンボーディング** (Onboarding) | First-time setup wizard | App launch (first time) | ⚠️ |
+| **同期状態** (Sync Status) | View sync queue, conflicts | Settings | ✅ |
+| **About** | App info, version, credits | Settings | ✅ |
 
 ---
 
@@ -122,7 +122,6 @@ Arbiter Console
 ```
 
 **Tab Icons + Labels**:
-
 - ホーム: 🏠 Home
 - 報告: ⚠️ Incident Report (primary action, highlighted)
 - 検索: 🔍 Rule Search
@@ -134,7 +133,6 @@ Arbiter Console
 ### 4.2 Hierarchical Navigation
 
 **For secondary screens** (Tournament Detail, Game Detail, etc.):
-
 - **Back button** (top-left): Return to previous screen
 - **Breadcrumb** (optional, on larger screens): Show navigation path
 - **Close button** (modals): Dismiss overlay
@@ -208,7 +206,6 @@ Arbiter Console
 ```
 
 **Key UX Points**:
-
 - **Progressive disclosure**: Only show questions when needed
 - **Large buttons**: Easy to tap with one hand
 - **Auto-scroll**: Scroll to new content automatically
@@ -258,7 +255,6 @@ Arbiter Console
 ```
 
 **Key UX Points**:
-
 - **Instant search**: Results appear as you type
 - **Relevance scores**: Show confidence
 - **Source badges**: Visual indicators (FIDE/JCF/Tournament)
@@ -320,7 +316,6 @@ Arbiter Console
 > tournament.
 
 **Key UX Points**:
-
 - **Phase-aware**: Checklist changes based on round status
 - **Progress indicator**: X/Y items completed
 - **Large checkboxes**: Easy to tap
@@ -365,7 +360,6 @@ Arbiter Console
 ```
 
 **Key UX Points**:
-
 - **Player-friendly language**: No technical jargon
 - **General rule only**: No position-specific advice (per §15)
 - **Large text mode**: Show to player on arbiter's device
@@ -410,7 +404,6 @@ Arbiter Console
 ```
 
 **Key UX Points**:
-
 - **Clear offline indicator**: Always visible
 - **Helpful suggestions**: Provide next steps
 - **Partial save**: Can save incident description
@@ -594,32 +587,27 @@ Arbiter Console
 ### 7.1 Button Sizes (Mobile-First, §32)
 
 **Primary Actions**:
-
 - Height: 56px minimum
 - Width: Full-width or 48% (for side-by-side)
 - Font size: 16px
 - Touch target: 48x48px minimum
 
 **Secondary Actions**:
-
 - Height: 44px
 - Font size: 14px
 
 **Icon Buttons**:
-
 - Size: 48x48px minimum
 - Icon: 24x24px
 
 ### 7.2 Input Methods
 
 **Text Input**:
-
 - Keyboard type: Default (allows Japanese + English)
 - Autocomplete: Off (prevent leaking player names)
 - Max length: 500 characters
 
 **Voice Input**:
-
 ```tsx
 <VoiceInputButton>
   Tap → Recording starts → Transcription shown → Edit/Confirm
@@ -627,7 +615,6 @@ Arbiter Console
 ```
 
 **Selection**:
-
 - Radio buttons: Large (24px), labels 44px height
 - Checkboxes: Large (24px), labels 44px height
 - Dropdowns: Avoided (use button lists instead)
@@ -635,23 +622,19 @@ Arbiter Console
 ### 7.3 Loading States
 
 **Short operations (<2s)**:
-
 - Spinner overlay with translucent background
 
 **Long operations (2-10s)**:
-
 - Progress indicator with message
 - Example: "AI分析中... (3/10s)"
 
 **Very long operations (>10s)**:
-
 - Progress bar with steps
 - Example: "Embedding生成中... 150/500 articles"
 
 ### 7.4 Error Handling
 
 **Network errors**:
-
 ```
 ┌─────────────────────────────────────────┐
 │  ⚠️ インターネット接続がありません       │
@@ -666,7 +649,6 @@ Arbiter Console
 ```
 
 **Validation errors**:
-
 ```
 ┌─────────────────────────────────────────┐
 │  ❌ 入力エラー                           │
@@ -679,7 +661,6 @@ Arbiter Console
 ```
 
 **LLM errors**:
-
 ```
 ┌─────────────────────────────────────────┐
 │  ⚠️ AI分析に失敗しました                │
@@ -698,37 +679,33 @@ Arbiter Console
 
 ### 8.1 Breakpoints
 
-| Device             | Width           | Layout                         |
-| ------------------ | --------------- | ------------------------------ |
-| Mobile (Portrait)  | < 768px         | Single column, bottom nav      |
-| Tablet (Portrait)  | 768px - 1024px  | Single column, side nav option |
-| Tablet (Landscape) | 1024px - 1280px | Two columns, side nav          |
-| Desktop            | > 1280px        | Multi-column, side nav         |
+| Device | Width | Layout |
+|--------|-------|--------|
+| Mobile (Portrait) | < 768px | Single column, bottom nav |
+| Tablet (Portrait) | 768px - 1024px | Single column, side nav option |
+| Tablet (Landscape) | 1024px - 1280px | Two columns, side nav |
+| Desktop | > 1280px | Multi-column, side nav |
 
 **Note**: Mobile portrait is **primary target** (per §4).
 
 ### 8.2 Mobile-Specific Optimizations
 
 **Font Sizes**:
-
 - Body: 16px (prevents zoom on iOS)
 - Headings: 20px (H3), 24px (H2), 28px (H1)
 - Small text: 14px minimum
 
 **Spacing**:
-
 - Section padding: 16px
 - Between elements: 12px
 - Between sections: 24px
 
 **Scrolling**:
-
 - Avoid horizontal scroll
 - Sticky headers for long lists
 - Pull-to-refresh for updates
 
 **Gestures**:
-
 - Swipe left/right: Navigate between tabs (optional)
 - Long press: Show context menu (optional)
 - Pinch-to-zoom: Disabled (except article view)
@@ -742,42 +719,38 @@ Arbiter Console
 **Target**: WCAG 2.1 AA
 
 **Color Contrast**:
-
 - Text: 4.5:1 minimum
 - Large text (18px+): 3:1 minimum
 - UI components: 3:1 minimum
 
 **Touch Targets**:
-
 - 48x48px minimum (per §32)
 - 8px spacing between targets
 
 **Focus Indicators**:
-
 - Visible outline on keyboard focus
 - 2px solid, high-contrast color
 
 ### 9.2 Screen Reader Support
 
 **Semantic HTML**:
-
 ```tsx
 <main>
   <h1>トラブル報告</h1>
   <section aria-label="カテゴリ選択">
-    <button aria-label="違法手・着手を報告">違法手・着手</button>
+    <button aria-label="違法手・着手を報告">
+      違法手・着手
+    </button>
   </section>
 </main>
 ```
 
 **ARIA Labels**:
-
 - All buttons have descriptive labels
 - Icons have aria-label
 - Forms have proper labels + fieldsets
 
 **Keyboard Navigation**:
-
 - Tab order follows visual order
 - Enter/Space activates buttons
 - Escape closes modals
@@ -805,7 +778,6 @@ or
 ### 10.2 Feature Availability Hints
 
 **On Incident Report screen**:
-
 ```
 [Online]
   - Category selection shown
@@ -817,7 +789,6 @@ or
 ```
 
 **On Rule Search screen**:
-
 ```
 [Online/Offline]
   - Full functionality (local search)
@@ -826,7 +797,6 @@ or
 ### 10.3 Sync Indicators
 
 **Incident saved offline**:
-
 ```
 ┌─────────────────────────────────────────┐
 │  ✅ Incidentを記録しました               │
@@ -835,7 +805,6 @@ or
 ```
 
 **After sync**:
-
 ```
 ┌─────────────────────────────────────────┐
 │  ✅ 同期完了                             │
@@ -849,13 +818,11 @@ or
 **Not in MVP**, but designed for future addition:
 
 **Color Scheme**:
-
 - Light mode: Default (white background)
 - Dark mode: Dark gray background (#1a1a1a), white text
 - System preference detection: `prefers-color-scheme`
 
 **Implementation**:
-
 - CSS variables for colors
 - Toggle in Settings
 

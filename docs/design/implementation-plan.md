@@ -24,13 +24,11 @@ This document defines the **implementation sequence** for Arbiter Console MVP. T
 Each milestone delivers **end-to-end functionality**, not just infrastructure.
 
 **Good** ✅:
-
 ```
 Milestone 1: User can report illegal move → get decision → save to log
 ```
 
 **Bad** ❌:
-
 ```
 Milestone 1: Build entire database layer (no user-facing features)
 ```
@@ -40,7 +38,6 @@ Milestone 1: Build entire database layer (no user-facing features)
 Implement **core value proposition** before nice-to-have features.
 
 **Priority**:
-
 1. Illegal Move Decision Tree (most common incident)
 2. Rule Search (foundational)
 3. Incident Log (record-keeping)
@@ -65,7 +62,6 @@ Write tests **alongside** implementation, not after.
 **Goal**: Set up development environment and core infrastructure
 
 **Tasks**:
-
 1. ✅ Initialize Next.js 14.2.x project
 2. ✅ Configure TypeScript (strict mode)
 3. ✅ Install Digital Agency Design System
@@ -78,7 +74,6 @@ Write tests **alongside** implementation, not after.
 **Deliverable**: Empty app with design system, DB schema, and build pipeline
 
 **Acceptance Criteria**:
-
 - `npm run dev` starts app
 - `npm run build` succeeds
 - `npm run test` runs (no tests yet, but framework works)
@@ -91,7 +86,6 @@ Write tests **alongside** implementation, not after.
 **Goal**: Arbiter can search FIDE rules and view articles
 
 **Why First**:
-
 - Validates RAG architecture
 - Provides immediate value (rule lookup)
 - Foundation for Decision Support citations
@@ -99,34 +93,29 @@ Write tests **alongside** implementation, not after.
 **Tasks**:
 
 #### 1.1 Domain Models (2 days)
-
 - [ ] Define TypeScript interfaces for RuleSource, Article
 - [ ] Create Zod schemas for validation
 - [ ] Implement RuleRepository (Dexie.js)
 
 #### 1.2 Rule Upload (3 days)
-
 - [ ] Admin UI: Upload PDF
 - [ ] Extract text from PDF (pdf.js)
 - [ ] Parse FIDE Laws into articles (regex for "Article X.Y")
 - [ ] Store in IndexedDB
 
 #### 1.3 Embedding Generation (4 days)
-
 - [ ] Load Transformers.js model (`all-MiniLM-L6-v2`)
 - [ ] Generate embeddings for each article
 - [ ] Store embeddings in IndexedDB
 - [ ] Show progress indicator during generation
 
 #### 1.4 Search Implementation (5 days)
-
 - [ ] Implement Vector Search (cosine similarity)
 - [ ] Implement Full-text Search (Lunr.js)
 - [ ] Implement Hybrid Search (merge + re-rank)
 - [ ] Apply Rule Priority (tournament > JCF > FIDE)
 
 #### 1.5 Search UI (3 days)
-
 - [ ] Rule Search screen with search input
 - [ ] Search results list (sorted by relevance)
 - [ ] Article Detail view
@@ -135,7 +124,6 @@ Write tests **alongside** implementation, not after.
 **Deliverable**: Working rule search from home screen
 
 **Acceptance Criteria**:
-
 - ✅ User uploads FIDE Laws PDF
 - ✅ App generates embeddings (500 articles in <5min)
 - ✅ User searches "illegal move" → sees FIDE 7.5.x articles
@@ -144,7 +132,6 @@ Write tests **alongside** implementation, not after.
 - ✅ Vector + full-text results merged correctly
 
 **Test Coverage**:
-
 - Unit tests: Vector search, full-text search, hybrid merge
 - E2E test: Upload PDF → search → view article
 
@@ -155,7 +142,6 @@ Write tests **alongside** implementation, not after.
 **Goal**: Arbiter can report illegal move (Standard) and get decision
 
 **Why Second**:
-
 - Highest frequency incident
 - Validates Decision Tree architecture
 - Proves end-to-end incident flow
@@ -163,20 +149,17 @@ Write tests **alongside** implementation, not after.
 **Tasks**:
 
 #### 2.1 Domain Models (2 days)
-
 - [ ] Define Incident, Decision, Penalty interfaces
 - [ ] Create IncidentRepository, PenaltyRepository
 - [ ] Implement Game context (tournament, round, board, players)
 
 #### 2.2 Decision Tree Implementation (4 days)
-
 - [ ] Implement IllegalMoveStandardTree class
 - [ ] Implement all branches (clock pressed, opponent moved, offense count)
 - [ ] Add source citations (FIDE 7.5.4, 7.5.5, JCF NA p.48)
 - [ ] Unit tests for all branches (8 test cases)
 
 #### 2.3 Incident Report UI (5 days)
-
 - [ ] Category selection screen
 - [ ] Natural language input (text only for now)
 - [ ] Follow-up questions UI (multi-step form)
@@ -184,7 +167,6 @@ Write tests **alongside** implementation, not after.
 - [ ] Source citations (expandable)
 
 #### 2.4 Incident Flow Integration (3 days)
-
 - [ ] Decision Engine: Route illegal-move → IllegalMoveStandardTree
 - [ ] Question Generator: Generate follow-up questions
 - [ ] Save incident + decision to IndexedDB
@@ -193,7 +175,6 @@ Write tests **alongside** implementation, not after.
 **Deliverable**: End-to-end illegal move reporting
 
 **Acceptance Criteria**:
-
 - ✅ User selects "違法手・着手" category
 - ✅ User inputs "黒が両手でキャスリングした"
 - ✅ System asks follow-up questions (4 questions)
@@ -203,7 +184,6 @@ Write tests **alongside** implementation, not after.
 - ✅ All branches tested (unit tests pass)
 
 **Test Coverage**:
-
 - Unit tests: IllegalMoveStandardTree (all 4+ branches)
 - Integration test: Full incident flow
 - E2E test: Report illegal move → see decision
@@ -215,7 +195,6 @@ Write tests **alongside** implementation, not after.
 **Goal**: Arbiter can view incident history filtered by game/player
 
 **Why Third**:
-
 - Enables tracking of repeat offenders (illegal move count)
 - Required for Penalty History (§25)
 - Completes basic incident management loop
@@ -223,20 +202,17 @@ Write tests **alongside** implementation, not after.
 **Tasks**:
 
 #### 3.1 Incident Log UI (3 days)
-
 - [ ] Incident Log screen (list view)
 - [ ] Filter by game, player, category
 - [ ] Tap incident → view Decision Detail
 - [ ] Penalty History display (per player/game)
 
 #### 3.2 Incident Counter (2 days)
-
 - [ ] IncidentCounter service (count illegal moves per player/game)
 - [ ] Integrate with Decision Tree (pass `playerIncidentCount`)
 - [ ] Update count after saving incident
 
 #### 3.3 Penalty Tracking (2 days)
-
 - [ ] PenaltyRepository queries (by player, by game)
 - [ ] Display penalty summary on Game Detail screen
 - [ ] Show "Illegal Move回数" badge
@@ -244,7 +220,6 @@ Write tests **alongside** implementation, not after.
 **Deliverable**: Functional incident log with filtering
 
 **Acceptance Criteria**:
-
 - ✅ User views incident log (all incidents listed)
 - ✅ User filters by Board 12 → sees only Board 12 incidents
 - ✅ User taps incident → sees decision detail
@@ -252,7 +227,6 @@ Write tests **alongside** implementation, not after.
 - ✅ Penalty history shows correctly
 
 **Test Coverage**:
-
 - Unit tests: IncidentCounter logic
 - E2E test: Report 2 illegal moves → verify 2nd is Game Loss
 
@@ -263,7 +237,6 @@ Write tests **alongside** implementation, not after.
 **Goal**: Implement P0 and P1 Decision Trees
 
 **Why Fourth**:
-
 - Extends offline capability to more incidents
 - Reuses existing Decision Tree architecture
 - Lower risk (proven pattern)
@@ -271,25 +244,21 @@ Write tests **alongside** implementation, not after.
 **Tasks**:
 
 #### 4.1 Flag Fall (DT-004) (2 days)
-
 - [ ] Implement FlagFallTree
 - [ ] Mate material check algorithm
 - [ ] Unit tests (10 material combinations)
 
 #### 4.2 Illegal Move Rapid A4 (DT-002) (3 days)
-
 - [ ] Implement IllegalMoveRapidA4Tree
 - [ ] Separate from Standard (different penalties)
 - [ ] Unit tests
 
 #### 4.3 Illegal Move Rapid A5 (DT-003) (4 days)
-
 - [ ] Implement IllegalMoveRapidA5Tree
 - [ ] Handle "opponent moved" condition
 - [ ] Unit tests
 
 #### 4.4 Threefold Repetition (DT-005) (5 days)
-
 - [ ] Implement ThreefoldRepetitionTree
 - [ ] FEN position comparison logic
 - [ ] Unit tests (5 scenarios)
@@ -298,14 +267,12 @@ Write tests **alongside** implementation, not after.
 **Deliverable**: 5 working Decision Trees
 
 **Acceptance Criteria**:
-
 - ✅ User reports flag fall → system checks mate material → correct result
 - ✅ User reports illegal move in Rapid A4 → different penalty than Standard
 - ✅ User claims threefold repetition → system verifies position history → grants/denies
 - ✅ All trees tested and working offline
 
 **Test Coverage**:
-
 - Unit tests for each tree (all branches)
 - Integration tests: Route incidents to correct trees
 
@@ -315,10 +282,10 @@ Write tests **alongside** implementation, not after.
 
 > **Note (ADR-007):** The LLM provider is now **Google Gemini**, called only through the server Route Handlers `app/api/llm/*`. The API key is never sent to the browser. Claude/Anthropic references below are historical. See [ADR-007](../decisions/ADR-007-gemini-llm-via-server-route.md).
 
+
 **Goal**: LLM-based incident classification and reasoning
 
 **Why Fifth**:
-
 - Handles incidents not covered by Decision Trees
 - Requires internet (not offline-critical)
 - Most complex integration
@@ -326,28 +293,24 @@ Write tests **alongside** implementation, not after.
 **Tasks**:
 
 #### 5.1 Claude API Client (2 days)
-
 - [ ] Create ClaudeClient service
 - [ ] Implement Sonnet and Haiku calls
 - [ ] Handle API errors and retries
 - [ ] Rate limiting (10 req/min)
 
 #### 5.2 Incident Classification (2 days)
-
 - [ ] Implement LLM-based classifier (Haiku)
 - [ ] Keyword fallback for offline
 - [ ] Extract missing information
 - [ ] Generate follow-up questions
 
 #### 5.3 LLM Reasoning (4 days)
-
 - [ ] Implement LLMReasoner (Sonnet + RAG)
 - [ ] Retrieve articles from vector/full-text search
 - [ ] Build prompt with articles + context
 - [ ] Parse structured output (Decision schema)
 
 #### 5.4 Output Validation (3 days)
-
 - [ ] Implement LLMOutputValidator (per ADR-002)
 - [ ] Check penalties have sources
 - [ ] Verify cited articles exist in DB
@@ -355,7 +318,6 @@ Write tests **alongside** implementation, not after.
 - [ ] Reject invalid outputs → CA escalation
 
 #### 5.5 Integration (3 days)
-
 - [ ] Decision Engine: Route LLM incidents to LLMReasoner
 - [ ] Offline fallback: Show "CAへ確認" message
 - [ ] Display LLM-generated decisions in UI
@@ -363,7 +325,6 @@ Write tests **alongside** implementation, not after.
 **Deliverable**: LLM-based decision support for complex incidents
 
 **Acceptance Criteria**:
-
 - ✅ User reports "スマートウォッチを着けている" → LLM classifies as player-behavior
 - ✅ LLM searches rules → finds FIDE 11.3 + tournament regulations
 - ✅ LLM generates decision with cited sources
@@ -371,7 +332,6 @@ Write tests **alongside** implementation, not after.
 - ✅ If offline → shows "オンライン必須" message
 
 **Test Coverage**:
-
 - Unit tests: Output validation logic
 - Integration tests: Mock LLM responses
 - E2E test: Online incident → LLM decision
@@ -383,7 +343,6 @@ Write tests **alongside** implementation, not after.
 **Goal**: User can create and manage tournaments
 
 **Why Sixth**:
-
 - Provides context for incidents (competition type, time control)
 - Required for tournament-specific rules
 - Enables Round Checklist
@@ -391,28 +350,24 @@ Write tests **alongside** implementation, not after.
 **Tasks**:
 
 #### 6.1 Tournament Profile (3 days)
-
 - [x] Tournament creation form
 - [x] Tournament Profile model
 - [x] TournamentRepository
 - [x] Save to IndexedDB
 
 #### 6.2 Round & Game Management (3 days)
-
 - [x] Round model (status: pending/active/completed)
 - [x] Game model (board, players)
 - [x] PlayerRepository
 - [x] Create rounds and games for tournament
 
 #### 6.3 Tournament Regulations Upload (3 days)
-
 - [x] Upload tournament-specific PDF
 - [x] Parse into TournamentRegulation entities
 - [x] Link to tournament
 - [x] Include in rule search (highest priority)
 
 #### 6.4 Home Screen (3 days)
-
 - [x] Display active tournament
 - [x] Quick actions (Report, Search)
 - [x] Recent incidents list
@@ -425,14 +380,12 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 **Deliverable**: Tournament management system
 
 **Acceptance Criteria**:
-
 - ✅ User creates new tournament with settings
 - ✅ User uploads tournament regulations
 - ✅ Rule search prioritizes tournament rules
 - ✅ Home screen shows active tournament
 
 **Test Coverage**:
-
 - Unit tests: TournamentRepository CRUD
 - E2E test: Create tournament → upload rules → search → see tournament rules first
 
@@ -443,7 +396,6 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 **Goal**: Arbiter can use round checklists
 
 **Why Seventh**:
-
 - Nice-to-have feature (not core decision support)
 - Reuses existing UI patterns
 - Low risk
@@ -451,20 +403,17 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 **Tasks**:
 
 #### 7.1 Checklist Model (1 day)
-
 - [x] ChecklistItem model
 - [x] Pre-round and post-round templates
 - [x] Store completion status
 
 #### 7.2 Checklist UI (3 days)
-
 - [x] Round Checklist screen
 - [x] Phase-aware display (pre/post/during)
 - [x] Large checkboxes (48px target)
 - [x] Notes field per item
 
 #### 7.3 Round Status (2 days)
-
 - [x] Round status transitions (pending → active → completed)
 - [x] Trigger checklist phase changes
 - [x] Button to start/end round
@@ -472,14 +421,12 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 **Deliverable**: Working round checklist
 
 **Acceptance Criteria**:
-
 - ✅ User opens checklist before round → sees pre-round items
 - ✅ User checks items → progress updates
 - ✅ User starts round → checklist switches to "during" phase
 - ✅ All items can be checked offline
 
 **Test Coverage**:
-
 - E2E test: Complete pre-round checklist → start round
   (Milestone 7 covers this flow with component tests in `__tests__/checklist/`; Playwright E2E is Milestone 9.)
 
@@ -495,33 +442,28 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 **Goal**: Voice input and UX refinements
 
 **Why Eighth**:
-
 - Voice input is nice-to-have (text input works)
 - Polish improves usability but not core functionality
 
 **Tasks**:
 
 #### 8.1 Voice Input (3 days)
-
 - [ ] Integrate Web Speech API
 - [ ] Voice button on incident report
 - [ ] Show transcription before sending
 - [ ] Offline detection (may or may not work depending on browser)
 
 #### 8.2 Clock Operation Guide (2 days)
-
 - [ ] Static content for common clocks (DGT 2010, etc.)
 - [ ] Link from Decision Support ("Clock操作ガイド" button)
 - [ ] Markdown or HTML content
 
 #### 8.3 Player Question Mode (2 days)
-
 - [ ] Player Q&A mode toggle
 - [ ] Generate player-friendly explanations (LLM)
 - [ ] Large text display for showing player
 
 #### 8.4 UX Polish (3 days)
-
 - [ ] Improve button sizes (ensure 48px minimum)
 - [ ] Add loading states (spinners)
 - [ ] Improve error messages
@@ -531,7 +473,6 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 **Deliverable**: Polished MVP
 
 **Acceptance Criteria**:
-
 - ✅ Voice input works (when online)
 - ✅ Clock guide accessible from decision
 - ✅ Player mode generates explanations
@@ -539,7 +480,6 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 - ✅ App installable as PWA
 
 **Test Coverage**:
-
 - Manual testing: Voice input accuracy
 - E2E test: Player Q&A mode
 
@@ -550,7 +490,6 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 **Goal**: Comprehensive testing and bug fixes
 
 **Why Ninth**:
-
 - Ensure quality before release
 - Find edge cases
 - Performance optimization
@@ -558,13 +497,11 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 **Tasks**:
 
 #### 9.1 Decision Tree Testing (3 days)
-
 - [ ] Verify all branches tested
 - [ ] Test edge cases (e.g., game already ended)
 - [ ] Test with tournament context
 
 #### 9.2 E2E Testing (4 days)
-
 - [ ] Critical flow tests (Playwright):
   - Report incident → decision → log
   - Search rules → view article
@@ -574,14 +511,12 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 - [ ] Mobile testing (iOS, Android)
 
 #### 9.3 Performance Testing (2 days)
-
 - [ ] Measure Decision Tree execution (<100ms)
 - [ ] Measure rule search (<3s)
 - [ ] Measure LLM response time (<10s)
 - [ ] Optimize slow queries
 
 #### 9.4 Bug Fixes (5 days)
-
 - [ ] Fix issues found in testing
 - [ ] Edge case handling
 - [ ] Error message improvements
@@ -589,15 +524,13 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 **Deliverable**: Production-ready MVP
 
 **Acceptance Criteria**:
-
 - ✅ All P0 tests pass
 - ✅ Performance targets met (§33)
 - ✅ No critical bugs
 - ✅ Works on iOS Safari and Android Chrome
 
 **Test Coverage**:
-
-- > 80% code coverage for Decision Trees and domain logic
+- >80% code coverage for Decision Trees and domain logic
 - All critical flows covered by E2E tests
 
 ---
@@ -609,7 +542,6 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 **Tasks**:
 
 #### 10.1 Deployment (2 days)
-
 - [ ] Set up a hosting project with a Node runtime (Vercel recommended; the `/api/llm/*` routes need a server — ADR-007)
 - [ ] Build command: `npm run fetch-models && npm run build` (prebuild fails without the embedding model)
 - [ ] Configure environment variables: `GEMINI_API_KEY`, and `LLM_ACCESS_TOKEN` (or `LLM_ALLOW_UNAUTHENTICATED=1` behind platform auth); see `.env.example`
@@ -618,14 +550,12 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 - [ ] Test production deployment
 
 #### 10.2 User Documentation (3 days)
-
 - [ ] User guide: How to create tournament
 - [ ] User guide: How to report incidents
 - [ ] User guide: How to search rules
 - [ ] FAQ: Common questions
 
 #### 10.3 Developer Documentation (2 days)
-
 - [ ] README: Setup instructions
 - [ ] CONTRIBUTING: Development guidelines
 - [ ] API documentation (if backend added later)
@@ -633,7 +563,6 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 **Deliverable**: Deployed MVP with documentation
 
 **Acceptance Criteria**:
-
 - ✅ App live at production URL
 - ✅ HTTPS enabled
 - ✅ PWA installable from production
@@ -643,19 +572,19 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 
 ## 4. Implementation Timeline Summary
 
-| Milestone           | Duration | Cumulative | Deliverable              |
-| ------------------- | -------- | ---------- | ------------------------ |
-| M0: Foundation      | 1 week   | Week 1     | Project setup            |
-| M1: Rule Search     | 2 weeks  | Week 3     | Working rule search      |
-| M2: Illegal Move DT | 1 week   | Week 4     | End-to-end incident flow |
-| M3: Incident Log    | 1 week   | Week 5     | Incident history         |
-| M4: Additional DTs  | 2 weeks  | Week 7     | 5 Decision Trees         |
-| M5: LLM Integration | 2 weeks  | Week 9     | LLM decision support     |
-| M6: Tournament Mgmt | 1 week   | Week 10    | Tournament profiles      |
-| M7: Round Checklist | 1 week   | Week 11    | Round checklists         |
-| M8: Voice & Polish  | 1 week   | Week 12    | Polished UI              |
-| M9: Testing         | 1 week   | Week 13    | Production-ready         |
-| M10: Deployment     | 1 week   | Week 14    | Live MVP                 |
+| Milestone | Duration | Cumulative | Deliverable |
+|-----------|----------|------------|-------------|
+| M0: Foundation | 1 week | Week 1 | Project setup |
+| M1: Rule Search | 2 weeks | Week 3 | Working rule search |
+| M2: Illegal Move DT | 1 week | Week 4 | End-to-end incident flow |
+| M3: Incident Log | 1 week | Week 5 | Incident history |
+| M4: Additional DTs | 2 weeks | Week 7 | 5 Decision Trees |
+| M5: LLM Integration | 2 weeks | Week 9 | LLM decision support |
+| M6: Tournament Mgmt | 1 week | Week 10 | Tournament profiles |
+| M7: Round Checklist | 1 week | Week 11 | Round checklists |
+| M8: Voice & Polish | 1 week | Week 12 | Polished UI |
+| M9: Testing | 1 week | Week 13 | Production-ready |
+| M10: Deployment | 1 week | Week 14 | Live MVP |
 
 **Total: 14 weeks (~3.5 months) with 1 developer**
 
@@ -668,14 +597,12 @@ existing rule ingestion (tournament `RuleSource` + `Rule` linked by `tournamentI
 If 2+ developers available:
 
 ### Developer A (Backend/Domain Logic)
-
 - M1: RAG infrastructure
 - M2: Decision Trees
 - M4: Additional Decision Trees
 - M5: LLM integration
 
 ### Developer B (Frontend/UI)
-
 - M1: Search UI
 - M2: Incident Report UI
 - M3: Incident Log UI
@@ -690,20 +617,20 @@ If 2+ developers available:
 
 ### 6.1 Technical Risks
 
-| Risk                        | Mitigation                   | Contingency                        |
-| --------------------------- | ---------------------------- | ---------------------------------- |
-| Transformers.js too slow    | Test early (M1)              | Fallback to full-text only         |
-| LLM hallucination           | Validation layer (M5)        | Stricter validation, manual review |
-| IndexedDB quota exceeded    | Monitor during M1            | Compress embeddings, lite mode     |
-| Position comparison complex | Allocate extra time (DT-005) | Use external library (chess.js)    |
+| Risk | Mitigation | Contingency |
+|------|------------|-------------|
+| Transformers.js too slow | Test early (M1) | Fallback to full-text only |
+| LLM hallucination | Validation layer (M5) | Stricter validation, manual review |
+| IndexedDB quota exceeded | Monitor during M1 | Compress embeddings, lite mode |
+| Position comparison complex | Allocate extra time (DT-005) | Use external library (chess.js) |
 
 ### 6.2 Schedule Risks
 
-| Risk                      | Mitigation                   | Contingency                         |
-| ------------------------- | ---------------------------- | ----------------------------------- |
-| Behind schedule           | Weekly reviews, adjust scope | Defer P2 trees to post-MVP          |
-| Key developer unavailable | Document as we go            | Pair programming, knowledge sharing |
-| Requirement changes       | Lock requirements during MVP | Create backlog for post-MVP         |
+| Risk | Mitigation | Contingency |
+|------|------------|-------------|
+| Behind schedule | Weekly reviews, adjust scope | Defer P2 trees to post-MVP |
+| Key developer unavailable | Document as we go | Pair programming, knowledge sharing |
+| Requirement changes | Lock requirements during MVP | Create backlog for post-MVP |
 
 ---
 
@@ -712,25 +639,21 @@ If 2+ developers available:
 Each milestone must pass these gates before proceeding:
 
 ### Code Quality
-
 - ✅ ESLint passes (no errors)
 - ✅ TypeScript compiles (strict mode)
 - ✅ Prettier applied
 
 ### Testing
-
 - ✅ Unit tests pass (for Decision Trees)
 - ✅ Integration tests pass (if applicable)
 - ✅ Manual smoke test performed
 
 ### Functionality
-
 - ✅ Acceptance criteria met
 - ✅ No critical bugs
 - ✅ Works offline (if required)
 
 ### Performance
-
 - ✅ Meets performance targets (§33)
 - ✅ No regressions
 
@@ -745,7 +668,6 @@ After MVP completion, prioritize based on:
 3. **Technical Debt**: What architectural improvements are needed?
 
 **Likely Post-MVP Features**:
-
 1. P2 Decision Trees (50-move, fivefold, stalemate, dead position)
 2. Dark mode
 3. Backend sync (optional cloud storage)
@@ -759,20 +681,17 @@ After MVP completion, prioritize based on:
 Track these metrics to measure MVP success:
 
 ### Usage Metrics
-
 - Number of tournaments created
 - Number of incidents reported
 - Number of rule searches
 - Decision Tree vs. LLM usage ratio
 
 ### Quality Metrics
-
 - LLM output validation pass rate (target: 100%)
 - CA escalation rate (target: <10%)
 - User-reported bugs (target: <5 critical bugs/month)
 
 ### Performance Metrics
-
 - Decision Tree execution time (target: <100ms)
 - Rule search time (target: <3s)
 - LLM response time (target: <10s)

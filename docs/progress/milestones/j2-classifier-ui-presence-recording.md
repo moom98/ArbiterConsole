@@ -15,7 +15,7 @@
 | --- | --- | --- |
 | J2-1 | `a2439aa` | Classification UI (§7) and a preview that names the provider actually used |
 | J2-2 | `9d41e82`, `e8c2d35` (review fixes), `9f66b2f` (reverts accidental doc formatting) | Optional fact-presence check and question ordering; J2-1 review follow-ups |
-| J2-3 | `c2661c0` (+ review fixes, see below) | DT-011 recording obligation (8.4), record-only `game.record-state`, facts daily cap |
+| J2-3 | `c2661c0` (merged in PR #10), review fixes in a follow-up PR | DT-011 recording obligation (8.4), record-only `game.record-state`, facts daily cap |
 
 ## Completed work
 
@@ -74,7 +74,7 @@
 ## Tests and verification
 
 - `npx tsc --noEmit` is clean and `npm run lint` is clean.
-- `npx vitest run`: 83 files / 1616 tests at `c2661c0`. New files:
+- `npx vitest run`: 83 files / 1616 tests at `c2661c0`, and 1631 after the J2-3 review fixes. New files:
   - `__tests__/llm/providers.test.ts`;
   - `__tests__/llm/fact-presence.test.ts`;
   - `__tests__/facts/presence-ordering.test.ts`;
@@ -94,7 +94,16 @@
     - the preview did not list the facts;
     - errors were unhandled.
   - All of these were fixed in `e8c2d35`, and the re-review gave **MERGE**.
-- **J2-3:** see below (pending at the time of writing).
+- **J2-3:** **FIX FIRST**. PR #10 had already been merged, so the fixes are a follow-up on `feature/fact-catalog` (restarted from `main` at `1fc8f5b`).
+  - **Must-fix:** "遅れている" ignored 8.1.3. Being one move behind is legal, but the tree said "intervene immediately". Fixed: DT-011 now asks 「記録していないのは、直前の手だけですか？」 first. "Yes" means no violation (8.1.3). "Unknown" plus "required" means consult the CA.
+  - **Should-fix, all fixed:**
+    - the exempt result names the 8.5.1 / 8.5.2 steps;
+    - period and increment questions are no longer asked when the clock never went below 5:00;
+    - the period answer is limited to `MAX_TIME_CONTROL_PERIODS`;
+    - the permanent `unknown` issue is documented;
+    - added tests: Blitz, 29/30 s, all periods under 30 s, delay plus 30 s, out-of-range period, stored incident without issue, the 8.1.3 cases.
+  - New verbatim citations `FIDE_8_1_3`, `FIDE_8_5_1`, `FIDE_8_5_2` (Arbiters' Manual 2025, pp. 29–30), checked against the PDF.
+  - Docs: ADR-014 §7 amendment wording, fact-model §3.6 and §3.9.
 
 ## Known issues
 

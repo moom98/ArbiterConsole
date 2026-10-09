@@ -34,7 +34,10 @@ import {
   GAME_RECORD_STATE_LABELS,
   GAME_RECORD_STATES,
 } from "@/lib/domain/services/game-end";
-import { timeControlPeriodOptions } from "@/lib/domain/services/time-control";
+import {
+  MAX_TIME_CONTROL_PERIODS,
+  timeControlPeriodOptions,
+} from "@/lib/domain/services/time-control";
 
 /**
  * 追加確認質問（要件 §12）。
@@ -91,6 +94,7 @@ export type IncidentQuestionId =
   | "touchFen"
   // 棋譜の記録義務（DT-011。FIDE 8.1.1 / 8.4）
   | "scoresheetIssue"
+  | "recordingOnlyLastMoves"
   | "recordingBelowFiveNow"
   | "recordingBelowFiveInPeriod"
   | "recordingPeriod"
@@ -699,6 +703,20 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
       RECORDING_UNKNOWN,
     ],
   },
+  recordingOnlyLastMoves: {
+    id: "recordingOnlyLastMoves",
+    scope: "incident",
+    label: "記録していないのは、直前の手だけですか？",
+    help: "相手の手を記録する前に指し返すことはできますが、次の手を指す前に自分の前の手を記録しなければなりません（8.1.3）。",
+    options: [
+      {
+        value: "true",
+        label: "直前の手だけ（自分の最後の手と、それに対する相手の手）",
+      },
+      { value: "false", label: "それより前の手も記録していない" },
+      RECORDING_UNKNOWN,
+    ],
+  },
   recordingBelowFiveNow: {
     id: "recordingBelowFiveNow",
     scope: "incident",
@@ -1272,14 +1290,17 @@ export function applyIncidentAnswers(
         )
           subtype = raw;
         break;
+      case "recordingOnlyLastMoves":
       case "recordingBelowFiveNow":
       case "recordingBelowFiveInPeriod": {
         const v = parseTriState(raw);
         if (v !== undefined) {
           sheet[
-            id === "recordingBelowFiveNow"
-              ? "belowFiveNow"
-              : "belowFiveInPeriod"
+            id === "recordingOnlyLastMoves"
+              ? "onlyLastMoves"
+              : id === "recordingBelowFiveNow"
+                ? "belowFiveNow"
+                : "belowFiveInPeriod"
           ] = v;
           touchedSheet = true;
         }
@@ -1287,7 +1308,10 @@ export function applyIncidentAnswers(
       }
       case "recordingPeriod": {
         const n = Number(raw);
-        if (raw === "unknown" || (Number.isInteger(n) && n >= 1 && n <= 10)) {
+        if (
+          raw === "unknown" ||
+          (Number.isInteger(n) && n >= 1 && n <= MAX_TIME_CONTROL_PERIODS)
+        ) {
           sheet.period = raw === "unknown" ? "unknown" : n;
           touchedSheet = true;
         }

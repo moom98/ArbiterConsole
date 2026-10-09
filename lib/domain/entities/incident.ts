@@ -131,6 +131,11 @@ export type RecordingIncrementAnswer = "at-least-30" | "below-30" | "delay";
 
 /** DT-011 の構造化された回答（「わからない」は "unknown"） */
 export interface ScoresheetFacts {
+  /**
+   * 「遅れている」: 記録していないのが直前の手（自分の最後の手・それに対する相手の手）だけか。
+   * true なら 8.1.3 の範囲で違反ではない
+   */
+  onlyLastMoves?: boolean | "unknown";
   /** ss.remaining-time を5分と比べた回答: 今の残り時間が5分未満か */
   belowFiveNow?: boolean | "unknown";
   /** ss.below-five-in-period */

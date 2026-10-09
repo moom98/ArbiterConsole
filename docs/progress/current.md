@@ -1,6 +1,6 @@
 # Current Progress
 
-**Last updated:** 2026-10-09 (J2 on `feature/fact-catalog`, pushed, no PR yet; not deployed)
+**Last updated:** 2026-10-09 (J2 merged via PR #10; J2-3 review fixes in a follow-up PR; not deployed)
 **Main line:** `main`. PR #1 (M0–M7 + Cloudflare config) was merged on 2026-10-08. New work branches from `main`.
 
 - The deployment config (ADR-009) is in `main` via PR #1. The `account_id` arrived in a follow-up PR.
@@ -21,7 +21,7 @@ This file is the handoff for a fresh Claude session. Do not rely on conversation
 - J2-1: the classification UI (§7) and `/api/llm/providers`, so the preview names the real destination (409 `provider-changed` on a mismatch);
 - J2-2: the optional fact-presence check that only reorders DT questions. **It is hidden until J3 registers a calibration**;
 - J2-3: **DT-011** (FIDE 8.4 recording obligation for scoresheet "記入していない／遅れている" in Standard), `game.record-state` as record-only, and facts keeping the shared daily cap.
-- Pushed; no PR yet (the user asks for PRs). Not deployed (deploying needs the user's go-ahead).
+- **Merged via PR #10** (`1fc8f5b`). The J2-3 review (FIX FIRST: "遅れている" ignored FIDE 8.1.3) is fixed in a follow-up PR from `feature/fact-catalog`. The user asked to deploy after merging; deploy once the follow-up is merged.
 
 **Next:** J3 (evaluation, calibration, production switch). See Next steps.
 - After the first deploy, 「意味検索用データを作成」 rebuilds every vector once (key `+deid1`).
@@ -482,11 +482,11 @@ On the Milestone 7 branch after merging M5, which is the content merged into `fe
 2. The current work branch is `feature/fact-catalog` (pushed to `origin`, latest J1a-1 at `52d7ebb` or later; `main` has the deployed app). Check `git log --oneline -15` on it, and `git worktree list`.
    - PR #7 (`feature/fact-catalog`) is merged and deployed.
    - J1c is on `feature/j1c-jev-port`. Worktree: `.claude/worktrees/j1c`.
-   - PR #8 and PR #9 are merged. J2 is on `feature/fact-catalog` (pushed, no PR yet).
+   - PR #8, #9 and #10 (J2) are merged. The J2-3 review fixes are in a follow-up PR from `feature/fact-catalog`.
    - **Next task:** J3 (see Next steps). Before that, the user may want a PR for J2 and a deploy (ask first).
    - The privacy package's reviews used independent reviewer agents that wrote their own synthetic sensitive phrases; keep doing that for any change to `lib/domain/privacy/` (the author's own fixtures say little).
    - Follow `.claude/rules/development-cycle.md`: implement, run checks, have a separate read-only reviewer agent review, fix, re-review, then write `milestones/<slice>-*.md` and update this file.
-   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (83 files / 1616 tests at J2-3; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
+   - Checks: `npx tsc --noEmit`, `npx eslint --ext .ts,.tsx app components lib __tests__`, `npx vitest run` (83 files / 1631 tests after the J2-3 review fixes; the full run takes about 2 minutes, run it with a longer timeout), `npm run build`. Use `npm ci`, not `npm install`.
    - The project tsconfig has no `target` (tsc treats it as ES5): avoid regex-literal flags such as `/u` or `/s` and `matchAll`; use `new RegExp(source, flags)` and `exec` loops, as `lib/domain/privacy/` does.
    - In a nested worktree, run eslint as `npx eslint --no-eslintrc -c .eslintrc.json --ext .ts,.tsx app components lib __tests__`.
 3. Do not edit `docs/requirements/product-requirements.md` for implementation convenience.

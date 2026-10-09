@@ -22,6 +22,8 @@ import { TreeOutput } from "./tree-support";
 export const DT_011_ID = "DT-011-recording-obligation" as const;
 
 export interface RecordingObligationTreeInput {
+  /** 棋譜の問題（not-writing / behind だけを渡す） */
+  issue: "not-writing" | "behind";
   /** 回答（「わからない」は "unknown"） */
   facts: ScoresheetFacts;
   /** 報告時点の大会の持ち時間（ない・不完全なら加算を質問する） */
@@ -48,12 +50,13 @@ const known = (v: boolean | "unknown" | undefined): boolean | undefined =>
   v === "unknown" ? undefined : v;
 
 /**
- * DT-011: 棋譜の記録義務（FIDE Laws 2023 8.1.1 / 8.4。ADR-014 §7）。
+ * DT-011: 棋譜の記録義務（FIDE Laws 2023 8.1.1 / 8.1.3 / 8.4 / 8.5。ADR-014 §7）。
  * 「記入していない」「遅れている」の報告で、Standard の対局だけを扱う（呼び出し側が確かめる）。
  *
+ * - 「遅れている」で、記録していないのが直前の手だけなら違反ではない（8.1.3）
  * - 加算は大会の持ち時間から求める（単一ピリオド・全ピリオドで「30秒以上か」が同じなら質問しない）。
  *   複数ピリオドで異なる場合はピリオドを、設定がない・不完全な場合は加算を質問する
- * - 加算が30秒以上なら、残り時間を尋ねずに「免除なし」
+ * - 加算が30秒以上、またはこのピリオドで5分を下回っていないなら、もう一方は尋ねずに「免除なし」
  * - 判定は assessRecordingObligation（三値）。遅延は免除を確定しない（CAへ確認）
  * - ペナルティは自動で適用しない（アービターの裁量。12.9）
  */
@@ -65,18 +68,46 @@ export class RecordingObligationTree {
   }
 
   evaluate(input: RecordingObligationTreeInput): DecisionTreeResult {
-    const { facts, timeControl: tc } = input;
-    const inc = recordingIncrement(tc, facts.period);
+    const { facts, timeControl: tc, issue } = input;
 
+    // 1. 遅れている: 直前の手だけなら 8.1.3 の範囲（違反ではない）
+    if (issue === "behind" && facts.onlyLastMoves === true)
+      return this.withinLastMoves();
+    const askOnlyLastMoves =
+      issue === "behind" && facts.onlyLastMoves === undefined;
+    /** 直前の手だけの質問と一緒に尋ねる場合、それ以外の回答のときだけ表示する */
+    const afterLastMoves = (q: FollowUpQuestion): FollowUpQuestion =>
+      askOnlyLastMoves && !q.showWhen
+        ? {
+            ...q,
+            showWhen: {
+              questionId: "recordingOnlyLastMoves",
+              values: ["false", "unknown"],
+            },
+          }
+        : q;
+
+    // 2. 残り時間（このピリオドで5分を下回ったか）
+    const lowNow = known(facts.belowFiveNow);
+    const below = known(facts.belowFiveInPeriod);
+    const lowInPeriod =
+      lowNow === true || below === true
+        ? true
+        : below === false
+          ? false
+          : undefined;
+
+    // 3. 加算
+    const inc = recordingIncrement(tc, facts.period);
     const assessment: RecordingObligationInput = {
       competitionType: "standard",
-      belowFiveNow: known(facts.belowFiveNow),
-      belowFiveInPeriod: known(facts.belowFiveInPeriod),
+      belowFiveNow: lowNow,
+      belowFiveInPeriod: below,
       delaySeconds: tc?.delaySeconds,
     };
-    /** 加算を設定から求めた（回答ではない） */
+    /** 加算を回答（加算の質問）ではなく設定から求めた（ピリオドの回答を含む） */
     let fromSettings = true;
-    const questions: FollowUpQuestion[] = [];
+    const incrementQuestions: FollowUpQuestion[] = [];
     switch (inc.status) {
       case "known":
         assessment.incrementSeconds = inc.incrementSeconds;
@@ -85,15 +116,14 @@ export class RecordingObligationTree {
         assessment.incrementAtLeast30 = inc.atLeast30;
         break;
       case "ask-period":
-        questions.push(recordingPeriodQuestion(tc as TimeControl));
+        incrementQuestions.push(recordingPeriodQuestion(tc as TimeControl));
         break;
       case "unknown":
-        fromSettings = false;
         break;
       case "ask-increment":
         fromSettings = false;
         if (facts.increment === undefined)
-          questions.push(QUESTIONS.recordingIncrement);
+          incrementQuestions.push(QUESTIONS.recordingIncrement);
         else if (facts.increment !== "unknown") {
           assessment.incrementAtLeast30 = facts.increment === "at-least-30";
           // 遅延方式の回答は、遅延の秒数が分からなくても遅延ありとして扱う（免除を確定しない）
@@ -102,29 +132,36 @@ export class RecordingObligationTree {
         }
         break;
     }
-
     const atLeast30 =
       assessment.incrementSeconds !== undefined
         ? assessment.incrementSeconds >= 30
         : assessment.incrementAtLeast30;
+
+    const questions: FollowUpQuestion[] = [];
+    if (askOnlyLastMoves) questions.push(QUESTIONS.recordingOnlyLastMoves);
     // 加算が30秒以上なら、残り時間に関係なく免除はない（残り時間は尋ねない）
     if (atLeast30 !== true) {
       if (facts.belowFiveNow === undefined)
-        questions.unshift(
-          QUESTIONS.recordingBelowFiveNow,
+        questions.push(
+          afterLastMoves(QUESTIONS.recordingBelowFiveNow),
           QUESTIONS.recordingBelowFiveInPeriod
         );
-      else if (
-        facts.belowFiveNow !== true &&
-        facts.belowFiveInPeriod === undefined
-      )
-        questions.unshift(bare(QUESTIONS.recordingBelowFiveInPeriod));
+      else if (lowNow !== true && facts.belowFiveInPeriod === undefined)
+        questions.push(
+          afterLastMoves(bare(QUESTIONS.recordingBelowFiveInPeriod))
+        );
     }
+    // このピリオドで5分を下回っていないなら、加算に関係なく免除はない（加算は尋ねない）
+    if (lowInPeriod !== false)
+      questions.push(...incrementQuestions.map(afterLastMoves));
     if (questions.length > 0)
       return this.out.needsInput(
         questions,
         INITIAL_CONCLUSION,
-        cite("FIDE_8_4")
+        cite(
+          ...(issue === "behind" ? (["FIDE_8_1_3"] as const) : []),
+          "FIDE_8_4"
+        )
       );
 
     const result = assessRecordingObligation(assessment);
@@ -135,26 +172,43 @@ export class RecordingObligationTree {
           conclusion: result.explanation,
           actions: [
             "このピリオドの残りは、手を記録しなくても 8.1.1 の違反ではない（8.4）",
+            "フラッグが落ちたら、記録していない選手は駒を動かす前に棋譜を完全に記入する。手番なら相手の棋譜を使ってよい（8.5.2）",
+            "両者とも記録していない場合は、アービター（または補助者）がそばで記録する。フラッグが落ちたら時計を止め、両者に棋譜を記入させる（8.5.1）",
             "次のピリオドに入ったら、加算と残り時間によって記録義務が戻るか確認する（8.4 は「そのピリオドの残り」）",
           ],
           intervention: "no-intervention",
           penalties: [],
-          sources: result.sources,
+          sources: [...result.sources, ...cite("FIDE_8_5_2", "FIDE_8_5_1")],
           // 加算を回答から求めた場合は、設定で確かめていない
           confidence: fromSettings ? "high" : "medium",
           escalationRecommended: false,
         });
       case "required":
+        // 遅れている手が直前の手だけかどうか分からない場合、違反かどうかを確定できない
+        if (issue === "behind" && facts.onlyLastMoves !== false)
+          return this.manual(
+            `${result.explanation}ただし、記録していないのが直前の手だけなら違反ではありません（8.1.3）。`,
+            ["記録していないのが直前の手だけか"],
+            [...result.sources, ...cite("FIDE_8_1_3")]
+          );
         return this.out.decided({
           kind: "recommendation",
           conclusion: result.explanation,
           actions: [
-            "手を記録するよう選手に伝える（8.1.1）",
+            issue === "behind"
+              ? "記録していない手を記録するよう選手に伝える（8.1.1。直前の手だけなら記録前に指し返してよい: 8.1.3）"
+              : "手を記録するよう選手に伝える（8.1.1）",
             "従わない場合の対応はアービターの裁量で決める（12.9）",
           ],
           intervention: "immediate",
           penalties: [],
-          sources: [...result.sources, ...cite("FIDE_12_9")],
+          sources: [
+            ...result.sources,
+            ...cite(
+              ...(issue === "behind" ? (["FIDE_8_1_3"] as const) : []),
+              "FIDE_12_9"
+            ),
+          ],
           confidence: fromSettings ? "high" : "medium",
           escalationRecommended: false,
         });
@@ -168,6 +222,24 @@ export class RecordingObligationTree {
         // 呼び出し側が Standard だけを渡すため起きない。判断しない
         return this.manual(result.explanation, [], result.sources);
     }
+  }
+
+  /** 「遅れている」が直前の手だけ（8.1.3） */
+  private withinLastMoves(): DecisionTreeResult {
+    return this.out.decided({
+      kind: "recommendation",
+      conclusion:
+        "記録していないのが直前の手（自分の最後の手と、それに対する相手の手）だけなら、8.1.3 の範囲で違反ではありません。次の手を指す前に、自分の前の手を記録する必要があります。",
+      actions: [
+        "介入しない（8.1.3: 相手の手を記録する前に指し返してよい）",
+        "次の手を指す前に自分の前の手を記録していない場合は、改めて確認する（8.1.3）",
+      ],
+      intervention: "no-intervention",
+      penalties: [],
+      sources: cite("FIDE_8_1_3", "FIDE_8_1_1"),
+      confidence: "high",
+      escalationRecommended: false,
+    });
   }
 
   private manual(

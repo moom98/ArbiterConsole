@@ -36,8 +36,14 @@ const MIXED: TimeControl = {
 };
 const INCOMPLETE: TimeControl = { ...SINGLE_0, periodsIncomplete: true };
 
-function run(input: RecordingObligationTreeInput) {
-  return new RecordingObligationTree(fixedProviders()).evaluate(input);
+function run(
+  input: Omit<RecordingObligationTreeInput, "issue"> &
+    Partial<Pick<RecordingObligationTreeInput, "issue">>
+) {
+  return new RecordingObligationTree(fixedProviders()).evaluate({
+    issue: "not-writing",
+    ...input,
+  });
 }
 function ids(r: ReturnType<typeof run>) {
   return r.status === "needs-input" ? r.questions.map((q) => q.id) : [];
@@ -162,6 +168,140 @@ describe("DT-011 decisions", () => {
   });
 });
 
+describe("DT-011: behind (8.1.3)", () => {
+  it("asks 'only the last moves?' first; the time questions show only for other answers", () => {
+    const r = run({ issue: "behind", facts: {}, timeControl: SINGLE_0 });
+    expect(ids(r)).toEqual([
+      "recordingOnlyLastMoves",
+      "recordingBelowFiveNow",
+      "recordingBelowFiveInPeriod",
+    ]);
+    if (r.status !== "needs-input") throw new Error("expected");
+    expect(r.questions[1].showWhen).toEqual({
+      questionId: "recordingOnlyLastMoves",
+      values: ["false", "unknown"],
+    });
+    // 5分を下回ったかは、残り時間の質問に続く（元の表示条件のまま）
+    expect(r.questions[2].showWhen?.questionId).toBe("recordingBelowFiveNow");
+    expect(articles(r)).toContain("FIDE 8.1.3");
+  });
+
+  it("only the last moves: no violation, even with a 30 s increment", () => {
+    const r = run({
+      issue: "behind",
+      facts: { onlyLastMoves: true },
+      timeControl: SINGLE_30,
+    });
+    expect(r.decision.intervention).toBe("no-intervention");
+    expect(articles(r)).toContain("FIDE 8.1.3");
+  });
+
+  it("one move behind in 90+30 is never 'intervene immediately'", () => {
+    const r = run({ issue: "behind", facts: {}, timeControl: SINGLE_30 });
+    expect(ids(r)).toEqual(["recordingOnlyLastMoves"]);
+  });
+
+  it("older moves missing and no exemption: recording required", () => {
+    const r = run({
+      issue: "behind",
+      facts: { onlyLastMoves: false },
+      timeControl: SINGLE_30,
+    });
+    expect(r.decision.intervention).toBe("immediate");
+    expect(articles(r)).toEqual(
+      expect.arrayContaining(["FIDE 8.1.3", "FIDE 12.9"])
+    );
+  });
+
+  it("unknown which moves are missing and no exemption: consult the CA", () => {
+    const r = run({
+      issue: "behind",
+      facts: { onlyLastMoves: "unknown" },
+      timeControl: SINGLE_30,
+    });
+    expect(r.decision.kind).toBe("manual-review");
+    expect(r.decision.conclusion).toMatch(/8\.1\.3/);
+  });
+
+  it("unknown which moves are missing but exempt (8.4): exempt", () => {
+    const r = run({
+      issue: "behind",
+      facts: { onlyLastMoves: "unknown", belowFiveNow: true },
+      timeControl: SINGLE_0,
+    });
+    expect(r.decision.intervention).toBe("no-intervention");
+  });
+});
+
+describe("DT-011: more cases", () => {
+  it("the exempt result names the 8.5 steps", () => {
+    const r = run({ facts: { belowFiveNow: true }, timeControl: SINGLE_0 });
+    expect(articles(r)).toEqual(
+      expect.arrayContaining(["FIDE 8.5.1", "FIDE 8.5.2"])
+    );
+    expect(r.decision.actions.join()).toMatch(/8\.5\.2/);
+  });
+
+  it("never below five in the period: no period or increment question", () => {
+    for (const timeControl of [MIXED, undefined]) {
+      const r = run({
+        facts: { belowFiveNow: false, belowFiveInPeriod: false },
+        timeControl,
+      });
+      expect(r.status).toBe("decided");
+      expect(r.decision.intervention).toBe("immediate");
+    }
+    const unknownNow = run({
+      facts: { belowFiveNow: "unknown", belowFiveInPeriod: false },
+      timeControl: SINGLE_0,
+    });
+    expect(unknownNow.decision.intervention).toBe("immediate");
+  });
+
+  it("increment boundary from settings: 29 s can be exempt, 30 s cannot", () => {
+    const tc = (incrementSeconds: number): TimeControl => ({
+      periods: [{ minutes: 90, incrementSeconds }],
+    });
+    expect(
+      run({ facts: { belowFiveNow: true }, timeControl: tc(29) }).decision
+        .intervention
+    ).toBe("no-intervention");
+    expect(
+      run({ facts: { belowFiveNow: true }, timeControl: tc(30) }).decision
+        .intervention
+    ).toBe("immediate");
+  });
+
+  it("several periods all under 30 s: the period is not asked", () => {
+    const r = run({
+      facts: { belowFiveNow: true },
+      timeControl: {
+        periods: [
+          { moves: 40, minutes: 90, incrementSeconds: 10 },
+          { minutes: 30, incrementSeconds: 10 },
+        ],
+      },
+    });
+    expect(r.decision.intervention).toBe("no-intervention");
+  });
+
+  it("a delay with an increment of 30 s or more: recording required", () => {
+    const r = run({
+      facts: {},
+      timeControl: { ...SINGLE_30, delaySeconds: 5 },
+    });
+    expect(r.decision.intervention).toBe("immediate");
+  });
+
+  it("a stored period out of range is asked again", () => {
+    const r = run({
+      facts: { belowFiveNow: true, period: 7 },
+      timeControl: MIXED,
+    });
+    expect(ids(r)).toContain("recordingPeriod");
+  });
+});
+
 describe("DT-011 in the engine", () => {
   function incident(overrides: Partial<Incident> = {}): Incident {
     return {
@@ -229,6 +369,38 @@ describe("DT-011 in the engine", () => {
       },
     });
     expect(rapid.decision.treeId).toBeUndefined();
+  });
+
+  it("Blitz stays outside the tree", () => {
+    const r = engine().processIncident({
+      incident: incident({
+        subtype: "not-writing",
+        description: "書いていない",
+      }),
+      ruleset: {
+        competitionType: "blitz",
+        supervisionRegime: "competition-rules",
+        rulesVersion: "FIDE-2023",
+      },
+    });
+    expect(r.decision.treeId).toBeUndefined();
+  });
+
+  it("a stored scoresheet incident with a description but no issue is asked the issue", () => {
+    const r = engine().processIncident({
+      incident: incident({ description: "棋譜をつけていない" }),
+      ruleset: { competitionType: "standard", rulesVersion: "FIDE-2023" },
+    });
+    expect(r.followUpQuestions.map((q) => q.id)).toEqual(["scoresheetIssue"]);
+  });
+
+  it("the period answer is limited to the profile maximum", () => {
+    expect(
+      applyIncidentAnswers(incident(), { recordingPeriod: "6" }).scoresheetFacts
+    ).toBeUndefined();
+    expect(
+      applyIncidentAnswers(incident(), { recordingPeriod: "5" }).scoresheetFacts
+    ).toEqual({ period: 5 });
   });
 
   it("ignores invalid answers", () => {

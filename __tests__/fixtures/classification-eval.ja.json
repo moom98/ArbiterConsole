@@ -1,0 +1,1152 @@
+{
+ "id": "classification-eval.ja",
+ "version": "1",
+ "description": "Synthetic Japanese arbiter reports for the classifier evaluation (jev-classifier-design §9, §18). 20 per category (fair-play excluded), 10 tuning + 10 held-out. Every report passes the production guard; the wording is therefore biased toward the guard's known vocabulary (§18.3). Never add real tournament reports.",
+ "identifiers": {
+  "players": [
+   {
+    "name": "山田太郎"
+   },
+   {
+    "name": "佐藤花子"
+   },
+   {
+    "name": "鈴木一郎"
+   },
+   {
+    "name": "高橋美咲"
+   },
+   {
+    "name": "田中健"
+   },
+   {
+    "name": "伊藤さくら"
+   }
+  ],
+  "tournaments": [],
+  "venues": [],
+  "officials": []
+ },
+ "cases": [
+  {
+   "id": "illegal-move-01",
+   "split": "tuning",
+   "category": "illegal-move",
+   "text": "白が両手でキャスリングを指した。"
+  },
+  {
+   "id": "illegal-move-02",
+   "split": "tuning",
+   "category": "illegal-move",
+   "text": "第3ボード、黒が手を指さずに時計を押した。"
+  },
+  {
+   "id": "illegal-move-03",
+   "split": "tuning",
+   "category": "illegal-move",
+   "text": "山田太郎、ポーンを最終段に進めたがクイーンを置かずに時計を押した。"
+  },
+  {
+   "id": "illegal-move-04",
+   "split": "tuning",
+   "category": "illegal-move",
+   "text": "黒がチェックを見落としてキングをチェックに放置したまま時計を押した。相手が指摘。"
+  },
+  {
+   "id": "illegal-move-05",
+   "split": "tuning",
+   "category": "illegal-move",
+   "text": "白、キングが一度動いているのにキャスリングをした。"
+  },
+  {
+   "id": "illegal-move-06",
+   "split": "tuning",
+   "category": "illegal-move",
+   "text": "黒がナイトに触れた後、ビショップを動かした。白がタッチムーブを主張。"
+  },
+  {
+   "id": "illegal-move-07",
+   "split": "tuning",
+   "category": "illegal-move",
+   "text": "違法手。白のビショップがポーンの先のマスへ移動していた。"
+  },
+  {
+   "id": "illegal-move-08",
+   "split": "tuning",
+   "category": "illegal-move",
+   "text": "佐藤花子がルークに触ってから別の駒を指した。相手が触れた駒を指すよう要求。"
+  },
+  {
+   "id": "illegal-move-09",
+   "split": "tuning",
+   "category": "illegal-move",
+   "text": "第5ボード：黒、キングをチェックされたマスに動かして時計を押した。"
+  },
+  {
+   "id": "illegal-move-10",
+   "split": "tuning",
+   "category": "illegal-move",
+   "text": "白がポーンを後ろに動かして時計を押した。黒が違法手を指摘。"
+  },
+  {
+   "id": "illegal-move-11",
+   "split": "held-out",
+   "category": "illegal-move",
+   "text": "黒、チェック中にキャスリング。白がすぐ申告。"
+  },
+  {
+   "id": "illegal-move-12",
+   "split": "held-out",
+   "category": "illegal-move",
+   "text": "白がルークを先に動かしてからキングを動かした。黒がタッチムーブを主張。"
+  },
+  {
+   "id": "illegal-move-13",
+   "split": "held-out",
+   "category": "illegal-move",
+   "text": "鈴木一郎、相手の駒に触れたが取れる手があるのに別の手を指した。"
+  },
+  {
+   "id": "illegal-move-14",
+   "split": "held-out",
+   "category": "illegal-move",
+   "text": "昇格したポーンをそのまま盤に残して時計を押した。黒の手番。"
+  },
+  {
+   "id": "illegal-move-15",
+   "split": "held-out",
+   "category": "illegal-move",
+   "text": "白が同じ対局で二度目の違法手。一度目は警告済み。"
+  },
+  {
+   "id": "illegal-move-16",
+   "split": "held-out",
+   "category": "illegal-move",
+   "text": "第2ボードで黒のナイトが違法なマスにある。数手前の違法手だった。"
+  },
+  {
+   "id": "illegal-move-17",
+   "split": "held-out",
+   "category": "illegal-move",
+   "text": "黒が駒から手を離した後、別のマスに移動した。白が申告。"
+  },
+  {
+   "id": "illegal-move-18",
+   "split": "held-out",
+   "category": "illegal-move",
+   "text": "白がキャスリングしたが、キングとルークの間にビショップがあった。時計も押した。"
+  },
+  {
+   "id": "illegal-move-19",
+   "split": "held-out",
+   "category": "illegal-move",
+   "text": "高橋美咲が取る駒のない斜めのマスにポーンを動かして時計を押した。"
+  },
+  {
+   "id": "illegal-move-20",
+   "split": "held-out",
+   "category": "illegal-move",
+   "text": "黒、ポーンで取る際に両手を使った。白が申告。"
+  },
+  {
+   "id": "board-piece-01",
+   "split": "tuning",
+   "category": "board-piece",
+   "text": "第4ボード、ナイトが盤の外に落ちていた。"
+  },
+  {
+   "id": "board-piece-02",
+   "split": "tuning",
+   "category": "board-piece",
+   "text": "白の時間中に黒のビショップが盤から落ちた。"
+  },
+  {
+   "id": "board-piece-03",
+   "split": "tuning",
+   "category": "board-piece",
+   "text": "開始後に盤の向きが逆と確認。右の白マスの位置が違う。"
+  },
+  {
+   "id": "board-piece-04",
+   "split": "tuning",
+   "category": "board-piece",
+   "text": "初期配置でキングとクイーンの位置が逆だった。十手目で発見。"
+  },
+  {
+   "id": "board-piece-05",
+   "split": "tuning",
+   "category": "board-piece",
+   "text": "黒のポーンが一つ足りない状態で対局が始まっていた。"
+  },
+  {
+   "id": "board-piece-06",
+   "split": "tuning",
+   "category": "board-piece",
+   "text": "駒がマスからずれている。白が直してほしいと申告。"
+  },
+  {
+   "id": "board-piece-07",
+   "split": "tuning",
+   "category": "board-piece",
+   "text": "田中健、駒を落としたまま戻さずに時計を押した。"
+  },
+  {
+   "id": "board-piece-08",
+   "split": "tuning",
+   "category": "board-piece",
+   "text": "黒のルークが二つとも白の駒になっている。予備の駒と交換。"
+  },
+  {
+   "id": "board-piece-09",
+   "split": "tuning",
+   "category": "board-piece",
+   "text": "白の初期配置でナイトとビショップが入れ替わっていた。"
+  },
+  {
+   "id": "board-piece-10",
+   "split": "tuning",
+   "category": "board-piece",
+   "text": "白のルークがマスからずれている。直してから再開した。"
+  },
+  {
+   "id": "board-piece-11",
+   "split": "held-out",
+   "category": "board-piece",
+   "text": "第1ボード、駒が三つ落ちた。どこにあったか両者の主張が違う。"
+  },
+  {
+   "id": "board-piece-12",
+   "split": "held-out",
+   "category": "board-piece",
+   "text": "予備のクイーンがない。昇格に使う駒を用意してほしいと要求。"
+  },
+  {
+   "id": "board-piece-13",
+   "split": "held-out",
+   "category": "board-piece",
+   "text": "駒の位置が不明になった。両者で局面を並べ直したい。"
+  },
+  {
+   "id": "board-piece-14",
+   "split": "held-out",
+   "category": "board-piece",
+   "text": "伊藤さくらの盤で、黒の駒の一つが別のセットのものだった。"
+  },
+  {
+   "id": "board-piece-15",
+   "split": "held-out",
+   "category": "board-piece",
+   "text": "盤の向きと駒の配置が違っていた。開始前に直した。"
+  },
+  {
+   "id": "board-piece-16",
+   "split": "held-out",
+   "category": "board-piece",
+   "text": "取った駒がない。どの駒が盤上にあったか不明。"
+  },
+  {
+   "id": "board-piece-17",
+   "split": "held-out",
+   "category": "board-piece",
+   "text": "盤上に白のキングが二つある。予備の駒が置いてあった。"
+  },
+  {
+   "id": "board-piece-18",
+   "split": "held-out",
+   "category": "board-piece",
+   "text": "対局途中で黒のビショップが一つない。会場も確認した。"
+  },
+  {
+   "id": "board-piece-19",
+   "split": "held-out",
+   "category": "board-piece",
+   "text": "盤のマスに駒が入らない。盤の交換を求められた。"
+  },
+  {
+   "id": "board-piece-20",
+   "split": "held-out",
+   "category": "board-piece",
+   "text": "黒が駒を落として、直す前に時計を押した。白が申告。"
+  },
+  {
+   "id": "clock-time-01",
+   "split": "tuning",
+   "category": "clock-time",
+   "subtype": "flag-fall",
+   "text": "白、時間切れ。黒は駒が残っている。"
+  },
+  {
+   "id": "clock-time-02",
+   "split": "tuning",
+   "category": "clock-time",
+   "subtype": "flag-fall",
+   "text": "第6ボード、黒のフラッグが落ちた。白はキングのみ。"
+  },
+  {
+   "id": "clock-time-03",
+   "split": "tuning",
+   "category": "clock-time",
+   "subtype": "flag-fall",
+   "text": "山田太郎の時間が0になった。相手が申告した。"
+  },
+  {
+   "id": "clock-time-04",
+   "split": "tuning",
+   "category": "clock-time",
+   "subtype": "flag-fall",
+   "text": "白の時間が0になり、黒が申告。黒はクイーンが残っている。"
+  },
+  {
+   "id": "clock-time-05",
+   "split": "tuning",
+   "category": "clock-time",
+   "subtype": "flag-fall",
+   "text": "両者の時間が0になっていた。どの時点で先にフラッグが落ちたか不明。"
+  },
+  {
+   "id": "clock-time-06",
+   "split": "tuning",
+   "category": "clock-time",
+   "subtype": "flag-fall",
+   "text": "黒が時間切れ。白はナイトとキングのみで勝つ手順がない。"
+  },
+  {
+   "id": "clock-time-07",
+   "split": "tuning",
+   "category": "clock-time",
+   "subtype": "other",
+   "text": "時計の表示が止まった。電池の故障の可能性。"
+  },
+  {
+   "id": "clock-time-08",
+   "split": "tuning",
+   "category": "clock-time",
+   "subtype": "other",
+   "text": "時間設定が間違っていた。加算が入っていない。"
+  },
+  {
+   "id": "clock-time-09",
+   "split": "tuning",
+   "category": "clock-time",
+   "subtype": "other",
+   "text": "黒が時計を押し忘れて自分の時間が減っていた。"
+  },
+  {
+   "id": "clock-time-10",
+   "split": "tuning",
+   "category": "clock-time",
+   "subtype": "other",
+   "text": "白が時計を強く押して時計が落ちた。"
+  },
+  {
+   "id": "clock-time-11",
+   "split": "held-out",
+   "category": "clock-time",
+   "subtype": "flag-fall",
+   "text": "第2ボードで白の時間が0。黒は駒が十分ある。"
+  },
+  {
+   "id": "clock-time-12",
+   "split": "held-out",
+   "category": "clock-time",
+   "subtype": "flag-fall",
+   "text": "佐藤花子、時間切れを申告。相手の表示が0になっている。"
+  },
+  {
+   "id": "clock-time-13",
+   "split": "held-out",
+   "category": "clock-time",
+   "subtype": "flag-fall",
+   "text": "白、時間切れ。黒が申告し、アービターが確認した。"
+  },
+  {
+   "id": "clock-time-14",
+   "split": "held-out",
+   "category": "clock-time",
+   "subtype": "flag-fall",
+   "text": "黒の時間が0のまま数手指していた。アービターが確認。"
+  },
+  {
+   "id": "clock-time-15",
+   "split": "held-out",
+   "category": "clock-time",
+   "subtype": "other",
+   "text": "時計の表示が消えて時間が分からない。予備の時計に交換。"
+  },
+  {
+   "id": "clock-time-16",
+   "split": "held-out",
+   "category": "clock-time",
+   "subtype": "other",
+   "text": "四十手目で時間が加算されなかった。設定を確認中。"
+  },
+  {
+   "id": "clock-time-17",
+   "split": "held-out",
+   "category": "clock-time",
+   "subtype": "other",
+   "text": "黒が指した後に時計を押し忘れ、自分の時間が減っていた。白は申告していない。"
+  },
+  {
+   "id": "clock-time-18",
+   "split": "held-out",
+   "category": "clock-time",
+   "subtype": "other",
+   "text": "時計の位置について両者の主張が違う。白の右にある。"
+  },
+  {
+   "id": "clock-time-19",
+   "split": "held-out",
+   "category": "clock-time",
+   "subtype": "other",
+   "text": "鈴木一郎の時計が開始前に作動していた。"
+  },
+  {
+   "id": "clock-time-20",
+   "split": "held-out",
+   "category": "clock-time",
+   "subtype": "other",
+   "text": "白が時計を手で押さえたまま。黒が申告。"
+  },
+  {
+   "id": "game-result-01",
+   "split": "tuning",
+   "category": "game-result",
+   "text": "第3ボード、白は黒が投了したと主張、黒は投了していないと言っている。"
+  },
+  {
+   "id": "game-result-02",
+   "split": "tuning",
+   "category": "game-result",
+   "text": "結果の記入が逆。白の勝ちなのに記録用紙に0-1と書いてある。"
+  },
+  {
+   "id": "game-result-03",
+   "split": "tuning",
+   "category": "game-result",
+   "text": "両者が結果を記入したが、署名をしないまま退場した。"
+  },
+  {
+   "id": "game-result-04",
+   "split": "tuning",
+   "category": "game-result",
+   "text": "5番ボードの結果がペアリングの登録と一致していない。"
+  },
+  {
+   "id": "game-result-05",
+   "split": "tuning",
+   "category": "game-result",
+   "text": "山田太郎が勝ちを主張、相手の佐藤花子は引き分けで合意したと言う。"
+  },
+  {
+   "id": "game-result-06",
+   "split": "tuning",
+   "category": "game-result",
+   "text": "黒がキングを倒したが、本人は投了ではないと言っている。"
+  },
+  {
+   "id": "game-result-07",
+   "split": "tuning",
+   "category": "game-result",
+   "text": "結果の記入後、白が署名を拒否。結果に同意していない。"
+  },
+  {
+   "id": "game-result-08",
+   "split": "tuning",
+   "category": "game-result",
+   "text": "8番ボード、両者とも結果を申告しないまま帰った。"
+  },
+  {
+   "id": "game-result-09",
+   "split": "tuning",
+   "category": "game-result",
+   "text": "黒は白が投了したと見て時計を止めた。白は投了していないと主張。"
+  },
+  {
+   "id": "game-result-10",
+   "split": "tuning",
+   "category": "game-result",
+   "text": "記録用紙の結果に1-0と0-1の両方が記入されている。"
+  },
+  {
+   "id": "game-result-11",
+   "split": "held-out",
+   "category": "game-result",
+   "text": "2番ボードの勝敗が逆に登録されていた。両者に確認済み。"
+  },
+  {
+   "id": "game-result-12",
+   "split": "held-out",
+   "category": "game-result",
+   "text": "黒はチェックメイトで勝ちと言うが、白はメイトではないと主張している。"
+  },
+  {
+   "id": "game-result-13",
+   "split": "held-out",
+   "category": "game-result",
+   "text": "鈴木一郎の結果が不戦勝で登録されていたが、対局は行われていて負けている。"
+  },
+  {
+   "id": "game-result-14",
+   "split": "held-out",
+   "category": "game-result",
+   "text": "白が投了と言ったかどうかで両者の主張が違う。"
+  },
+  {
+   "id": "game-result-15",
+   "split": "held-out",
+   "category": "game-result",
+   "text": "結果の申告後、黒が結果は誤りと言ってきた。両者署名済み。"
+  },
+  {
+   "id": "game-result-16",
+   "split": "held-out",
+   "category": "game-result",
+   "text": "1番ボード、署名済みの記録用紙が提出されていない。結果は未確認。"
+  },
+  {
+   "id": "game-result-17",
+   "split": "held-out",
+   "category": "game-result",
+   "text": "高橋美咲が結果用紙に勝ちと書いたが、相手は自分が勝ちと言っている。"
+  },
+  {
+   "id": "game-result-18",
+   "split": "held-out",
+   "category": "game-result",
+   "text": "対局後、両者が違う結果を申告してきた。"
+  },
+  {
+   "id": "game-result-19",
+   "split": "held-out",
+   "category": "game-result",
+   "text": "黒が何も言わず記録用紙に署名して退場した。白は投了かどうか確認したい。"
+  },
+  {
+   "id": "game-result-20",
+   "split": "held-out",
+   "category": "game-result",
+   "text": "6番ボードの結果が未記入のまま。対局は終了している。"
+  },
+  {
+   "id": "draw-01",
+   "split": "tuning",
+   "category": "draw",
+   "subtype": "threefold-repetition-claim",
+   "text": "白が同一局面三回でドローを主張。記録用紙で確認する。"
+  },
+  {
+   "id": "draw-02",
+   "split": "tuning",
+   "category": "draw",
+   "subtype": "fifty-move-claim",
+   "text": "黒が50手ルールでドローを主張してきた。"
+  },
+  {
+   "id": "draw-03",
+   "split": "tuning",
+   "category": "draw",
+   "subtype": "fivefold-repetition",
+   "text": "同一局面が五回あったが、両者とも気付かず対局が続いていた。"
+  },
+  {
+   "id": "draw-04",
+   "split": "tuning",
+   "category": "draw",
+   "subtype": "75-move-rule",
+   "text": "ポーンの移動も駒取りもなく75手以上指していた。アービターが対局を止めた。"
+  },
+  {
+   "id": "draw-05",
+   "split": "tuning",
+   "category": "draw",
+   "subtype": "agreement",
+   "text": "4番ボード、両者がドローに合意した。"
+  },
+  {
+   "id": "draw-06",
+   "split": "tuning",
+   "category": "draw",
+   "subtype": "stalemate",
+   "text": "白のキングに合法な手がなくステイルメイト。黒は勝ちと言っている。"
+  },
+  {
+   "id": "draw-07",
+   "split": "tuning",
+   "category": "draw",
+   "subtype": "dead-position",
+   "text": "白はキングのみ、黒はキングとビショップのみ。両者ともメイトできない局面。"
+  },
+  {
+   "id": "draw-08",
+   "split": "tuning",
+   "category": "draw",
+   "subtype": "other",
+   "text": "黒が自分の手を指さずにドローを提案してきた。"
+  },
+  {
+   "id": "draw-09",
+   "split": "tuning",
+   "category": "draw",
+   "subtype": "threefold-repetition-claim",
+   "text": "田中健が次の手を記録用紙に書いて三回同一局面を主張した。"
+  },
+  {
+   "id": "draw-10",
+   "split": "tuning",
+   "category": "draw",
+   "subtype": "agreement",
+   "text": "手番の白がドローを提案、黒が受けた。記録用紙に=を記入。"
+  },
+  {
+   "id": "draw-11",
+   "split": "held-out",
+   "category": "draw",
+   "subtype": "fifty-move-claim",
+   "text": "50手の主張あり。記録用紙で手数を確認すると48手だった。"
+  },
+  {
+   "id": "draw-12",
+   "split": "held-out",
+   "category": "draw",
+   "subtype": "stalemate",
+   "text": "黒の最後の手で白に合法な手がなくなった。ステイルメイトで引き分け。"
+  },
+  {
+   "id": "draw-13",
+   "split": "held-out",
+   "category": "draw",
+   "subtype": "dead-position",
+   "text": "白はキングとナイト、黒はキングのみ。メイトの可能性がない局面になった。"
+  },
+  {
+   "id": "draw-14",
+   "split": "held-out",
+   "category": "draw",
+   "subtype": "other",
+   "text": "白が時計を押してからドローを提案。黒は提案が有効か確認を求めた。"
+  },
+  {
+   "id": "draw-15",
+   "split": "held-out",
+   "category": "draw",
+   "subtype": "fivefold-repetition",
+   "text": "第7ボードで同一局面が五回目になったので対局を止めた。"
+  },
+  {
+   "id": "draw-16",
+   "split": "held-out",
+   "category": "draw",
+   "subtype": "75-move-rule",
+   "text": "ポーンの移動も駒取りもないまま75手続いた。引き分けで終了。"
+  },
+  {
+   "id": "draw-17",
+   "split": "held-out",
+   "category": "draw",
+   "subtype": "threefold-repetition-claim",
+   "text": "黒が同一局面三回を主張したが、キャスリングの状態が違っていて同一局面ではなかった。"
+  },
+  {
+   "id": "draw-18",
+   "split": "held-out",
+   "category": "draw",
+   "subtype": "other",
+   "text": "ドローの提案を受けた黒が何も言わずに指さない。白は提案がまだ有効かと聞いた。"
+  },
+  {
+   "id": "draw-19",
+   "split": "held-out",
+   "category": "draw",
+   "subtype": "agreement",
+   "text": "伊藤さくらと相手がドローで合意。両者署名済み。"
+  },
+  {
+   "id": "draw-20",
+   "split": "held-out",
+   "category": "draw",
+   "subtype": "fifty-move-claim",
+   "text": "白が50手ルールを主張。記録用紙の記入が不足していて手数が確認できない。"
+  },
+  {
+   "id": "scoresheet-01",
+   "split": "tuning",
+   "category": "scoresheet",
+   "text": "黒が対局中一度も棋譜を書いていない。"
+  },
+  {
+   "id": "scoresheet-02",
+   "split": "tuning",
+   "category": "scoresheet",
+   "text": "白の記録が5手遅れている。持ち時間は十分ある。"
+  },
+  {
+   "id": "scoresheet-03",
+   "split": "tuning",
+   "category": "scoresheet",
+   "text": "2番ボード、黒の記録用紙がない。対局後に気付いた。"
+  },
+  {
+   "id": "scoresheet-04",
+   "split": "tuning",
+   "category": "scoresheet",
+   "text": "白の記録用紙に手が二つ抜けている。"
+  },
+  {
+   "id": "scoresheet-05",
+   "split": "tuning",
+   "category": "scoresheet",
+   "text": "両者とも残り時間が少なく、記録をしていない。"
+  },
+  {
+   "id": "scoresheet-06",
+   "split": "tuning",
+   "category": "scoresheet",
+   "text": "黒が記録用紙に手を書いてから指している。"
+  },
+  {
+   "id": "scoresheet-07",
+   "split": "tuning",
+   "category": "scoresheet",
+   "text": "記録用紙の白と黒の記入が逆になっている。"
+  },
+  {
+   "id": "scoresheet-08",
+   "split": "tuning",
+   "category": "scoresheet",
+   "text": "佐藤花子が相手の記録用紙を見せてほしいと言ってきた。"
+  },
+  {
+   "id": "scoresheet-09",
+   "split": "tuning",
+   "category": "scoresheet",
+   "text": "白の記録用紙が読めない状態になり、予備の記録用紙を渡した。"
+  },
+  {
+   "id": "scoresheet-10",
+   "split": "tuning",
+   "category": "scoresheet",
+   "text": "黒の記録用紙の手数が局面と一致せず、どこで違ったか不明。"
+  },
+  {
+   "id": "scoresheet-11",
+   "split": "held-out",
+   "category": "scoresheet",
+   "text": "加算で残り時間が5分以上になったが、白は記録用紙の抜けた手を書いていない。"
+  },
+  {
+   "id": "scoresheet-12",
+   "split": "held-out",
+   "category": "scoresheet",
+   "text": "黒は残り5分未満になってから記録をしていない。30秒加算あり。"
+  },
+  {
+   "id": "scoresheet-13",
+   "split": "held-out",
+   "category": "scoresheet",
+   "text": "9番ボード、白が記録用紙を提出せずに帰った。"
+  },
+  {
+   "id": "scoresheet-14",
+   "split": "held-out",
+   "category": "scoresheet",
+   "text": "記録用紙の手が読めず、対局後に確認できない。"
+  },
+  {
+   "id": "scoresheet-15",
+   "split": "held-out",
+   "category": "scoresheet",
+   "text": "白の記録用紙にボード番号とラウンドが書かれていない。"
+  },
+  {
+   "id": "scoresheet-16",
+   "split": "held-out",
+   "category": "scoresheet",
+   "text": "山田太郎が記録せず、時計だけ押している。加算30秒あり。"
+  },
+  {
+   "id": "scoresheet-17",
+   "split": "held-out",
+   "category": "scoresheet",
+   "text": "黒が自分の記録用紙を提出せずに会場から帰った。"
+  },
+  {
+   "id": "scoresheet-18",
+   "split": "held-out",
+   "category": "scoresheet",
+   "text": "白の記録が相手の手より先に書かれていたので注意した。"
+  },
+  {
+   "id": "scoresheet-19",
+   "split": "held-out",
+   "category": "scoresheet",
+   "text": "両者の記録用紙で20手目から後が一致しない。"
+  },
+  {
+   "id": "scoresheet-20",
+   "split": "held-out",
+   "category": "scoresheet",
+   "text": "黒の記録用紙がなくなり、白の用紙を見せてほしいと申し出た。"
+  },
+  {
+   "id": "player-behavior-01",
+   "split": "tuning",
+   "category": "player-behavior",
+   "text": "対局中に白のスマートフォンが鳴った。"
+  },
+  {
+   "id": "player-behavior-02",
+   "split": "tuning",
+   "category": "player-behavior",
+   "text": "対局中、黒のスマホの音が鳴った。"
+  },
+  {
+   "id": "player-behavior-03",
+   "split": "tuning",
+   "category": "player-behavior",
+   "text": "対局中に山田太郎さんの携帯が鳴った。"
+  },
+  {
+   "id": "player-behavior-04",
+   "split": "tuning",
+   "category": "player-behavior",
+   "text": "白が相手の手番中に話しかけている、と黒から申し出。"
+  },
+  {
+   "id": "player-behavior-05",
+   "split": "tuning",
+   "category": "player-behavior",
+   "text": "黒がスマホの電源を切っていなかった。"
+  },
+  {
+   "id": "player-behavior-06",
+   "split": "tuning",
+   "category": "player-behavior",
+   "text": "白が対局中に相手に話しかけていて、黒が集中できないと言っている。"
+  },
+  {
+   "id": "player-behavior-07",
+   "split": "tuning",
+   "category": "player-behavior",
+   "text": "黒が駒を強く置く音が続いていて、白が注意を求めた。"
+  },
+  {
+   "id": "player-behavior-08",
+   "split": "tuning",
+   "category": "player-behavior",
+   "text": "白が指し手を毎回声で言っている。黒が注意を求めた。"
+  },
+  {
+   "id": "player-behavior-09",
+   "split": "tuning",
+   "category": "player-behavior",
+   "text": "対局を終了した選手が会場で話していて、騒音になっている。"
+  },
+  {
+   "id": "player-behavior-10",
+   "split": "tuning",
+   "category": "player-behavior",
+   "text": "黒が対局中に話している声で、白が集中できない。"
+  },
+  {
+   "id": "player-behavior-11",
+   "split": "held-out",
+   "category": "player-behavior",
+   "text": "対局中、佐藤花子さんのスマートフォンが鳴った。"
+  },
+  {
+   "id": "player-behavior-12",
+   "split": "held-out",
+   "category": "player-behavior",
+   "text": "対局中、黒の席から騒音が続いている。"
+  },
+  {
+   "id": "player-behavior-13",
+   "split": "held-out",
+   "category": "player-behavior",
+   "text": "対局中の白が静粛でなく、黒から注意の要求があった。"
+  },
+  {
+   "id": "player-behavior-14",
+   "split": "held-out",
+   "category": "player-behavior",
+   "text": "白がスマホをかばんに入れていなかった。"
+  },
+  {
+   "id": "player-behavior-15",
+   "split": "held-out",
+   "category": "player-behavior",
+   "text": "伊藤さくらさんが相手の手番中に話していて、黒が集中できないと申告。"
+  },
+  {
+   "id": "player-behavior-16",
+   "split": "held-out",
+   "category": "player-behavior",
+   "text": "対局中、第7ボードの白の携帯が鳴った。"
+  },
+  {
+   "id": "player-behavior-17",
+   "split": "held-out",
+   "category": "player-behavior",
+   "text": "黒が相手の手番中に話しかけた。白から申し出があった。"
+  },
+  {
+   "id": "player-behavior-18",
+   "split": "held-out",
+   "category": "player-behavior",
+   "text": "対局中の会場で、終了した選手の声が騒音になっている。"
+  },
+  {
+   "id": "player-behavior-19",
+   "split": "held-out",
+   "category": "player-behavior",
+   "text": "白が相手の手番中に駒を指で指して話している。"
+  },
+  {
+   "id": "player-behavior-20",
+   "split": "held-out",
+   "category": "player-behavior",
+   "text": "高橋美咲さんの携帯の音が鳴った。"
+  },
+  {
+   "id": "team-01",
+   "split": "tuning",
+   "category": "team",
+   "text": "団体戦で、第2ボードと第3ボードの選手が逆の席で対局していた。"
+  },
+  {
+   "id": "team-02",
+   "split": "tuning",
+   "category": "team",
+   "text": "団体戦のボード順が提出した順と違う。"
+  },
+  {
+   "id": "team-03",
+   "split": "tuning",
+   "category": "team",
+   "text": "団体戦で第4ボードの選手が来ず、その盤は不戦になった。"
+  },
+  {
+   "id": "team-04",
+   "split": "tuning",
+   "category": "team",
+   "text": "団体戦で、ラウンドの途中で選手の交代を求めている。"
+  },
+  {
+   "id": "team-05",
+   "split": "tuning",
+   "category": "team",
+   "text": "団体戦の第1ボードに、登録していない選手が出場している。"
+  },
+  {
+   "id": "team-06",
+   "split": "tuning",
+   "category": "team",
+   "text": "団体戦で、対戦相手の選手が全員来ず、試合が不戦になった。"
+  },
+  {
+   "id": "team-07",
+   "split": "tuning",
+   "category": "team",
+   "text": "団体戦のボード順が前回と逆になっている。"
+  },
+  {
+   "id": "team-08",
+   "split": "tuning",
+   "category": "team",
+   "text": "団体戦で第3ボードに予備の選手を入れたいと申し出。"
+  },
+  {
+   "id": "team-09",
+   "split": "tuning",
+   "category": "team",
+   "text": "団体戦、提出したボード順と対局の順番が一致しない。"
+  },
+  {
+   "id": "team-10",
+   "split": "tuning",
+   "category": "team",
+   "text": "団体戦で第3ボードと第4ボードの選手が来ていない。"
+  },
+  {
+   "id": "team-11",
+   "split": "held-out",
+   "category": "team",
+   "text": "団体戦で、ボード順の登録に間違いがあった。"
+  },
+  {
+   "id": "team-12",
+   "split": "held-out",
+   "category": "team",
+   "text": "田中健さんが団体戦で登録と別の盤で対局していた。"
+  },
+  {
+   "id": "team-13",
+   "split": "held-out",
+   "category": "team",
+   "text": "団体戦の途中で選手を交代したいと申し出があった。可能か確認。"
+  },
+  {
+   "id": "team-14",
+   "split": "held-out",
+   "category": "team",
+   "text": "団体戦で、出場の登録がない選手が第2ボードで対局している。"
+  },
+  {
+   "id": "team-15",
+   "split": "held-out",
+   "category": "team",
+   "text": "団体戦の試合が全ボード不戦になった。対戦相手の到着がない。"
+  },
+  {
+   "id": "team-16",
+   "split": "held-out",
+   "category": "team",
+   "text": "団体戦で第1ボードと第2ボードの順番が登録と違う。"
+  },
+  {
+   "id": "team-17",
+   "split": "held-out",
+   "category": "team",
+   "text": "鈴木一郎さんが団体戦の第2ボードに登録されているが、第1ボードで対局した。"
+  },
+  {
+   "id": "team-18",
+   "split": "held-out",
+   "category": "team",
+   "text": "団体戦で選手が替わっているが、交代の申告はない。"
+  },
+  {
+   "id": "team-19",
+   "split": "held-out",
+   "category": "team",
+   "text": "団体戦で到着の遅れがあり、試合が全ボード不戦になる可能性。"
+  },
+  {
+   "id": "team-20",
+   "split": "held-out",
+   "category": "team",
+   "text": "団体戦のボード順で、提出のない交代があった。"
+  },
+  {
+   "id": "tournament-admin-01",
+   "split": "tuning",
+   "category": "tournament-admin",
+   "text": "白の選手が開始から来ていない。不戦敗の扱いを確認したい。"
+  },
+  {
+   "id": "tournament-admin-02",
+   "split": "tuning",
+   "category": "tournament-admin",
+   "text": "第4ラウンドのペアリングに誤りがあると選手から申し出。"
+  },
+  {
+   "id": "tournament-admin-03",
+   "split": "tuning",
+   "category": "tournament-admin",
+   "text": "黒が大会の残りのラウンドを棄権したいと言っている。"
+  },
+  {
+   "id": "tournament-admin-04",
+   "split": "tuning",
+   "category": "tournament-admin",
+   "text": "会場の準備が遅れ、ラウンドの開始が遅くなっている。"
+  },
+  {
+   "id": "tournament-admin-05",
+   "split": "tuning",
+   "category": "tournament-admin",
+   "text": "黒が遅刻して、対局が始まってから来た。"
+  },
+  {
+   "id": "tournament-admin-06",
+   "split": "tuning",
+   "category": "tournament-admin",
+   "text": "不戦勝の選手がペアリングに入っていない。"
+  },
+  {
+   "id": "tournament-admin-07",
+   "split": "tuning",
+   "category": "tournament-admin",
+   "text": "白の選手が来ていないまま、規定の時間を経過した。"
+  },
+  {
+   "id": "tournament-admin-08",
+   "split": "tuning",
+   "category": "tournament-admin",
+   "text": "ペアリングで同じ相手と二度目の対戦になっている。"
+  },
+  {
+   "id": "tournament-admin-09",
+   "split": "tuning",
+   "category": "tournament-admin",
+   "text": "前のラウンドの結果に誤りがあり、今回のペアリングが違っている。"
+  },
+  {
+   "id": "tournament-admin-10",
+   "split": "tuning",
+   "category": "tournament-admin",
+   "text": "黒が前回も今回も黒番になっていると、ペアリングに異議を申し立て。"
+  },
+  {
+   "id": "tournament-admin-11",
+   "split": "held-out",
+   "category": "tournament-admin",
+   "text": "登録した選手がペアリングに入っていない。"
+  },
+  {
+   "id": "tournament-admin-12",
+   "split": "held-out",
+   "category": "tournament-admin",
+   "text": "ペアリングの表示がまだで、ラウンドの開始が遅れている。"
+  },
+  {
+   "id": "tournament-admin-13",
+   "split": "held-out",
+   "category": "tournament-admin",
+   "text": "選手が大会の途中で棄権を申し出た。"
+  },
+  {
+   "id": "tournament-admin-14",
+   "split": "held-out",
+   "category": "tournament-admin",
+   "text": "前のラウンドで不戦敗の選手が、次のラウンドの出場を求めている。"
+  },
+  {
+   "id": "tournament-admin-15",
+   "split": "held-out",
+   "category": "tournament-admin",
+   "text": "佐藤花子さんが遅刻で不戦敗になったが、到着は開始から少し後だったと言っている。"
+  },
+  {
+   "id": "tournament-admin-16",
+   "split": "held-out",
+   "category": "tournament-admin",
+   "text": "ペアリングの表示で、第5ボードの組合が間違っていた。"
+  },
+  {
+   "id": "tournament-admin-17",
+   "split": "held-out",
+   "category": "tournament-admin",
+   "text": "大会の開始が遅れていると、全員から申し出があった。"
+  },
+  {
+   "id": "tournament-admin-18",
+   "split": "held-out",
+   "category": "tournament-admin",
+   "text": "山田太郎さんが、同点の相手とペアリングされていないと異議。"
+  },
+  {
+   "id": "tournament-admin-19",
+   "split": "held-out",
+   "category": "tournament-admin",
+   "text": "順位の誤りがあり、ペアリングを再度行うことになりそう。"
+  },
+  {
+   "id": "tournament-admin-20",
+   "split": "held-out",
+   "category": "tournament-admin",
+   "text": "黒が次のラウンドを棄権すると連絡してきた。"
+  }
+ ]
+}

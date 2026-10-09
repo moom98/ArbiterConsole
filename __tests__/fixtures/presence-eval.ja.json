@@ -1,0 +1,186 @@
+{
+ "id": "presence-eval.ja",
+ "version": "0.1-seed",
+ "description": "Synthetic, de-identified seed set for fact presence (fact-model §5.2). Too small to set any threshold: every fact stays always 'missing' until J3-2 adds >=250 (blocking) / >=160 (other) explicit reports per fact, split about 80% tuning / 20% held-out.",
+ "identifiers": {
+  "players": [
+   {
+    "name": "山田太郎"
+   },
+   {
+    "name": "佐藤花子"
+   },
+   {
+    "name": "鈴木一郎"
+   },
+   {
+    "name": "高橋美咲"
+   },
+   {
+    "name": "田中健"
+   },
+   {
+    "name": "伊藤さくら"
+   }
+  ],
+  "tournaments": [],
+  "venues": [],
+  "officials": []
+ },
+ "cases": [
+  {
+   "id": "im.clock-pressed-explicit-01",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "explicit",
+   "text": "白が違法手を指し、そのまま時計を押した"
+  },
+  {
+   "id": "im.clock-pressed-explicit-02",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "explicit",
+   "text": "黒はキングをチェックに放置する手を指して時計を押した"
+  },
+  {
+   "id": "im.clock-pressed-explicit-03",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "explicit",
+   "text": "両手でキャスリングしてから時計を押した"
+  },
+  {
+   "id": "im.clock-pressed-explicit-04",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "explicit",
+   "text": "昇格したポーンを置き換えずに黒が時計を押した"
+  },
+  {
+   "id": "im.clock-pressed-explicit-05",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "explicit",
+   "text": "白が違法なキャスリングをして、時計も押していた"
+  },
+  {
+   "id": "im.clock-pressed-explicit-06",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "explicit",
+   "text": "山田太郎がビショップを違法に動かして時計を押した"
+  },
+  {
+   "id": "im.clock-pressed-explicit-07",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "explicit",
+   "text": "黒の違法手。指した後に時計を押している"
+  },
+  {
+   "id": "im.clock-pressed-explicit-08",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "explicit",
+   "text": "違法手の後、白は自分の時計を押した"
+  },
+  {
+   "id": "im.clock-pressed-explicit-09",
+   "split": "held-out",
+   "factId": "im.clock-pressed",
+   "kind": "explicit",
+   "text": "黒がナイトを違法に動かして時計を押した。相手が指摘"
+  },
+  {
+   "id": "im.clock-pressed-explicit-10",
+   "split": "held-out",
+   "factId": "im.clock-pressed",
+   "kind": "explicit",
+   "text": "白は違法手を指した。その後に時計を押した"
+  },
+  {
+   "id": "im.clock-pressed-inferred-01",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "inferred",
+   "text": "白が違法手を指した。黒の時計が動いていた"
+  },
+  {
+   "id": "im.clock-pressed-inferred-02",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "inferred",
+   "text": "違法手の後、黒の持ち時間が減り始めていた"
+  },
+  {
+   "id": "im.clock-pressed-inferred-03",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "inferred",
+   "text": "白が違法手を指した。そのあと黒の持ち時間が減っていた"
+  },
+  {
+   "id": "im.clock-pressed-inferred-04",
+   "split": "held-out",
+   "factId": "im.clock-pressed",
+   "kind": "inferred",
+   "text": "黒の違法手。そのあと白の時計が動いていた"
+  },
+  {
+   "id": "im.clock-pressed-near-miss-01",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "near-miss",
+   "text": "白が違法手を指したが、時計は押さなかった"
+  },
+  {
+   "id": "im.clock-pressed-near-miss-02",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "near-miss",
+   "text": "違法手の後、相手が時計を押した"
+  },
+  {
+   "id": "im.clock-pressed-near-miss-03",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "near-miss",
+   "text": "黒が違法手を指し、アービターが時計を止めた"
+  },
+  {
+   "id": "im.clock-pressed-near-miss-04",
+   "split": "held-out",
+   "factId": "im.clock-pressed",
+   "kind": "near-miss",
+   "text": "白は違法手に気付いて時計を押す前に手を戻した"
+  },
+  {
+   "id": "im.clock-pressed-absent-01",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "absent",
+   "text": "白が違法手を指した。相手が指摘した"
+  },
+  {
+   "id": "im.clock-pressed-absent-02",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "absent",
+   "text": "黒のビショップが違法な位置にあった"
+  },
+  {
+   "id": "im.clock-pressed-absent-03",
+   "split": "tuning",
+   "factId": "im.clock-pressed",
+   "kind": "absent",
+   "text": "両手でキャスリングした。アービターが気付いた"
+  },
+  {
+   "id": "im.clock-pressed-absent-04",
+   "split": "held-out",
+   "factId": "im.clock-pressed",
+   "kind": "absent",
+   "text": "昇格したポーンをそのまま盤に置いていた"
+  }
+ ]
+}

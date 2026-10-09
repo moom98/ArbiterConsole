@@ -40,7 +40,15 @@ export interface RequiredFact {
   definition: FactDefinition;
   usage: FactUsage;
   level: FactLevel;
+  /**
+   * 記録のための fact（判断を止めない）。未回答でも DT の判断は確定してよく、不足の一覧には
+   * 「記録用」として出す（例: game.record-state。fact-model §3.9）
+   */
+  recordOnly: boolean;
 }
+
+/** 判断には使わず記録に残す fact（fact-model §3.1, §3.9） */
+export const RECORD_ONLY_FACTS: readonly FactId[] = ["game.record-state"];
 
 /** カテゴリ・サブタイプに当てはまる usage（カタログの順） */
 export function usagesFor(
@@ -89,7 +97,12 @@ export function requiredFacts(input: RequiredFactsInput): RequiredFact[] {
     const definition = getFactDefinition(usage.factId);
     if (!definition) continue;
     seen.add(usage.factId);
-    result.push({ definition, usage, level: usage.level });
+    result.push({
+      definition,
+      usage,
+      level: usage.level,
+      recordOnly: RECORD_ONLY_FACTS.includes(usage.factId),
+    });
   }
   return result;
 }

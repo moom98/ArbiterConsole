@@ -315,9 +315,9 @@ See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §4.
 - **Legacy data (review M1):** the old form had no field for a second period, so "40/90 → 30" events were stored as "90+30". **Every legacy value is `periodsIncomplete`** until the arbiter confirms the periods in the profile form. Until then `lastPeriod` is asked.
 - **DT-004 `lastPeriod`:** an explicit answer wins. The setting is used only when the question is unanswered or answered "unknown", and only for a confirmed single period. Multi-period controls still ask, because the move number is not wired into the flag-fall flow.
 - **Snapshot:** `RulesetSnapshot.timeControl` (normalized copy). Older snapshots have none, so they ask.
-- **Not wired yet (J1c/J2):**
-  - `deriveTimeControlFacts` with a move number from `game.history` or `ss.move-number`;
-  - `assessRecordingObligation` (the scoresheet category has no tree; it will feed the fact plan / reasoning request).
+- **Wired in J2-3 (DT-011, ADR-014 §7 amendment):** `assessRecordingObligation` decides "記入していない" / "遅れている" in Standard. It also accepts the answers `belowFiveNow` and `incrementAtLeast30`; measured values win when present. `recordingIncrement(tc, period)` decides whether the period or the increment must be asked, and `timeControlPeriodOptions` builds the period choice.
+  - The catalogue maps only `ss.issue` → `scoresheetIssue`. The 8.4 facts stay `appliesWhen`-only in the fact plan, because DT-011 asks coarser forms (under 5:00 / 30 s or more / period) than the fact values (duration, seconds, move number).
+- **Still not wired:** `deriveTimeControlFacts` with a move number from `game.history` or `ss.move-number` (the fact plan has no caller in the app yet; DT-011 asks the period instead).
 
 ### 3.7 Mate possibility (FIDE 6.9)
 
@@ -384,6 +384,7 @@ See [ADR-014](../decisions/ADR-014-draw-dt-touch-move-game-history.md) §6.
 - **Legacy data.** Stored booleans (`illegalMoveFacts.gameEnded`, `flagFallFacts.gameEndedBeforeFlag`) are `@deprecated`. The engine strips them, so the trees ask the event again: an old "yes" may have come from a handshake. Answering the new question deletes the legacy value and a legacy unknown entry.
 - **Illegal mating moves (FIDE 5.1.1 / 5.2.1).** Checkmate and stalemate end the game only when the move that produced the position was legal. Both help texts say so, and a "result stands" decision for checkmate or stalemate (DT-001…004) adds the check "was that move legal?", cites 5.1.1 / 5.2.1 and has confidence medium.
 - **Legacy "no" answers.** A stored `gameEnded: false` is also asked again, on purpose: it is simpler and costs one tap, and it keeps a single rule (the trees read only the events).
+- **Record only (J2-3).** `requiredFacts` marks it `recordOnly: true` (`RECORD_ONLY_FACTS`): it can be listed as missing, but must never block a ruling.
 - **Required facts.** `game.record-state` stays `conditional` in the catalogue (required once an end event other than "in progress" is answered), as the catalogue review decided, while the DT question is optional. J1c must treat it as a record fact: it can appear in the missing-facts list, but it never blocks a ruling.
 - **Unknown answers.** When a question's `showWhen` parent was answered unknown, `resolveUnknown` no longer returns it among the other questions (the UI would hide it anyway).
 

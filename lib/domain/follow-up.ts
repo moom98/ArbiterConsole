@@ -14,8 +14,12 @@ import type {
   IllegalMoveSubtype,
   MatePositionInput,
   PlayerColor,
+  RecordingIncrementAnswer,
   RepetitionClaimMode,
+  ScoresheetFacts,
+  ScoresheetIssue,
   SupervisionRegime,
+  TimeControl,
   TouchHow,
   TouchMoveFacts,
   TouchPromotion,
@@ -30,6 +34,7 @@ import {
   GAME_RECORD_STATE_LABELS,
   GAME_RECORD_STATES,
 } from "@/lib/domain/services/game-end";
+import { timeControlPeriodOptions } from "@/lib/domain/services/time-control";
 
 /**
  * 追加確認質問（要件 §12）。
@@ -84,6 +89,12 @@ export type IncidentQuestionId =
   | "touchPromotion"
   | "touchedPieces"
   | "touchFen"
+  // 棋譜の記録義務（DT-011。FIDE 8.1.1 / 8.4）
+  | "scoresheetIssue"
+  | "recordingBelowFiveNow"
+  | "recordingBelowFiveInPeriod"
+  | "recordingPeriod"
+  | "recordingIncrement"
   // 手動確認（決定木の対象外）
   | "situationNote";
 
@@ -181,6 +192,21 @@ const YES_NO: FollowUpOption[] = [
   { value: "true", label: "はい" },
   { value: "false", label: "いいえ" },
 ];
+
+/** 棋譜の問題（ss.issue。カタログの選択肢と同じ値） */
+export const SCORESHEET_ISSUE_LABELS: Record<ScoresheetIssue, string> = {
+  "not-writing": "記入していない",
+  behind: "遅れている",
+  "pre-written": "指す前に書いた",
+  illegible: "読めない",
+  wrong: "誤記",
+};
+
+/** DT-011 の質問の「わからない」（各質問の値として持ち、DT-011 が CA への確認として扱う） */
+const RECORDING_UNKNOWN: FollowUpOption = {
+  value: "unknown",
+  label: "わからない・確認できない",
+};
 
 const COLOR_OPTIONS: FollowUpOption[] = [
   { value: "white", label: "白" },
@@ -660,6 +686,61 @@ const BASE_QUESTIONS: Record<FollowUpQuestionId, FollowUpQuestion> = {
     },
   },
 
+  // ---- 棋譜の記録義務（DT-011） ----
+  scoresheetIssue: {
+    id: "scoresheetIssue",
+    scope: "incident",
+    label: "棋譜の何が問題ですか？",
+    // 「わからない」は DT-011 に入らず、決定木の対象外として扱う（状況のメモ → AI参考・CA）
+    options: [
+      ...(Object.keys(SCORESHEET_ISSUE_LABELS) as ScoresheetIssue[]).map(
+        (value) => ({ value, label: SCORESHEET_ISSUE_LABELS[value] })
+      ),
+      RECORDING_UNKNOWN,
+    ],
+  },
+  recordingBelowFiveNow: {
+    id: "recordingBelowFiveNow",
+    scope: "incident",
+    label: "記録していない（遅れている）側の時計の、今の残り時間は？",
+    help: "ちょうど 5:00 は「5分以上」です（8.4 は5分未満）。",
+    options: [
+      { value: "true", label: "5分未満" },
+      { value: "false", label: "5分以上" },
+      RECORDING_UNKNOWN,
+    ],
+  },
+  recordingBelowFiveInPeriod: {
+    id: "recordingBelowFiveInPeriod",
+    scope: "incident",
+    label: "このピリオドの中で、その時計が一度でも5分を下回りましたか？",
+    help: "加算で5分以上に戻っていても、そのピリオドの残りは免除が続きます（8.4）。",
+    showWhen: {
+      questionId: "recordingBelowFiveNow",
+      values: ["false", "unknown"],
+    },
+    options: [...YES_NO, RECORDING_UNKNOWN],
+  },
+  // 選択肢は大会の持ち時間から作る（recordingPeriodQuestion）
+  recordingPeriod: {
+    id: "recordingPeriod",
+    scope: "incident",
+    label: "今はどのピリオドですか？",
+    options: [RECORDING_UNKNOWN],
+  },
+  recordingIncrement: {
+    id: "recordingIncrement",
+    scope: "incident",
+    label: "現在のピリオドの、1手ごとの加算は？",
+    help: "大会の持ち時間が登録されていない（または確認されていない）ため質問しています。",
+    options: [
+      { value: "at-least-30", label: "30秒以上" },
+      { value: "below-30", label: "30秒未満（加算なしを含む）" },
+      { value: "delay", label: "遅延（ディレイ）方式" },
+      RECORDING_UNKNOWN,
+    ],
+  },
+
   // ---- 手動確認 ----
   situationNote: {
     id: "situationNote",
@@ -817,6 +898,8 @@ export function applyIncidentAnswers(
   let touchedFlag = false;
   let touchedDraw = false;
   let touchedTouch = false;
+  const sheet: ScoresheetFacts = { ...incident.scoresheetFacts };
+  let touchedSheet = false;
   let next_description = incident.description;
   const unknown = new Set(incident.unknownAnswers ?? []);
 
@@ -1177,6 +1260,53 @@ export function applyIncidentAnswers(
         break;
       }
 
+      // ---- 棋譜の記録義務（DT-011） ----
+      case "scoresheetIssue":
+        if (
+          incident.category === "scoresheet" &&
+          (isOneOf(
+            raw,
+            Object.keys(SCORESHEET_ISSUE_LABELS) as ScoresheetIssue[]
+          ) ||
+            raw === UNKNOWN_VALUE)
+        )
+          subtype = raw;
+        break;
+      case "recordingBelowFiveNow":
+      case "recordingBelowFiveInPeriod": {
+        const v = parseTriState(raw);
+        if (v !== undefined) {
+          sheet[
+            id === "recordingBelowFiveNow"
+              ? "belowFiveNow"
+              : "belowFiveInPeriod"
+          ] = v;
+          touchedSheet = true;
+        }
+        break;
+      }
+      case "recordingPeriod": {
+        const n = Number(raw);
+        if (raw === "unknown" || (Number.isInteger(n) && n >= 1 && n <= 10)) {
+          sheet.period = raw === "unknown" ? "unknown" : n;
+          touchedSheet = true;
+        }
+        break;
+      }
+      case "recordingIncrement":
+        if (
+          isOneOf(raw, [
+            "at-least-30",
+            "below-30",
+            "delay",
+            "unknown",
+          ] as readonly (RecordingIncrementAnswer | "unknown")[])
+        ) {
+          sheet.increment = raw;
+          touchedSheet = true;
+        }
+        break;
+
       case "situationNote": {
         const note = raw.trim();
         if (note !== "") {
@@ -1254,6 +1384,7 @@ export function applyIncidentAnswers(
   if (touchedFlag || incident.flagFallFacts) next.flagFallFacts = flag;
   if (touchedDraw || incident.drawClaimFacts) next.drawClaimFacts = draw;
   if (touchedTouch || incident.touchMoveFacts) next.touchMoveFacts = touch;
+  if (touchedSheet || incident.scoresheetFacts) next.scoresheetFacts = sheet;
   return next;
 }
 
@@ -1334,6 +1465,10 @@ export function isReportableSubtype(
       Object.keys(SUBTYPE_LABELS).includes(subtype) ||
       subtype === TOUCH_MOVE_SUBTYPE
     );
+  // 棋譜の問題（ss.issue）は DT-011 の質問で確定するコード。DT-011 の対象外の問題は
+  // AI参考情報の入力になる（「わからない」は送らない）
+  if (category === "scoresheet")
+    return Object.keys(SCORESHEET_ISSUE_LABELS).includes(subtype);
   return isKnownSubtype(category, subtype);
 }
 
@@ -1399,4 +1534,12 @@ export function groupQuestionsByPresence(
   for (const q of questions)
     (presence[rootOf(q).id] === "present" ? present : missing).push(q);
   return { missing, present };
+}
+
+/** DT-011: ピリオドの質問（選択肢は大会の持ち時間から作る） */
+export function recordingPeriodQuestion(tc: TimeControl): FollowUpQuestion {
+  return {
+    ...QUESTIONS.recordingPeriod,
+    options: [...timeControlPeriodOptions(tc), RECORDING_UNKNOWN],
+  };
 }

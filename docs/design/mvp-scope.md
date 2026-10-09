@@ -66,6 +66,7 @@ Per ADR-002, implement Decision Trees for high-frequency incidents:
 | ~~DT-008~~ | ~~75-move Rule~~ — part of DT-006 (ADR-014) | All | — | — |
 | ~~DT-009~~ | ~~Stalemate~~ — no tree; fact plan (ADR-014 §1) | All | — | — |
 | ~~DT-010~~ | ~~Dead Position~~ — no tree; fact plan (ADR-014 §1) | All | — | — |
+| DT-011 | Recording obligation: 8.4 exemption from 8.1.1 for "not writing" / "behind" (ADR-014 §7; implemented in J2-3, fact-model §3.6) | Standard | P1 | — |
 
 *Requires position comparison logic (FEN)
 

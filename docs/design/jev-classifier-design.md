@@ -446,7 +446,7 @@ The default stays `gemini`. With the default environment, the classify route, it
 - ~~The UI of §7 (percentage, candidate chips, `onPickCategory`).~~ **Done in J2-1** (§15.2).
 - `scripts/eval-classifier.mjs`, the datasets and the first calibration (J3).
 - **Check in J3 (review note):** the sum tolerance of ±0.02. If Jev rounds each of the 10 probabilities separately, the sum can drift by up to ±0.05, and valid answers would fall back to keywords. Record the observed sums in the evaluation and widen the tolerance (with a test) if needed.
-- **Daily cap (review note):** (to be decided in J2-3) `/api/llm/facts` shares `LLM_DAILY_REQUEST_LIMIT` with reason and classify. When J2 calls it on every DT round, decide whether it needs its own cap.
+- **Daily cap (review note):** **decided in J2-3: keep the shared cap.** The presence check is sent only on an explicit tap and after the D13 confirmation (never per DT round automatically), and it has its own per-minute limit (`LLM_RATE_LIMIT_FACTS_PER_MINUTE`). A separate cap would add configuration without protecting anything the shared cap does not. Revisit if J3 shows facts calls crowding out reasoning. Original note: `/api/llm/facts` shares `LLM_DAILY_REQUEST_LIMIT` with reason and classify. When J2 calls it on every DT round, decide whether it needs its own cap.
 
 ## 15. Implementation (J2-1, 2026-10-09): classification UI and the provider-named preview
 
@@ -478,3 +478,10 @@ The default stays `gemini`. With the default environment, the classify route, it
 - **Application:** `prepareFactPresenceCheck` (`lib/application/fact-presence.ts`) parses with `parseFactPresence` and maps facts back to questions. **Only a valid answer from a calibrated model reorders anything.** Failure, malformed output and an uncalibrated model return a notice and no `byQuestion`: the questions stay in their normal order and nothing is labelled "not in the report". Offline, unavailable, provider-unknown and gate stops yield `none` with a reason.
 - **Display:** `FollowUpQuestions` takes an optional `presence` map. With it, questions are shown under 「先に確認してください — 報告に記載ありと判定されなかった事実」 (judged missing, and unjudged, first) and 「報告に記載あり（続く質問を含む） — 内容を選んでください」 (judged present, after), using `groupQuestionsByPresence` (domain). A `showWhen` child stays with its root question, which the second heading says. **No question is skipped and no answer is filled in** (ADR-002). The report page keys the result by incident id and question set and clears it on 「新しい報告」, so neither a new round nor a new report reuses an old result; a result that arrives after the card unmounts is dropped.
 - **Not done:** the classifier card's missing-information list from required facts (fact-model §4.3 last bullet). The card is shown before the DT round, when the required facts are not yet known.
+
+## 17. J2-3 (2026-10-09): time control and record facts
+
+- **DT-011 (FIDE 8.4)** for scoresheet "記入していない" / "遅れている" in Standard. See fact-model §3.6 and the ADR-014 §7 amendment.
+- **`game.record-state`** is a record-only fact (`RequiredFact.recordOnly`, fact-model §3.9).
+- **Daily cap:** facts keeps the shared cap (§14.3).
+- Scoresheet issue codes are now reportable subtypes, so a non-DT scoresheet incident sends its issue code (not "unknown") with the AI reasoning request; the server validates with the same function.

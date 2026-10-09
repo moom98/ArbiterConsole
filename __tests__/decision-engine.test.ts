@@ -423,7 +423,7 @@ describe("DecisionEngine", () => {
 
     it("routes other categories to manual review", () => {
       const r = run({
-        incident: incident({ category: "scoresheet" }),
+        incident: incident({ category: "scoresheet", subtype: "illegible" }),
         ruleset: STANDARD,
       });
       expect(r.decision.kind).toBe("manual-review");

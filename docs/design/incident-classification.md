@@ -244,8 +244,8 @@ The subtype values are `DrawSubtype` in `lib/domain/entities/incident.ts` and th
 
 | Subtype | Description | Handler | Key Questions |
 |---------|-------------|---------|---------------|
-| `scoresheet-not-written` | Scoresheet not being maintained | LLM+RAG | Reason? Time trouble? Competition type? |
-| `scoresheet-delayed` | Scoresheet several moves behind | LLM+RAG | How many moves? Time trouble? |
+| `scoresheet-not-written` | Scoresheet not being maintained | Standard: Decision Tree (DT-011, 8.4 exemption; J2-3). Rapid/Blitz: LLM+RAG | Under 5:00 now? Below 5:00 earlier in the period? Increment (from the time control, or asked)? |
+| `scoresheet-delayed` | Scoresheet several moves behind | Standard: Decision Tree (DT-011; J2-3). Rapid/Blitz: LLM+RAG | Same as above |
 | `scoresheet-pre-recording` | Moves recorded before playing | LLM+RAG | Reason? Draw claim exception? |
 | `scoresheet-illegible` | Scoresheet unreadable | LLM+RAG | Can be reconstructed? |
 | `scoresheet-error` | Incorrect move notation | LLM+RAG | Correction possible? |
